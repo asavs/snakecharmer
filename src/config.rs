@@ -18,6 +18,11 @@ pub struct Config {
     pub dpi_up: String,
     /// Action for the rear DPI button (vendor code 0x21).
     pub dpi_down: String,
+    /// Action for the Back thumb button (XBUTTON1). `none` = passthrough
+    /// (native Back kept). Any other action suppresses native Back.
+    pub thumb_back: String,
+    /// Action for the Forward thumb button (XBUTTON2). `none` = passthrough.
+    pub thumb_forward: String,
     /// Lighting effect applied at startup: `keep` (don't touch), `static`,
     /// `breathing`, `spectrum`, or `off`.
     pub lighting: String,
@@ -34,6 +39,8 @@ impl Default for Config {
             dpi_y: None,
             dpi_up: "copy".to_string(),
             dpi_down: "paste".to_string(),
+            thumb_back: "none".to_string(),
+            thumb_forward: "none".to_string(),
             lighting: "keep".to_string(),
             color: "#00ff00".to_string(),
             reassert_interval_secs: 60,
@@ -118,6 +125,8 @@ mod tests {
             dpi_y: Some(800),
             dpi_up: "key:9".into(),
             dpi_down: "key:0".into(),
+            thumb_back: "cut".into(),
+            thumb_forward: "none".into(),
             lighting: "static".into(),
             color: "#ff8800".into(),
             reassert_interval_secs: 30,

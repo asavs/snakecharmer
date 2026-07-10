@@ -30,6 +30,8 @@ pub enum MenuAction {
     Effect(EffectSpec),
     SetUpAction(String),
     SetDownAction(String),
+    SetThumbBack(String),
+    SetThumbForward(String),
     SetEffectKind(String),
     SetColor(Rgb),
     Apply,
@@ -57,7 +59,7 @@ const EFFECT_PRESETS: &[&str] = &["keep", "static", "breathing", "spectrum", "of
 /// selected indices for dpi_up / dpi_down.
 fn action_options(cfg: &Config) -> (Vec<String>, usize, usize) {
     let mut labels: Vec<String> = ACTION_PRESETS.iter().map(|s| s.to_string()).collect();
-    for v in [&cfg.dpi_up, &cfg.dpi_down] {
+    for v in [&cfg.dpi_up, &cfg.dpi_down, &cfg.thumb_back, &cfg.thumb_forward] {
         if !labels.iter().any(|l| l == v) {
             labels.push(v.clone());
         }
@@ -65,6 +67,32 @@ fn action_options(cfg: &Config) -> (Vec<String>, usize, usize) {
     let up = labels.iter().position(|l| l == &cfg.dpi_up).unwrap_or(0);
     let down = labels.iter().position(|l| l == &cfg.dpi_down).unwrap_or(0);
     (labels, up, down)
+}
+
+/// Parse a config action into a keystroke chord (`None` = passthrough/disabled).
+fn chord_of(spec: &str) -> Option<Vec<u16>> {
+    crate::actions::parse(spec)
+        .ok()
+        .and_then(|a| a.chord().map(|c| c.to_vec()))
+}
+
+/// Push the current thumb-button remaps into the low-level mouse hook.
+fn apply_thumb_hook(cfg: &Config, log: &Logger) {
+    let back = chord_of(&cfg.thumb_back);
+    let forward = chord_of(&cfg.thumb_forward);
+    let desc = |on: bool, s: &str| if on { s.to_string() } else { "passthrough".to_string() };
+    log.log(&format!(
+        "Thumb remap: back={}, forward={}.",
+        desc(back.is_some(), &cfg.thumb_back),
+        desc(forward.is_some(), &cfg.thumb_forward)
+    ));
+    platform::mouse_hook::set_thumb_actions(back, forward);
+}
+
+/// Build the thumb-button dropdown indices (reusing the action label list).
+fn thumb_indices(cfg: &Config, labels: &[String]) -> (usize, usize) {
+    let find = |v: &str| labels.iter().position(|l| l == v).unwrap_or(0);
+    (find(&cfg.thumb_back), find(&cfg.thumb_forward))
 }
 
 fn effect_options(cfg: &Config) -> (Vec<String>, usize) {
@@ -79,6 +107,7 @@ fn effect_options(cfg: &Config) -> (Vec<String>, usize) {
 /// Spawn the settings window on its own thread (message loop lives there).
 fn open_settings_window(cfg: &Config, tx: &Sender<Event>) {
     let (action_labels, up_index, down_index) = action_options(cfg);
+    let (thumb_back_index, thumb_forward_index) = thumb_indices(cfg, &action_labels);
     let (effect_labels, effect_index) = effect_options(cfg);
     let color = Rgb::parse_hex(&cfg.color).unwrap_or(Rgb::new(0, 0xFF, 0));
     let init = platform::settings::SettingsInit {
@@ -88,6 +117,8 @@ fn open_settings_window(cfg: &Config, tx: &Sender<Event>) {
         action_labels: action_labels.clone(),
         up_index,
         down_index,
+        thumb_back_index,
+        thumb_forward_index,
         effect_labels: effect_labels.clone(),
         effect_index,
         color: (color.r, color.g, color.b),
@@ -102,6 +133,12 @@ fn open_settings_window(cfg: &Config, tx: &Sender<Event>) {
                 SE::UpAction(i) => action_labels.get(i).map(|s| MenuAction::SetUpAction(s.clone())),
                 SE::DownAction(i) => {
                     action_labels.get(i).map(|s| MenuAction::SetDownAction(s.clone()))
+                }
+                SE::ThumbBack(i) => {
+                    action_labels.get(i).map(|s| MenuAction::SetThumbBack(s.clone()))
+                }
+                SE::ThumbForward(i) => {
+                    action_labels.get(i).map(|s| MenuAction::SetThumbForward(s.clone()))
                 }
                 SE::Effect(i) => effect_labels.get(i).map(|s| MenuAction::SetEffectKind(s.clone())),
                 SE::Color(r, g, b) => Some(MenuAction::SetColor(Rgb::new(r, g, b))),
@@ -280,6 +317,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
     }
 
     let mut bindings = Bindings::from_config(&cfg, &log);
+    apply_thumb_hook(&cfg, &log);
     let mut settings_open = false;
     loop {
         match run_session(&mut cfg, &mut bindings, &log, &tx, &rx, &mut settings_open) {
@@ -375,7 +413,8 @@ fn run_session(
             }
             Ok(Event::Menu(action)) => {
                 if handle_menu(action, &ctrl, cfg, bindings, log)? {
-                    log.log("Quit selected; exiting.");
+                    log.log("Quit selected; removing mouse hook and exiting.");
+                    platform::mouse_hook::uninstall();
                     std::process::exit(0);
                 }
             }
@@ -452,6 +491,24 @@ fn handle_menu(
                 Err(e) => log.log(&format!("Settings: invalid dpi_down {s:?}: {e}")),
             }
         }
+        MenuAction::SetThumbBack(s) => match crate::actions::parse(&s) {
+            Ok(_) => {
+                cfg.thumb_back = s.clone();
+                save_config(cfg, log);
+                apply_thumb_hook(cfg, log);
+                log.log(&format!("Settings: thumb_back -> {s:?}."));
+            }
+            Err(e) => log.log(&format!("Settings: invalid thumb_back {s:?}: {e}")),
+        },
+        MenuAction::SetThumbForward(s) => match crate::actions::parse(&s) {
+            Ok(_) => {
+                cfg.thumb_forward = s.clone();
+                save_config(cfg, log);
+                apply_thumb_hook(cfg, log);
+                log.log(&format!("Settings: thumb_forward -> {s:?}."));
+            }
+            Err(e) => log.log(&format!("Settings: invalid thumb_forward {s:?}: {e}")),
+        },
         MenuAction::SetEffectKind(kind) => match EffectSpec::from_config(&kind, &cfg.color) {
             Ok(Some(spec)) => {
                 spec.apply(ctrl)?;
@@ -504,6 +561,7 @@ fn handle_menu(
             let (dx, dy) = cfg.dpi_xy();
             let _ = ctrl.set_dpi(dx, dy);
             apply_startup_lighting(ctrl, cfg, log);
+            apply_thumb_hook(cfg, log);
             log.log("Menu: config reloaded and reapplied.");
         }
         MenuAction::Quit => return Ok(true),
@@ -628,6 +686,33 @@ mod tests {
         cfg.lighting = "spectrum".into();
         let (labels, idx) = effect_options(&cfg);
         assert_eq!(labels[idx], "spectrum");
+    }
+
+    #[test]
+    fn chord_of_disables_none_and_invalid() {
+        // Real actions produce a chord; none/invalid produce passthrough (None).
+        assert!(chord_of("copy").is_some());
+        assert!(chord_of("key:f13").is_some());
+        assert!(chord_of("none").is_none());
+        assert!(chord_of("frobnicate").is_none());
+    }
+
+    #[test]
+    fn thumb_indices_track_config() {
+        let mut cfg = Config {
+            thumb_back: "cut".into(),
+            ..Config::default()
+        };
+        let (labels, _, _) = action_options(&cfg);
+        let (back, fwd) = thumb_indices(&cfg, &labels);
+        assert_eq!(labels[back], "cut");
+        assert_eq!(labels[fwd], "none"); // forward defaulted to none, which is a preset
+
+        // A custom thumb chord must be present in the labels (via action_options).
+        cfg.thumb_forward = "ctrl+shift+t".into();
+        let (labels, _, _) = action_options(&cfg);
+        let (_, fwd) = thumb_indices(&cfg, &labels);
+        assert_eq!(labels[fwd], "ctrl+shift+t");
     }
 
     #[test]
