@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use hidapi::{HidApi, HidDevice};
 use razer_proto as proto;
-use razer_proto::{DeviceMode, REPORT_LEN};
+use razer_proto::{led, DeviceMode, Rgb, REPORT_LEN};
 
 /// Create a fresh [`HidApi`] instance (the library is safe to instantiate more
 /// than once). Exposed so callers can share one instance across opens.
@@ -179,6 +179,41 @@ impl DeathAdder {
             )));
         }
         Ok(read)
+    }
+
+    // --- Chroma / RGB lighting (both zones: scroll wheel + logo) ----------
+    //
+    // Each effect is applied to both lit zones. The device acknowledges each
+    // command with status 0x02 (verified by `send_command`); there is no color
+    // read-back in this protocol, so success == the device accepted the report.
+
+    fn apply_both<F>(&self, mut make: F) -> Result<()>
+    where
+        F: FnMut(u8) -> [u8; REPORT_LEN],
+    {
+        self.send_command(&make(led::SCROLL_WHEEL))?;
+        self.send_command(&make(led::LOGO))?;
+        Ok(())
+    }
+
+    /// Static single color on both zones.
+    pub fn set_color(&self, rgb: Rgb) -> Result<()> {
+        self.apply_both(|zone| proto::effect_static_report(zone, rgb))
+    }
+
+    /// Breathing (single color) on both zones.
+    pub fn set_breathing(&self, rgb: Rgb) -> Result<()> {
+        self.apply_both(|zone| proto::effect_breathing_report(zone, rgb))
+    }
+
+    /// Spectrum cycling on both zones.
+    pub fn set_spectrum(&self) -> Result<()> {
+        self.apply_both(proto::effect_spectrum_report)
+    }
+
+    /// Lighting off (none) on both zones.
+    pub fn set_lighting_off(&self) -> Result<()> {
+        self.apply_both(proto::effect_none_report)
     }
 }
 

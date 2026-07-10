@@ -8,6 +8,8 @@
 //! The rest of the codebase (`razer-proto`, `razer-hid`, the daemon logic) stays
 //! safe Rust and never touches Win32 directly.
 
+pub mod tray;
+
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 
