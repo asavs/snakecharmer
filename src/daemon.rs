@@ -23,11 +23,19 @@ const CODE_DPI_DOWN: u8 = 0x21; // rear button
 /// Ignore a repeat of the same code within this window (debounce / anti double-fire).
 const DEBOUNCE: Duration = Duration::from_millis(200);
 
-/// A menu selection turned into a daemon command.
+/// A menu / settings-window selection turned into a daemon command.
 #[derive(Debug, Clone)]
 pub enum MenuAction {
     SetDpi(u16),
     Effect(EffectSpec),
+    SetUpAction(String),
+    SetDownAction(String),
+    SetEffectKind(String),
+    SetColor(Rgb),
+    Apply,
+    Save,
+    OpenSettings,
+    SettingsClosed,
     ReloadConfig,
     Quit,
 }
@@ -37,6 +45,76 @@ enum Event {
     Button(u8),
     Menu(MenuAction),
     ListenerClosed,
+}
+
+/// Action presets offered in the settings-window dropdowns.
+const ACTION_PRESETS: &[&str] =
+    &["copy", "paste", "cut", "none", "key:9", "key:0", "key:f13", "key:f14"];
+/// Lighting options offered in the settings-window effect dropdown.
+const EFFECT_PRESETS: &[&str] = &["keep", "static", "breathing", "spectrum", "off"];
+
+/// Build the action dropdown labels (including the current values) and the
+/// selected indices for dpi_up / dpi_down.
+fn action_options(cfg: &Config) -> (Vec<String>, usize, usize) {
+    let mut labels: Vec<String> = ACTION_PRESETS.iter().map(|s| s.to_string()).collect();
+    for v in [&cfg.dpi_up, &cfg.dpi_down] {
+        if !labels.iter().any(|l| l == v) {
+            labels.push(v.clone());
+        }
+    }
+    let up = labels.iter().position(|l| l == &cfg.dpi_up).unwrap_or(0);
+    let down = labels.iter().position(|l| l == &cfg.dpi_down).unwrap_or(0);
+    (labels, up, down)
+}
+
+fn effect_options(cfg: &Config) -> (Vec<String>, usize) {
+    let labels: Vec<String> = EFFECT_PRESETS.iter().map(|s| s.to_string()).collect();
+    let idx = labels
+        .iter()
+        .position(|l| l.eq_ignore_ascii_case(&cfg.lighting))
+        .unwrap_or(0);
+    (labels, idx)
+}
+
+/// Spawn the settings window on its own thread (message loop lives there).
+fn open_settings_window(cfg: &Config, tx: &Sender<Event>) {
+    let (action_labels, up_index, down_index) = action_options(cfg);
+    let (effect_labels, effect_index) = effect_options(cfg);
+    let color = Rgb::parse_hex(&cfg.color).unwrap_or(Rgb::new(0, 0xFF, 0));
+    let init = platform::settings::SettingsInit {
+        dpi: cfg.dpi,
+        dpi_min: 100,
+        dpi_max: 3200,
+        action_labels: action_labels.clone(),
+        up_index,
+        down_index,
+        effect_labels: effect_labels.clone(),
+        effect_index,
+        color: (color.r, color.g, color.b),
+    };
+    let tx = tx.clone();
+    thread::spawn(move || {
+        use platform::settings::SettingsEvent as SE;
+        let tx_ev = tx.clone();
+        platform::settings::open(init, move |ev| {
+            let cmd = match ev {
+                SE::Dpi(v) => Some(MenuAction::SetDpi(v)),
+                SE::UpAction(i) => action_labels.get(i).map(|s| MenuAction::SetUpAction(s.clone())),
+                SE::DownAction(i) => {
+                    action_labels.get(i).map(|s| MenuAction::SetDownAction(s.clone()))
+                }
+                SE::Effect(i) => effect_labels.get(i).map(|s| MenuAction::SetEffectKind(s.clone())),
+                SE::Color(r, g, b) => Some(MenuAction::SetColor(Rgb::new(r, g, b))),
+                SE::Apply => Some(MenuAction::Apply),
+                SE::Save => Some(MenuAction::Save),
+            };
+            if let Some(c) = cmd {
+                let _ = tx_ev.send(Event::Menu(c));
+            }
+        });
+        // Window closed.
+        let _ = tx.send(Event::Menu(MenuAction::SettingsClosed));
+    });
 }
 
 /// Pre-parsed button actions.
@@ -83,6 +161,7 @@ mod menu_id {
     pub const SPECTRUM: u32 = 25;
     pub const OFF: u32 = 26;
 
+    pub const SETTINGS: u32 = 80;
     pub const RELOAD: u32 = 90;
     pub const QUIT: u32 = 91;
 }
@@ -129,6 +208,7 @@ fn build_menu_spec() -> Vec<platform::tray::MenuItem> {
             ],
         ),
         M::Separator,
+        M::action(SETTINGS, "Settings..."),
         M::action(RELOAD, "Reload config"),
         M::action(QUIT, "Quit"),
     ]
@@ -160,8 +240,10 @@ fn menu_action_for(id: u32) -> Option<MenuAction> {
         BREATHE_WHITE => MenuAction::Effect(EffectSpec::Breathing(white)),
         SPECTRUM => MenuAction::Effect(EffectSpec::Spectrum),
         OFF => MenuAction::Effect(EffectSpec::Off),
+        SETTINGS => MenuAction::OpenSettings,
         RELOAD => MenuAction::ReloadConfig,
         QUIT => MenuAction::Quit,
+        _ if id == platform::tray::TRAY_DOUBLE_CLICK => MenuAction::OpenSettings,
         _ => return None,
     })
 }
@@ -198,8 +280,9 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
     }
 
     let mut bindings = Bindings::from_config(&cfg, &log);
+    let mut settings_open = false;
     loop {
-        match run_session(&mut cfg, &mut bindings, &log, &tx, &rx) {
+        match run_session(&mut cfg, &mut bindings, &log, &tx, &rx, &mut settings_open) {
             Ok(()) => log.log("Session ended cleanly; restarting."),
             Err(e) => log.log(&format!(
                 "Session ended: {e}. Retrying in 3s (mouse unplugged/asleep?)."
@@ -215,6 +298,7 @@ fn run_session(
     log: &Logger,
     tx: &Sender<Event>,
     rx: &Receiver<Event>,
+    settings_open: &mut bool,
 ) -> Result<(), razer_hid::Error> {
     let api = razer_hid::open_api()?;
     let ctrl = DeathAdder::open_with(&api)?;
@@ -276,6 +360,19 @@ fn run_session(
     loop {
         match rx.recv_timeout(interval) {
             Ok(Event::Button(code)) => handle_code(code, bindings, log, &mut last_fire),
+            Ok(Event::Menu(MenuAction::OpenSettings)) => {
+                if *settings_open {
+                    log.log("Settings window already open.");
+                } else {
+                    *settings_open = true;
+                    open_settings_window(cfg, tx);
+                    log.log("Opened settings window.");
+                }
+            }
+            Ok(Event::Menu(MenuAction::SettingsClosed)) => {
+                *settings_open = false;
+                log.log("Settings window closed.");
+            }
             Ok(Event::Menu(action)) => {
                 if handle_menu(action, &ctrl, cfg, bindings, log)? {
                     log.log("Quit selected; exiting.");
@@ -332,6 +429,70 @@ fn handle_menu(
             }
             save_config(cfg, log);
             log.log(&format!("Menu: lighting -> {}.", spec.describe()));
+        }
+        MenuAction::SetUpAction(s) => {
+            match crate::actions::parse(&s) {
+                Ok(_) => {
+                    cfg.dpi_up = s.clone();
+                    *bindings = Bindings::from_config(cfg, log);
+                    save_config(cfg, log);
+                    log.log(&format!("Settings: dpi_up -> {s:?}."));
+                }
+                Err(e) => log.log(&format!("Settings: invalid dpi_up {s:?}: {e}")),
+            }
+        }
+        MenuAction::SetDownAction(s) => {
+            match crate::actions::parse(&s) {
+                Ok(_) => {
+                    cfg.dpi_down = s.clone();
+                    *bindings = Bindings::from_config(cfg, log);
+                    save_config(cfg, log);
+                    log.log(&format!("Settings: dpi_down -> {s:?}."));
+                }
+                Err(e) => log.log(&format!("Settings: invalid dpi_down {s:?}: {e}")),
+            }
+        }
+        MenuAction::SetEffectKind(kind) => match EffectSpec::from_config(&kind, &cfg.color) {
+            Ok(Some(spec)) => {
+                spec.apply(ctrl)?;
+                let (lighting, color) = spec.to_config();
+                cfg.lighting = lighting;
+                if let Some(c) = color {
+                    cfg.color = c;
+                }
+                save_config(cfg, log);
+                log.log(&format!("Settings: lighting -> {}.", spec.describe()));
+            }
+            Ok(None) => {
+                cfg.lighting = "keep".into();
+                save_config(cfg, log);
+                log.log("Settings: lighting -> keep.");
+            }
+            Err(e) => log.log(&format!("Settings: invalid effect {kind:?}: {e}")),
+        },
+        MenuAction::SetColor(rgb) => {
+            cfg.color = format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b);
+            // Re-apply live if the current effect is color-based.
+            if let Ok(Some(spec)) = EffectSpec::from_config(&cfg.lighting, &cfg.color) {
+                if matches!(spec, EffectSpec::Static(_) | EffectSpec::Breathing(_)) {
+                    spec.apply(ctrl)?;
+                }
+            }
+            save_config(cfg, log);
+            log.log(&format!("Settings: color -> {}.", cfg.color));
+        }
+        MenuAction::Apply => {
+            let (dx, dy) = cfg.dpi_xy();
+            let _ = ctrl.set_dpi(dx, dy);
+            apply_startup_lighting(ctrl, cfg, log);
+            log.log("Settings: applied current config to device.");
+        }
+        MenuAction::Save => {
+            save_config(cfg, log);
+            log.log("Settings: config saved.");
+        }
+        MenuAction::OpenSettings | MenuAction::SettingsClosed => {
+            // Handled in the run_session loop (need tx + the open flag).
         }
         MenuAction::ReloadConfig => {
             let (new_cfg, note) = Config::load_or_create(&Config::config_path());
@@ -423,4 +584,59 @@ fn reassert(ctrl: &DeathAdder, cfg: &Config, log: &Logger) -> Result<(), razer_h
         log.log(&format!("Re-locked DPI (was {cx}x{cy}, now {rx}x{ry})."));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_action_presets_parse() {
+        for p in ACTION_PRESETS {
+            assert!(crate::actions::parse(p).is_ok(), "preset {p:?} must parse");
+        }
+    }
+
+    #[test]
+    fn effect_presets_map_to_specs() {
+        // "keep" -> None; the rest -> a concrete spec.
+        assert_eq!(EffectSpec::from_config("keep", "#00ff00").unwrap(), None);
+        for p in &EFFECT_PRESETS[1..] {
+            assert!(EffectSpec::from_config(p, "#00ff00").unwrap().is_some(), "{p}");
+        }
+    }
+
+    #[test]
+    fn action_options_indices_track_config() {
+        let mut cfg = Config::default(); // dpi_up=copy, dpi_down=paste
+        let (labels, up, down) = action_options(&cfg);
+        assert_eq!(labels[up], "copy");
+        assert_eq!(labels[down], "paste");
+
+        // A custom value not in the presets must be appended and selected.
+        cfg.dpi_up = "ctrl+shift+v".to_string();
+        let (labels, up, _) = action_options(&cfg);
+        assert_eq!(labels[up], "ctrl+shift+v");
+        assert!(labels.iter().filter(|l| *l == "ctrl+shift+v").count() == 1);
+    }
+
+    #[test]
+    fn effect_options_index_tracks_lighting() {
+        let mut cfg = Config::default(); // lighting = keep
+        let (labels, idx) = effect_options(&cfg);
+        assert_eq!(labels[idx], "keep");
+        cfg.lighting = "spectrum".into();
+        let (labels, idx) = effect_options(&cfg);
+        assert_eq!(labels[idx], "spectrum");
+    }
+
+    #[test]
+    fn menu_action_for_covers_double_click_and_settings() {
+        assert!(matches!(menu_action_for(menu_id::SETTINGS), Some(MenuAction::OpenSettings)));
+        assert!(matches!(
+            menu_action_for(platform::tray::TRAY_DOUBLE_CLICK),
+            Some(MenuAction::OpenSettings)
+        ));
+        assert!(menu_action_for(9999).is_none());
+    }
 }
