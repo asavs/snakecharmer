@@ -1,0 +1,39 @@
+Psylli
+Copyright (C) 2026 asa
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 2 of the License, or (at your option) any later
+version. See the LICENSE file for the full text.
+
+-------------------------------------------------------------------------------
+Attribution
+-------------------------------------------------------------------------------
+
+Psylli's Razer HID protocol implementation is derived from OpenRazer:
+
+    OpenRazer — https://github.com/openrazer/openrazer
+    Licensed under the GNU General Public License v2.0.
+
+Specifically, the report structure, CRC, transaction IDs, command classes, and
+Chroma matrix-effect encodings in the `razer-proto` crate are a port of, and are
+validated byte-for-byte against, the following OpenRazer sources:
+
+    driver/razercommon.c
+    driver/razercommon.h
+    driver/razerchromacommon.c
+    driver/razermouse_driver.c
+
+OpenRazer is the work of its many contributors and performed the original
+reverse-engineering of Razer's USB HID control protocol. Psylli would not exist
+without it. This project is not affiliated with or endorsed by the OpenRazer
+project.
+
+-------------------------------------------------------------------------------
+Trademarks
+-------------------------------------------------------------------------------
+
+"Razer", "Synapse", "Chroma", and "DeathAdder" are trademarks of Razer Inc.,
+used here only descriptively to identify the hardware and protocol this software
+interoperates with. Psylli is an independent project and is not affiliated with,
+authorized, or endorsed by Razer Inc.

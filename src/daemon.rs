@@ -305,7 +305,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         let tx = tx.clone();
         thread::spawn(move || {
             platform::tray::run(
-                "Anti-Synapse - DeathAdder Elite",
+                "Psylli - DeathAdder Elite",
                 build_menu_spec(),
                 move |id| {
                     if let Some(a) = menu_action_for(id) {

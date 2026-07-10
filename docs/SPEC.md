@@ -1,4 +1,4 @@
-# Anti-Synapse — Design Spec
+# Psylli — Design Spec
 
 A native Windows replacement for Razer Synapse, scoped to the **Razer DeathAdder
 Elite** (USB `VID 0x1532 / PID 0x005C`). Everything Synapse did that's actually
@@ -34,13 +34,13 @@ resources refutes itself.
 - **Tray icon** (`Shell_NotifyIcon`) with a right-click menu (quick DPI, lighting,
   reload, quit) and a **settings window**: DPI slider, color picker + effect dropdown,
   per-button action dropdowns, Apply / Save.
-- Config persisted as TOML in `%LOCALAPPDATA%\AntiSynapse\config.toml`.
+- Config persisted as TOML in `%LOCALAPPDATA%\Psylli\config.toml`.
 - Runs at login via a Startup-folder shortcut (no admin), windowless until opened.
 
 ## Architecture (Rust, Win32-direct)
 
 ```
-anti-synapse/
+psylli/
 ├─ crates/
 │  ├─ razer-proto/      # pure protocol: report builder, CRC, mode/DPI/RGB commands
 │  │                    #   port of reference/razer_common.py — no I/O, unit-testable

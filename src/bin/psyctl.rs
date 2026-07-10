@@ -1,21 +1,21 @@
-//! `asctl` — the Anti-Synapse console CLI. A separate console-subsystem binary
+//! `psyctl` — the Psylli console CLI. A separate console-subsystem binary
 //! so the daemon can stay windowless while command-line control still prints to
 //! the terminal cleanly.
 //!
 //! Usage:
-//!   asctl status                         device mode + DPI (read-only)
-//!   asctl set-dpi X [Y]                  set DPI
-//!   asctl set-mode driver|hardware       set device mode
-//!   asctl set-color <#RRGGBB>            static color (both zones)
-//!   asctl set-effect static [#RRGGBB]    static color effect
-//!   asctl set-effect breathing [#RRGGBB] breathing effect
-//!   asctl set-effect spectrum            spectrum cycling
-//!   asctl set-effect off                 lighting off
-//!   asctl self-test                      exercise keystroke injection (F13)
-//!   asctl where                          print config/log paths
+//!   psyctl status                         device mode + DPI (read-only)
+//!   psyctl set-dpi X [Y]                  set DPI
+//!   psyctl set-mode driver|hardware       set device mode
+//!   psyctl set-color <#RRGGBB>            static color (both zones)
+//!   psyctl set-effect static [#RRGGBB]    static color effect
+//!   psyctl set-effect breathing [#RRGGBB] breathing effect
+//!   psyctl set-effect spectrum            spectrum cycling
+//!   psyctl set-effect off                 lighting off
+//!   psyctl self-test                      exercise keystroke injection (F13)
+//!   psyctl where                          print config/log paths
 
-use anti_synapse::config::Config;
-use anti_synapse::lighting::EffectSpec;
+use psylli::config::Config;
+use psylli::lighting::EffectSpec;
 use razer_hid::DeathAdder;
 use razer_proto::{DeviceMode, Rgb};
 
@@ -59,18 +59,18 @@ fn main() {
 
 fn print_help() {
     println!(
-        "asctl — Anti-Synapse control CLI (DeathAdder Elite)\n\n\
+        "psyctl — Psylli control CLI (DeathAdder Elite)\n\n\
          USAGE:\n\
-         \x20 asctl status                          device mode + DPI (read-only)\n\
-         \x20 asctl set-dpi X [Y]                   set DPI\n\
-         \x20 asctl set-mode driver|hardware        set device mode\n\
-         \x20 asctl set-color <#RRGGBB>             static color (both zones)\n\
-         \x20 asctl set-effect static [#RRGGBB]     static color effect\n\
-         \x20 asctl set-effect breathing [#RRGGBB]  breathing effect\n\
-         \x20 asctl set-effect spectrum             spectrum cycling\n\
-         \x20 asctl set-effect off                  lighting off\n\
-         \x20 asctl self-test                       test keystroke injection (F13)\n\
-         \x20 asctl where                           print config/log paths\n"
+         \x20 psyctl status                          device mode + DPI (read-only)\n\
+         \x20 psyctl set-dpi X [Y]                   set DPI\n\
+         \x20 psyctl set-mode driver|hardware        set device mode\n\
+         \x20 psyctl set-color <#RRGGBB>             static color (both zones)\n\
+         \x20 psyctl set-effect static [#RRGGBB]     static color effect\n\
+         \x20 psyctl set-effect breathing [#RRGGBB]  breathing effect\n\
+         \x20 psyctl set-effect spectrum             spectrum cycling\n\
+         \x20 psyctl set-effect off                  lighting off\n\
+         \x20 psyctl self-test                       test keystroke injection (F13)\n\
+         \x20 psyctl where                           print config/log paths\n"
     );
 }
 
@@ -138,7 +138,7 @@ fn self_test() -> Result<(), Box<dyn std::error::Error>> {
     let (cfg, _) = Config::load_or_create(&Config::config_path());
     println!("Config: dpi={:?} up={:?} down={:?} lighting={:?}", cfg.dpi_xy(), cfg.dpi_up, cfg.dpi_down, cfg.lighting);
     for (label, spec) in [("dpi_up", &cfg.dpi_up), ("dpi_down", &cfg.dpi_down)] {
-        match anti_synapse::actions::parse(spec) {
+        match psylli::actions::parse(spec) {
             Ok(a) => println!("  {label} = {spec:?} -> {:?}", a.chord()),
             Err(e) => println!("  {label} = {spec:?} -> PARSE ERROR: {e}"),
         }
