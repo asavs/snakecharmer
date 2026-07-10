@@ -1,0 +1,32 @@
+[workspace]
+members = ["crates/razer-proto", "crates/razer-hid"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["asa"]
+rust-version = "1.97"
+
+[package]
+name = "anti-synapse"
+version = "0.1.0"
+edition = "2021"
+description = "Native Windows replacement for Razer Synapse, scoped to the DeathAdder Elite"
+default-run = "anti-synapse"
+
+# Phase 1 milestone binary: reproduce the Python prototype end-to-end on the real mouse.
+[[bin]]
+name = "anti-synapse"
+path = "src/main.rs"
+
+[dependencies]
+razer-proto = { path = "crates/razer-proto" }
+razer-hid = { path = "crates/razer-hid" }
+
+# Footprint-focused release profile (SPEC target: static exe <= 2 MB).
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
