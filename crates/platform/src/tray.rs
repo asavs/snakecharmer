@@ -19,11 +19,14 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetMessageW, GetWindowLongPtrW, LoadIconW, PostMessageW, PostQuitMessage,
     RegisterClassW, SetForegroundWindow, SetWindowLongPtrW, TrackPopupMenu, TranslateMessage,
     CW_USEDEFAULT, GWLP_USERDATA, HMENU, IDI_APPLICATION, MF_POPUP, MF_SEPARATOR, MF_STRING, MSG,
-    TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_COMMAND, WM_DESTROY, WM_RBUTTONUP,
-    WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_COMMAND, WM_DESTROY,
+    WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 const TRAY_CALLBACK_MSG: u32 = WM_APP + 1;
+
+/// Command id the callback receives when the tray icon is double-clicked.
+pub const TRAY_DOUBLE_CLICK: u32 = 0xFFFF_FFFF;
 
 /// One entry in the tray's right-click menu.
 pub enum MenuItem {
@@ -160,8 +163,14 @@ unsafe extern "system" fn wnd_proc(
     match msg {
         TRAY_CALLBACK_MSG => {
             // Low word of lParam is the mouse event on the icon.
-            if (lparam as u32) == WM_RBUTTONUP {
-                show_context_menu(hwnd);
+            match lparam as u32 {
+                WM_RBUTTONUP => show_context_menu(hwnd),
+                WM_LBUTTONDBLCLK => {
+                    if let Some(state) = state_ref(hwnd) {
+                        (state.on_command)(TRAY_DOUBLE_CLICK);
+                    }
+                }
+                _ => {}
             }
             0
         }
