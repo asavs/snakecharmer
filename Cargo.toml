@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/razer-proto", "crates/razer-hid"]
+members = ["crates/razer-proto", "crates/razer-hid", "crates/platform"]
 
 [workspace.package]
 edition = "2021"
@@ -22,6 +22,9 @@ path = "src/main.rs"
 [dependencies]
 razer-proto = { path = "crates/razer-proto" }
 razer-hid = { path = "crates/razer-hid" }
+platform = { path = "crates/platform" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 # Footprint-focused release profile (SPEC target: static exe <= 2 MB).
 [profile.release]

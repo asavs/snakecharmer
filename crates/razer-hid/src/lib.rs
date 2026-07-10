@@ -10,12 +10,19 @@
 //! that accepts these vendor feature reports; the auxiliary keyboard-style
 //! collections reject `HidD_SetFeature` with "Incorrect function".
 
+use std::ffi::CString;
 use std::thread::sleep;
 use std::time::Duration;
 
 use hidapi::{HidApi, HidDevice};
 use razer_proto as proto;
 use razer_proto::{DeviceMode, REPORT_LEN};
+
+/// Create a fresh [`HidApi`] instance (the library is safe to instantiate more
+/// than once). Exposed so callers can share one instance across opens.
+pub fn open_api() -> Result<HidApi> {
+    Ok(HidApi::new()?)
+}
 
 /// Errors from talking to the mouse.
 #[derive(Debug)]
@@ -172,5 +179,64 @@ impl DeathAdder {
             )));
         }
         Ok(read)
+    }
+}
+
+/// Paths of every auxiliary (non-control) HID collection of the DeathAdder
+/// Elite — i.e. every interface other than interface-0 mouse control. These
+/// are the candidate collections for the DPI-button vendor input reports; the
+/// caller probes which ones are actually readable.
+pub fn aux_collection_paths(api: &HidApi) -> Vec<CString> {
+    api.device_list()
+        .filter(|d| {
+            d.vendor_id() == proto::VENDOR_ID
+                && d.product_id() == proto::PRODUCT_ID
+                && d.interface_number() != 0
+        })
+        .map(|d| d.path().to_owned())
+        .collect()
+}
+
+/// A readable auxiliary HID collection, used to listen for DPI-button input
+/// reports. `HidDevice` is `Send`, so a `Listener` can be moved into its own
+/// thread for a truly blocking read (no poll loop — CPU stays at ~0 when idle).
+pub struct Listener {
+    dev: HidDevice,
+    path: String,
+}
+
+impl Listener {
+    /// Open an auxiliary collection by path.
+    pub fn open(api: &HidApi, path: &CString) -> Result<Listener> {
+        let dev = api.open_path(path)?;
+        Ok(Listener {
+            dev,
+            path: path.to_string_lossy().into_owned(),
+        })
+    }
+
+    /// A short, human-readable tail of the device path (for logs).
+    pub fn label(&self) -> String {
+        let p = &self.path;
+        let tail = if p.len() > 34 { &p[p.len() - 34..] } else { p };
+        tail.to_string()
+    }
+
+    /// Toggle blocking mode. Blocking (`true`) makes [`Listener::read`] wait for
+    /// a report; non-blocking (`false`) returns `Ok(0)` immediately when idle.
+    pub fn set_blocking(&self, blocking: bool) -> Result<()> {
+        self.dev.set_blocking_mode(blocking)?;
+        Ok(())
+    }
+
+    /// Read one input report into `buf`, returning the number of bytes read.
+    /// In blocking mode this parks the thread until a report arrives.
+    pub fn read(&self, buf: &mut [u8]) -> Result<usize> {
+        Ok(self.dev.read(buf)?)
+    }
+
+    /// Read with an explicit timeout in milliseconds (`-1` = block forever).
+    pub fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
+        Ok(self.dev.read_timeout(buf, timeout_ms)?)
     }
 }
