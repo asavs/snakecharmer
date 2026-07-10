@@ -8,15 +8,15 @@ authors = ["asa"]
 rust-version = "1.97"
 
 [package]
-name = "psylli"
+name = "snakecharmer"
 version = "0.1.0"
 edition = "2021"
 description = "Native Windows replacement for Razer Synapse, scoped to the DeathAdder Elite"
-default-run = "psylli"
+default-run = "snakecharmer"
 
 # The daemon binary: DPI/lighting/remap + tray, talking to the real mouse.
 [[bin]]
-name = "psylli"
+name = "snakecharmer"
 path = "src/main.rs"
 
 [dependencies]

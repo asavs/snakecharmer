@@ -1,14 +1,14 @@
 # `reference/` — the Python recon toolkit
 
 This is the **original, runnable crack of the DeathAdder Elite in Python** — the worked
-example behind [`../CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md). Psylli itself is
+example behind [`../CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md). Snakecharmer itself is
 the polished Rust rewrite; these ~4 small files are kept because they're the best thing to
 read (and hack on) when **adding a new device**: the whole method — enumerate → build
 report + CRC → read-confirm → write → self-logging listener — in one gulp, with no compile
 cycle. Python + `hidapi` is the recon lingua franca; start here, adapt the byte layout for
 your mouse or keyboard.
 
-> Not part of the shipping app and not meant to autostart — the Rust `psylli.exe` does that
+> Not part of the shipping app and not meant to autostart — the Rust `snakecharmer.exe` does that
 > now. This folder is a reference exhibit and a scaffold to copy from.
 
 ## How it works (the DeathAdder Elite example)

@@ -1,4 +1,4 @@
-Psylli
+Snakecharmer
 Copyright (C) 2026 asa
 
 This program is free software: you can redistribute it and/or modify it under
@@ -10,7 +10,7 @@ version. See the LICENSE file for the full text.
 Attribution
 -------------------------------------------------------------------------------
 
-Psylli's Razer HID protocol implementation is derived from OpenRazer:
+Snakecharmer's Razer HID protocol implementation is derived from OpenRazer:
 
     OpenRazer — https://github.com/openrazer/openrazer
     Licensed under the GNU General Public License v2.0.
@@ -25,7 +25,7 @@ validated byte-for-byte against, the following OpenRazer sources:
     driver/razermouse_driver.c
 
 OpenRazer is the work of its many contributors and performed the original
-reverse-engineering of Razer's USB HID control protocol. Psylli would not exist
+reverse-engineering of Razer's USB HID control protocol. Snakecharmer would not exist
 without it. This project is not affiliated with or endorsed by the OpenRazer
 project.
 
@@ -35,5 +35,5 @@ Trademarks
 
 "Razer", "Synapse", "Chroma", and "DeathAdder" are trademarks of Razer Inc.,
 used here only descriptively to identify the hardware and protocol this software
-interoperates with. Psylli is an independent project and is not affiliated with,
+interoperates with. Snakecharmer is an independent project and is not affiliated with,
 authorized, or endorsed by Razer Inc.

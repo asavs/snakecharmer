@@ -1,4 +1,4 @@
-//! Isolated Windows platform FFI for Psylli.
+//! Isolated Windows platform FFI for Snakecharmer.
 //!
 //! Every `unsafe` block in the project lives here, contained and documented:
 //!   * [`send_chord`] — synthesize a keystroke via `SendInput`.

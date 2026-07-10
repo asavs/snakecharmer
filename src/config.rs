@@ -1,6 +1,6 @@
-//! Configuration for the Psylli daemon.
+//! Configuration for the Snakecharmer daemon.
 //!
-//! Persisted as TOML at `%LOCALAPPDATA%\Psylli\config.toml`. Defaults are
+//! Persisted as TOML at `%LOCALAPPDATA%\Snakecharmer\config.toml`. Defaults are
 //! written if the file is missing. This seeds the Phase-4 settings window.
 
 use std::path::{Path, PathBuf};
@@ -54,12 +54,12 @@ impl Config {
         (self.dpi, self.dpi_y.unwrap_or(self.dpi))
     }
 
-    /// Config directory: `%LOCALAPPDATA%\Psylli` (falls back to CWD).
+    /// Config directory: `%LOCALAPPDATA%\Snakecharmer` (falls back to CWD).
     pub fn dir() -> PathBuf {
         let base = std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
-        base.join("Psylli")
+        base.join("Snakecharmer")
     }
 
     pub fn config_path() -> PathBuf {

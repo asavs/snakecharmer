@@ -117,7 +117,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         InitCommonControlsEx(&icc);
 
         let hinstance = GetModuleHandleW(std::ptr::null());
-        let class_name = to_wide("PsylliSettings");
+        let class_name = to_wide("SnakecharmerSettings");
         let wc = WNDCLASSW {
             style: 0,
             lpfnWndProc: Some(wnd_proc),
@@ -132,7 +132,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         };
         RegisterClassW(&wc);
 
-        let title = to_wide("Psylli Settings");
+        let title = to_wide("Snakecharmer Settings");
         let style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
         let hwnd = CreateWindowExW(
             0,

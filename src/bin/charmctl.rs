@@ -1,21 +1,21 @@
-//! `psyctl` — the Psylli console CLI. A separate console-subsystem binary
+//! `charmctl` — the Snakecharmer console CLI. A separate console-subsystem binary
 //! so the daemon can stay windowless while command-line control still prints to
 //! the terminal cleanly.
 //!
 //! Usage:
-//!   psyctl status                         device mode + DPI (read-only)
-//!   psyctl set-dpi X [Y]                  set DPI
-//!   psyctl set-mode driver|hardware       set device mode
-//!   psyctl set-color <#RRGGBB>            static color (both zones)
-//!   psyctl set-effect static [#RRGGBB]    static color effect
-//!   psyctl set-effect breathing [#RRGGBB] breathing effect
-//!   psyctl set-effect spectrum            spectrum cycling
-//!   psyctl set-effect off                 lighting off
-//!   psyctl self-test                      exercise keystroke injection (F13)
-//!   psyctl where                          print config/log paths
+//!   charmctl status                         device mode + DPI (read-only)
+//!   charmctl set-dpi X [Y]                  set DPI
+//!   charmctl set-mode driver|hardware       set device mode
+//!   charmctl set-color <#RRGGBB>            static color (both zones)
+//!   charmctl set-effect static [#RRGGBB]    static color effect
+//!   charmctl set-effect breathing [#RRGGBB] breathing effect
+//!   charmctl set-effect spectrum            spectrum cycling
+//!   charmctl set-effect off                 lighting off
+//!   charmctl self-test                      exercise keystroke injection (F13)
+//!   charmctl where                          print config/log paths
 
-use psylli::config::Config;
-use psylli::lighting::EffectSpec;
+use snakecharmer::config::Config;
+use snakecharmer::lighting::EffectSpec;
 use razer_hid::DeathAdder;
 use razer_proto::{DeviceMode, Rgb};
 
@@ -59,18 +59,18 @@ fn main() {
 
 fn print_help() {
     println!(
-        "psyctl — Psylli control CLI (DeathAdder Elite)\n\n\
+        "charmctl — Snakecharmer control CLI (DeathAdder Elite)\n\n\
          USAGE:\n\
-         \x20 psyctl status                          device mode + DPI (read-only)\n\
-         \x20 psyctl set-dpi X [Y]                   set DPI\n\
-         \x20 psyctl set-mode driver|hardware        set device mode\n\
-         \x20 psyctl set-color <#RRGGBB>             static color (both zones)\n\
-         \x20 psyctl set-effect static [#RRGGBB]     static color effect\n\
-         \x20 psyctl set-effect breathing [#RRGGBB]  breathing effect\n\
-         \x20 psyctl set-effect spectrum             spectrum cycling\n\
-         \x20 psyctl set-effect off                  lighting off\n\
-         \x20 psyctl self-test                       test keystroke injection (F13)\n\
-         \x20 psyctl where                           print config/log paths\n"
+         \x20 charmctl status                          device mode + DPI (read-only)\n\
+         \x20 charmctl set-dpi X [Y]                   set DPI\n\
+         \x20 charmctl set-mode driver|hardware        set device mode\n\
+         \x20 charmctl set-color <#RRGGBB>             static color (both zones)\n\
+         \x20 charmctl set-effect static [#RRGGBB]     static color effect\n\
+         \x20 charmctl set-effect breathing [#RRGGBB]  breathing effect\n\
+         \x20 charmctl set-effect spectrum             spectrum cycling\n\
+         \x20 charmctl set-effect off                  lighting off\n\
+         \x20 charmctl self-test                       test keystroke injection (F13)\n\
+         \x20 charmctl where                           print config/log paths\n"
     );
 }
 
@@ -138,7 +138,7 @@ fn self_test() -> Result<(), Box<dyn std::error::Error>> {
     let (cfg, _) = Config::load_or_create(&Config::config_path());
     println!("Config: dpi={:?} up={:?} down={:?} lighting={:?}", cfg.dpi_xy(), cfg.dpi_up, cfg.dpi_down, cfg.lighting);
     for (label, spec) in [("dpi_up", &cfg.dpi_up), ("dpi_down", &cfg.dpi_down)] {
-        match psylli::actions::parse(spec) {
+        match snakecharmer::actions::parse(spec) {
             Ok(a) => println!("  {label} = {spec:?} -> {:?}", a.chord()),
             Err(e) => println!("  {label} = {spec:?} -> PARSE ERROR: {e}"),
         }

@@ -1,4 +1,21 @@
-# Psylli
+# Snakecharmer
+
+```
+                       ___
+                      /   \       ♪
+                     | o o |    ♫
+                     |  >  |   ♪
+                      \_-_/  ♫
+                       ) (
+                      /   \
+                  .--'     '--.
+                 /  )))   (((  \
+                |   )))   (((   |
+                 \  )))   (((  /
+                  '-----------'
+```
+
+> *Command the snake with a whisper, not a cage.*
 
 A lightweight, open configuration tool for the **Razer DeathAdder Elite** on
 **Windows** — DPI, RGB lighting, and button remapping in a single **436 KB** native
@@ -6,21 +23,23 @@ exe, with no background browser, no telemetry, and negligible idle CPU.
 
 Think of it as the **Windows sibling of [OpenRazer](https://openrazer.github.io/)**:
 OpenRazer opened up Razer's HID protocol on Linux, but it's Linux-only (it ships as
-kernel modules). Psylli brings that same protocol to Windows as a plain userspace app —
+kernel modules). Snakecharmer brings that same protocol to Windows as a plain userspace app —
 and adds the one genuinely useful thing OpenRazer leaves to other tools: **button
 remapping** (the feature you otherwise need Razer Synapse for).
 
-> The name: the **Psylli** were an ancient North African people renowned as
-> snake charmers, said to handle serpents unharmed. Razer's mascot is a snake; this
-> tames it without Synapse.
+> **The name.** A snake charmer commands the serpent with a simple pipe, not a cage —
+> which is the whole idea: drive the mouse with a 436 KB whisper instead of Synapse's
+> five-process spectacle. Razer's mascot is a snake; this tames it. *(It nearly shipped as
+> **Psylli**, after the ancient North African people renowned for handling snakes unharmed
+> — that name lives on here in the lore.)*
 
 ## Why
 
 Razer Synapse runs several processes and a full Chromium instance in the background to
-do what amounts to a handful of HID feature reports. Psylli talks to the mouse directly
+do what amounts to a handful of HID feature reports. Snakecharmer talks to the mouse directly
 over Win32 HID and then gets out of the way.
 
-| | Razer Synapse | Psylli |
+| | Razer Synapse | Snakecharmer |
 |---|---|---|
 | Footprint | ~5 processes + Chromium | one **436 KB** static exe |
 | Idle CPU | constant | negligible (blocking HID reads, no poll loop) |
@@ -31,7 +50,7 @@ over Win32 HID and then gets out of the way.
 
 - **DPI level** — set and lock sensitivity; re-asserted at login and periodically.
 - **DPI-button remap** — the two buttons behind the wheel emit private Razer vendor
-  codes (`0x20`/`0x21`) the OS can't see; Psylli catches them at the HID layer and turns
+  codes (`0x20`/`0x21`) the OS can't see; Snakecharmer catches them at the HID layer and turns
   them into keystrokes (default: copy / paste).
 - **Thumb-button remap** — the side Back/Forward buttons remapped to keystrokes via a
   low-level `WH_MOUSE_LL` hook that suppresses the original.
@@ -59,8 +78,8 @@ contained job, and a great one to hand an AI coding agent. See
 cargo build --release
 ```
 
-Produces `target\release\psylli.exe` (the windowless daemon) and
-`target\release\psyctl.exe` (the console control CLI).
+Produces `target\release\snakecharmer.exe` (the windowless daemon) and
+`target\release\charmctl.exe` (the console control CLI).
 
 ## Run at login
 
@@ -74,7 +93,7 @@ Produces `target\release\psylli.exe` (the windowless daemon) and
 
 ## Configuration
 
-Config lives at `%LOCALAPPDATA%\Psylli\config.toml`, written with defaults on first run
+Config lives at `%LOCALAPPDATA%\Snakecharmer\config.toml`, written with defaults on first run
 and editable from the settings window. Defaults:
 
 ```toml
@@ -88,25 +107,25 @@ color = "#00ff00"
 reassert_interval_secs = 60
 ```
 
-## `psyctl` — command-line control
+## `charmctl` — command-line control
 
 ```
-psyctl status                          device mode + DPI (read-only)
-psyctl set-dpi X [Y]                    set DPI
-psyctl set-mode driver|hardware         set device mode
-psyctl set-color <#RRGGBB>              static color (both zones)
-psyctl set-effect static [#RRGGBB]      static color effect
-psyctl set-effect breathing [#RRGGBB]   breathing effect
-psyctl set-effect spectrum              spectrum cycling
-psyctl set-effect off                   lighting off
-psyctl self-test                        test keystroke injection (F13)
-psyctl where                            print config/log paths
+charmctl status                          device mode + DPI (read-only)
+charmctl set-dpi X [Y]                    set DPI
+charmctl set-mode driver|hardware         set device mode
+charmctl set-color <#RRGGBB>              static color (both zones)
+charmctl set-effect static [#RRGGBB]      static color effect
+charmctl set-effect breathing [#RRGGBB]   breathing effect
+charmctl set-effect spectrum              spectrum cycling
+charmctl set-effect off                   lighting off
+charmctl self-test                        test keystroke injection (F13)
+charmctl where                            print config/log paths
 ```
 
 ## Architecture
 
 ```
-psylli/
+snakecharmer/
 ├─ crates/
 │  ├─ razer-proto/   # pure protocol: report builder, CRC, mode/DPI/RGB commands (no I/O)
 │  ├─ razer-hid/     # device open/enumerate, feature reports, input-report listener
@@ -119,12 +138,12 @@ See [`docs/SPEC.md`](docs/SPEC.md) for the full design and the protocol notes.
 
 ## Relationship to OpenRazer & license
 
-Psylli's protocol knowledge — the report layout, command classes, CRC, transaction IDs,
+Snakecharmer's protocol knowledge — the report layout, command classes, CRC, transaction IDs,
 and Chroma effect encodings — is derived from **[OpenRazer](https://github.com/openrazer/openrazer)**
 (`driver/razercommon.*`, `razerchromacommon.c`, `razermouse_driver.c`). OpenRazer did the
-hard reverse-engineering; Psylli ports the DeathAdder Elite slice of it to Windows.
+hard reverse-engineering; Snakecharmer ports the DeathAdder Elite slice of it to Windows.
 
-Because that makes Psylli a derivative work of OpenRazer, it is licensed under the
+Because that makes Snakecharmer a derivative work of OpenRazer, it is licensed under the
 **GNU General Public License v2.0 or later** — the same copyleft as OpenRazer. See
 [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
