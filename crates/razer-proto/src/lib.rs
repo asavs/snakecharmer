@@ -83,6 +83,8 @@ pub enum ProtoError {
     DeviceStatus(u8),
     /// The response's command class/id did not echo the request.
     CommandEchoMismatch { sent: (u8, u8), got: (u8, u8) },
+    /// A color string was not `#RRGGBB` / `RRGGBB`.
+    BadColor(String),
 }
 
 impl core::fmt::Display for ProtoError {
@@ -97,6 +99,7 @@ impl core::fmt::Display for ProtoError {
                 "response echo mismatch: sent {:02x}/{:02x}, got {:02x}/{:02x}",
                 sent.0, sent.1, got.0, got.1
             ),
+            ProtoError::BadColor(s) => write!(f, "bad color {s:?} (want #RRGGBB)"),
         }
     }
 }
@@ -164,6 +167,100 @@ pub fn set_dpi_report(dpi_x: u16, dpi_y: u16) -> Result<[u8; REPORT_LEN], ProtoE
 /// get DPI (xy): class 0x04, id 0x85.
 pub fn get_dpi_report() -> [u8; REPORT_LEN] {
     build_report(0x04, 0x85, 0x07, &[]).expect("no args always valid")
+}
+
+// --- Chroma / RGB lighting ------------------------------------------------
+//
+// The DeathAdder Elite (PID 0x005C) uses OpenRazer's *extended matrix effect*
+// family (`razer_chroma_extended_matrix_effect_*` in `razerchromacommon.c`),
+// dispatched with transaction_id 0x3F for this device (see the DEATHADDER_ELITE
+// cases in `razermouse_driver.c`). NOTE: these are command_class 0x0F /
+// command_id 0x02 — *not* the class-0x03 "standard" LED commands. The base
+// builder (`razer_chroma_extended_matrix_effect_base`) lays out:
+//   arg[0] = variable_storage (VARSTORE = 0x01)
+//   arg[1] = led_id           (SCROLL_WHEEL_LED 0x01 / LOGO_LED 0x04)
+//   arg[2] = effect_id
+// with a per-effect data_size and trailing arguments.
+
+/// Variable-storage selector (persist to the device's own store).
+pub const VARSTORE: u8 = 0x01;
+/// Non-persistent storage selector.
+pub const NOSTORE: u8 = 0x00;
+
+/// The DeathAdder Elite's two lit zones.
+pub mod led {
+    pub const SCROLL_WHEEL: u8 = 0x01;
+    pub const LOGO: u8 = 0x04;
+}
+
+/// A 24-bit RGB color.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rgb {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl Rgb {
+    pub const fn new(r: u8, g: u8, b: u8) -> Rgb {
+        Rgb { r, g, b }
+    }
+
+    /// Parse `#RRGGBB` or `RRGGBB` (case-insensitive).
+    pub fn parse_hex(s: &str) -> Result<Rgb, ProtoError> {
+        let h = s.trim().trim_start_matches('#');
+        if h.len() != 6 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(ProtoError::BadColor(s.to_string()));
+        }
+        let v = u32::from_str_radix(h, 16).map_err(|_| ProtoError::BadColor(s.to_string()))?;
+        Ok(Rgb::new((v >> 16) as u8, (v >> 8) as u8, v as u8))
+    }
+}
+
+/// The `razer_chroma_extended_matrix_effect_base`: class 0x0F, id 0x02.
+fn extended_matrix_effect_base(
+    arg_size: u8,
+    variable_storage: u8,
+    led_id: u8,
+    effect_id: u8,
+) -> [u8; REPORT_LEN] {
+    build_report(0x0F, 0x02, arg_size, &[variable_storage, led_id, effect_id])
+        .expect("3 args always valid")
+}
+
+/// "None" (off) effect for a zone. `razer_chroma_extended_matrix_effect_none`.
+pub fn effect_none_report(led_id: u8) -> [u8; REPORT_LEN] {
+    extended_matrix_effect_base(0x06, VARSTORE, led_id, 0x00)
+}
+
+/// "Spectrum" cycling effect for a zone. `..._effect_spectrum`.
+pub fn effect_spectrum_report(led_id: u8) -> [u8; REPORT_LEN] {
+    extended_matrix_effect_base(0x06, VARSTORE, led_id, 0x03)
+}
+
+/// "Static" single-color effect for a zone. `..._effect_static`.
+pub fn effect_static_report(led_id: u8, rgb: Rgb) -> [u8; REPORT_LEN] {
+    let mut r = extended_matrix_effect_base(0x09, VARSTORE, led_id, 0x01);
+    // arguments[5]=0x01, arguments[6..9]=RGB  (arguments start at byte offset 8)
+    r[8 + 5] = 0x01;
+    r[8 + 6] = rgb.r;
+    r[8 + 7] = rgb.g;
+    r[8 + 8] = rgb.b;
+    r[88] = crc(&r);
+    r
+}
+
+/// "Breathing" (single-color) effect for a zone. `..._effect_breathing_single`.
+pub fn effect_breathing_report(led_id: u8, rgb: Rgb) -> [u8; REPORT_LEN] {
+    let mut r = extended_matrix_effect_base(0x09, VARSTORE, led_id, 0x02);
+    // arguments[3]=0x01, arguments[5]=0x01, arguments[6..9]=RGB
+    r[8 + 3] = 0x01;
+    r[8 + 5] = 0x01;
+    r[8 + 6] = rgb.r;
+    r[8 + 7] = rgb.g;
+    r[8 + 8] = rgb.b;
+    r[88] = crc(&r);
+    r
 }
 
 // --- Response validation & parsing ---------------------------------------
@@ -311,6 +408,69 @@ mod tests {
         resp[12] = 0x20; // y = 800
         let v = validate_response(&req, &resp).unwrap();
         assert_eq!(parse_dpi(v), (1600, 800));
+    }
+
+    // --- Chroma tests: assert exact bytes against OpenRazer doc examples ----
+
+    #[test]
+    fn chroma_common_header() {
+        // All effects: class 0x0F, id 0x02, txn 0x3F, arg[0]=VARSTORE.
+        let r = effect_spectrum_report(led::SCROLL_WHEEL);
+        assert_eq!(r[0], 0x00); // status
+        assert_eq!(r[1], 0x3F); // transaction id
+        assert_eq!(r[6], 0x0F); // command class
+        assert_eq!(r[7], 0x02); // command id
+        assert_eq!(r[8], VARSTORE);
+    }
+
+    #[test]
+    fn chroma_spectrum_matches_openrazer() {
+        // Doc: data_size 06, args 01 <led> 03 00 00 00
+        let r = effect_spectrum_report(led::LOGO);
+        assert_eq!(r[5], 0x06); // data_size
+        assert_eq!(&r[8..14], &[VARSTORE, led::LOGO, 0x03, 0x00, 0x00, 0x00]);
+        assert_eq!(r[88], crc(&r));
+    }
+
+    #[test]
+    fn chroma_none_matches_openrazer() {
+        // Doc: 010500000000 (data_size 06)
+        let r = effect_none_report(led::SCROLL_WHEEL);
+        assert_eq!(r[5], 0x06);
+        assert_eq!(&r[8..14], &[VARSTORE, led::SCROLL_WHEEL, 0x00, 0x00, 0x00, 0x00]);
+        assert_eq!(r[88], crc(&r));
+    }
+
+    #[test]
+    fn chroma_static_red_matches_openrazer() {
+        // Doc pattern: data_size 09, args 01 <led> 01 00 00 01 RR GG BB
+        let r = effect_static_report(led::SCROLL_WHEEL, Rgb::new(0xFF, 0x00, 0x00));
+        assert_eq!(r[5], 0x09);
+        assert_eq!(
+            &r[8..17],
+            &[VARSTORE, led::SCROLL_WHEEL, 0x01, 0x00, 0x00, 0x01, 0xFF, 0x00, 0x00]
+        );
+        assert_eq!(r[88], crc(&r));
+    }
+
+    #[test]
+    fn chroma_breathing_green_matches_openrazer() {
+        // Doc: 01 05 02 01 00 01 00 ff 00 (data_size 09)
+        let r = effect_breathing_report(led::LOGO, Rgb::new(0x00, 0xFF, 0x00));
+        assert_eq!(r[5], 0x09);
+        assert_eq!(
+            &r[8..17],
+            &[VARSTORE, led::LOGO, 0x02, 0x01, 0x00, 0x01, 0x00, 0xFF, 0x00]
+        );
+        assert_eq!(r[88], crc(&r));
+    }
+
+    #[test]
+    fn rgb_hex_parsing() {
+        assert_eq!(Rgb::parse_hex("#FF8800"), Ok(Rgb::new(0xFF, 0x88, 0x00)));
+        assert_eq!(Rgb::parse_hex("00ff00"), Ok(Rgb::new(0, 255, 0)));
+        assert!(Rgb::parse_hex("#12345").is_err());
+        assert!(Rgb::parse_hex("gggggg").is_err());
     }
 
     #[test]

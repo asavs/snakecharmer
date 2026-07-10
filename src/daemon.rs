@@ -1,18 +1,19 @@
-//! The headless daemon: enable driver mode, lock DPI, listen for the DPI-button
-//! vendor reports on the readable collections (blocking reads in per-collection
-//! threads), and inject the configured keystrokes. Parity with
-//! `reference/dpi_button_daemon.py`.
+//! The headless daemon (with system tray): enable driver mode, lock DPI, apply
+//! lighting, listen for the DPI-button vendor reports on the readable
+//! collections (blocking reads in per-collection threads), inject the
+//! configured keystrokes, and serve the tray menu. One process, one exe.
 
 use std::collections::HashSet;
-use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use razer_hid::{aux_collection_paths, DeathAdder, Listener};
-use razer_proto::DeviceMode;
+use razer_proto::{DeviceMode, Rgb};
 
 use crate::actions::Action;
 use crate::config::Config;
+use crate::lighting::EffectSpec;
 use crate::logger::Logger;
 
 /// Vendor codes emitted by the DPI buttons in driver mode.
@@ -21,6 +22,22 @@ const CODE_DPI_DOWN: u8 = 0x21; // rear button
 
 /// Ignore a repeat of the same code within this window (debounce / anti double-fire).
 const DEBOUNCE: Duration = Duration::from_millis(200);
+
+/// A menu selection turned into a daemon command.
+#[derive(Debug, Clone)]
+pub enum MenuAction {
+    SetDpi(u16),
+    Effect(EffectSpec),
+    ReloadConfig,
+    Quit,
+}
+
+/// Events feeding the daemon's main loop.
+enum Event {
+    Button(u8),
+    Menu(MenuAction),
+    ListenerClosed,
+}
 
 /// Pre-parsed button actions.
 struct Bindings {
@@ -42,18 +59,147 @@ impl Bindings {
     }
 }
 
+// --- Tray menu ------------------------------------------------------------
+
+mod menu_id {
+    pub const DPI_800: u32 = 10;
+    pub const DPI_1200: u32 = 11;
+    pub const DPI_1600: u32 = 12;
+    pub const DPI_1800: u32 = 13;
+    pub const DPI_3200: u32 = 14;
+
+    pub const STATIC_RED: u32 = 30;
+    pub const STATIC_GREEN: u32 = 31;
+    pub const STATIC_BLUE: u32 = 32;
+    pub const STATIC_WHITE: u32 = 33;
+    pub const STATIC_CYAN: u32 = 34;
+    pub const STATIC_YELLOW: u32 = 35;
+
+    pub const BREATHE_RED: u32 = 40;
+    pub const BREATHE_GREEN: u32 = 41;
+    pub const BREATHE_BLUE: u32 = 42;
+    pub const BREATHE_WHITE: u32 = 43;
+
+    pub const SPECTRUM: u32 = 25;
+    pub const OFF: u32 = 26;
+
+    pub const RELOAD: u32 = 90;
+    pub const QUIT: u32 = 91;
+}
+
+fn build_menu_spec() -> Vec<platform::tray::MenuItem> {
+    use menu_id::*;
+    use platform::tray::MenuItem as M;
+    vec![
+        M::submenu(
+            "DPI",
+            vec![
+                M::action(DPI_800, "800"),
+                M::action(DPI_1200, "1200"),
+                M::action(DPI_1600, "1600"),
+                M::action(DPI_1800, "1800"),
+                M::action(DPI_3200, "3200"),
+            ],
+        ),
+        M::submenu(
+            "Lighting",
+            vec![
+                M::submenu(
+                    "Static color",
+                    vec![
+                        M::action(STATIC_RED, "Red"),
+                        M::action(STATIC_GREEN, "Green"),
+                        M::action(STATIC_BLUE, "Blue"),
+                        M::action(STATIC_WHITE, "White"),
+                        M::action(STATIC_CYAN, "Cyan"),
+                        M::action(STATIC_YELLOW, "Yellow"),
+                    ],
+                ),
+                M::submenu(
+                    "Breathing",
+                    vec![
+                        M::action(BREATHE_RED, "Red"),
+                        M::action(BREATHE_GREEN, "Green"),
+                        M::action(BREATHE_BLUE, "Blue"),
+                        M::action(BREATHE_WHITE, "White"),
+                    ],
+                ),
+                M::action(SPECTRUM, "Spectrum"),
+                M::action(OFF, "Off"),
+            ],
+        ),
+        M::Separator,
+        M::action(RELOAD, "Reload config"),
+        M::action(QUIT, "Quit"),
+    ]
+}
+
+fn menu_action_for(id: u32) -> Option<MenuAction> {
+    use menu_id::*;
+    let red = Rgb::new(0xFF, 0, 0);
+    let green = Rgb::new(0, 0xFF, 0);
+    let blue = Rgb::new(0, 0, 0xFF);
+    let white = Rgb::new(0xFF, 0xFF, 0xFF);
+    let cyan = Rgb::new(0, 0xFF, 0xFF);
+    let yellow = Rgb::new(0xFF, 0xFF, 0);
+    Some(match id {
+        DPI_800 => MenuAction::SetDpi(800),
+        DPI_1200 => MenuAction::SetDpi(1200),
+        DPI_1600 => MenuAction::SetDpi(1600),
+        DPI_1800 => MenuAction::SetDpi(1800),
+        DPI_3200 => MenuAction::SetDpi(3200),
+        STATIC_RED => MenuAction::Effect(EffectSpec::Static(red)),
+        STATIC_GREEN => MenuAction::Effect(EffectSpec::Static(green)),
+        STATIC_BLUE => MenuAction::Effect(EffectSpec::Static(blue)),
+        STATIC_WHITE => MenuAction::Effect(EffectSpec::Static(white)),
+        STATIC_CYAN => MenuAction::Effect(EffectSpec::Static(cyan)),
+        STATIC_YELLOW => MenuAction::Effect(EffectSpec::Static(yellow)),
+        BREATHE_RED => MenuAction::Effect(EffectSpec::Breathing(red)),
+        BREATHE_GREEN => MenuAction::Effect(EffectSpec::Breathing(green)),
+        BREATHE_BLUE => MenuAction::Effect(EffectSpec::Breathing(blue)),
+        BREATHE_WHITE => MenuAction::Effect(EffectSpec::Breathing(white)),
+        SPECTRUM => MenuAction::Effect(EffectSpec::Spectrum),
+        OFF => MenuAction::Effect(EffectSpec::Off),
+        RELOAD => MenuAction::ReloadConfig,
+        QUIT => MenuAction::Quit,
+        _ => return None,
+    })
+}
+
+// --- Daemon ---------------------------------------------------------------
+
 /// Run the daemon forever, restarting the device session on unplug/sleep errors.
-pub fn run(cfg: Config, log: Logger) -> ! {
+pub fn run(mut cfg: Config, log: Logger) -> ! {
     log.log(&format!(
-        "Daemon starting. dpi={:?} up={:?} down={:?} reassert={}s",
+        "Daemon starting. dpi={:?} up={:?} down={:?} lighting={:?} reassert={}s",
         cfg.dpi_xy(),
         cfg.dpi_up,
         cfg.dpi_down,
+        cfg.lighting,
         cfg.reassert_interval_secs
     ));
-    let bindings = Bindings::from_config(&cfg, &log);
+
+    let (tx, rx) = mpsc::channel::<Event>();
+
+    // Spawn the tray icon + menu once, on its own thread.
+    {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            platform::tray::run(
+                "Anti-Synapse - DeathAdder Elite",
+                build_menu_spec(),
+                move |id| {
+                    if let Some(a) = menu_action_for(id) {
+                        let _ = tx.send(Event::Menu(a));
+                    }
+                },
+            );
+        });
+    }
+
+    let mut bindings = Bindings::from_config(&cfg, &log);
     loop {
-        match run_session(&cfg, &bindings, &log) {
+        match run_session(&mut cfg, &mut bindings, &log, &tx, &rx) {
             Ok(()) => log.log("Session ended cleanly; restarting."),
             Err(e) => log.log(&format!(
                 "Session ended: {e}. Retrying in 3s (mouse unplugged/asleep?)."
@@ -63,23 +209,31 @@ pub fn run(cfg: Config, log: Logger) -> ! {
     }
 }
 
-fn run_session(cfg: &Config, bindings: &Bindings, log: &Logger) -> Result<(), razer_hid::Error> {
+fn run_session(
+    cfg: &mut Config,
+    bindings: &mut Bindings,
+    log: &Logger,
+    tx: &Sender<Event>,
+    rx: &Receiver<Event>,
+) -> Result<(), razer_hid::Error> {
     let api = razer_hid::open_api()?;
     let ctrl = DeathAdder::open_with(&api)?;
 
-    // Lock DPI (non-fatal if it fails — the buttons are the primary feature).
+    // Lock DPI (non-fatal if it fails).
     let (dx, dy) = cfg.dpi_xy();
     match ctrl.set_dpi(dx, dy) {
-        Ok((rx, ry)) => log.log(&format!("DPI locked to {rx} x {ry}.")),
+        Ok((rx2, ry)) => log.log(&format!("DPI locked to {rx2} x {ry}.")),
         Err(e) => log.log(&format!("WARN could not set DPI: {e}")),
     }
 
-    // Enable driver mode (fatal if it fails — no point listening otherwise).
+    // Enable driver mode (fatal if it fails).
     let mode = ctrl.set_device_mode(DeviceMode::Driver)?;
     log.log(&format!("Driver mode enabled (read back 0x{mode:02x})."));
 
-    // Probe which auxiliary collections are readable (mirrors the Python daemon's
-    // "dropped N unreadable collections" behavior), then keep the survivors.
+    // Apply configured startup lighting (unless "keep").
+    apply_startup_lighting(&ctrl, cfg, log);
+
+    // Probe readable auxiliary collections; keep the survivors.
     let mut listeners: Vec<Listener> = Vec::new();
     let mut dropped = 0usize;
     for path in aux_collection_paths(&api) {
@@ -94,11 +248,10 @@ fn run_session(cfg: &Config, bindings: &Bindings, log: &Logger) -> Result<(), ra
         let mut probe = [0u8; 64];
         match listener.read(&mut probe) {
             Ok(_) => {
-                // Readable: switch to true blocking for the listener thread.
                 listener.set_blocking(true)?;
                 listeners.push(listener);
             }
-            Err(_) => dropped += 1, // e.g. keyboard TLCs: "Incorrect function"
+            Err(_) => dropped += 1,
         }
     }
     if listeners.is_empty() {
@@ -110,33 +263,101 @@ fn run_session(cfg: &Config, bindings: &Bindings, log: &Logger) -> Result<(), ra
         dropped
     ));
 
-    // One blocking-read thread per collection -> channel. CPU stays ~0 when idle.
-    let (tx, rx) = mpsc::channel::<u8>();
+    // One blocking-read thread per collection -> channel. CPU stays ~0 idle.
     for listener in listeners {
         let tx = tx.clone();
         let log = log.clone();
         thread::spawn(move || reader_thread(listener, tx, log));
     }
-    drop(tx); // when every reader exits, rx disconnects and we restart the session
 
     let interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
     let mut last_fire: Option<(u8, Instant)> = None;
 
     loop {
         match rx.recv_timeout(interval) {
-            Ok(code) => handle_code(code, bindings, log, &mut last_fire),
+            Ok(Event::Button(code)) => handle_code(code, bindings, log, &mut last_fire),
+            Ok(Event::Menu(action)) => {
+                if handle_menu(action, &ctrl, cfg, bindings, log)? {
+                    log.log("Quit selected; exiting.");
+                    std::process::exit(0);
+                }
+            }
+            Ok(Event::ListenerClosed) => {
+                // Verify the device is still alive; if not, restart the session.
+                if ctrl.get_device_mode().is_err() {
+                    return Err(razer_hid::Error::Verify("device lost".into()));
+                }
+            }
             Err(RecvTimeoutError::Timeout) => reassert(&ctrl, cfg, log)?,
             Err(RecvTimeoutError::Disconnected) => {
-                return Err(razer_hid::Error::Verify(
-                    "all listener collections closed".to_string(),
-                ))
+                return Err(razer_hid::Error::Verify("event channel closed".into()))
             }
         }
     }
 }
 
+fn apply_startup_lighting(ctrl: &DeathAdder, cfg: &Config, log: &Logger) {
+    match EffectSpec::from_config(&cfg.lighting, &cfg.color) {
+        Ok(Some(effect)) => match effect.apply(ctrl) {
+            Ok(()) => log.log(&format!("Lighting set to {}.", effect.describe())),
+            Err(e) => log.log(&format!("WARN could not set lighting: {e}")),
+        },
+        Ok(None) => {} // "keep": leave lighting untouched
+        Err(e) => log.log(&format!("WARN invalid lighting config: {e}")),
+    }
+}
+
+/// Handle a menu command. Returns Ok(true) if Quit was selected.
+fn handle_menu(
+    action: MenuAction,
+    ctrl: &DeathAdder,
+    cfg: &mut Config,
+    bindings: &mut Bindings,
+    log: &Logger,
+) -> Result<bool, razer_hid::Error> {
+    match action {
+        MenuAction::SetDpi(v) => {
+            let (rx, ry) = ctrl.set_dpi(v, v)?;
+            cfg.dpi = v;
+            cfg.dpi_y = None;
+            save_config(cfg, log);
+            log.log(&format!("Menu: DPI set to {rx} x {ry}."));
+        }
+        MenuAction::Effect(spec) => {
+            spec.apply(ctrl)?;
+            let (lighting, color) = spec.to_config();
+            cfg.lighting = lighting;
+            if let Some(c) = color {
+                cfg.color = c;
+            }
+            save_config(cfg, log);
+            log.log(&format!("Menu: lighting -> {}.", spec.describe()));
+        }
+        MenuAction::ReloadConfig => {
+            let (new_cfg, note) = Config::load_or_create(&Config::config_path());
+            if let Some(n) = note {
+                log.log(&n);
+            }
+            *cfg = new_cfg;
+            *bindings = Bindings::from_config(cfg, log);
+            let (dx, dy) = cfg.dpi_xy();
+            let _ = ctrl.set_dpi(dx, dy);
+            apply_startup_lighting(ctrl, cfg, log);
+            log.log("Menu: config reloaded and reapplied.");
+        }
+        MenuAction::Quit => return Ok(true),
+    }
+    Ok(false)
+}
+
+fn save_config(cfg: &Config, log: &Logger) {
+    if let Err(e) = cfg.save(&Config::config_path()) {
+        log.log(&format!("WARN could not save config: {e}"));
+    }
+}
+
 /// Blocking read loop for one collection. Emits rising-edge vendor codes.
-fn reader_thread(listener: Listener, tx: mpsc::Sender<u8>, log: Logger) {
+fn reader_thread(listener: Listener, tx: Sender<Event>, log: Logger) {
     let label = listener.label();
     let mut prev: HashSet<u8> = HashSet::new();
     let mut buf = [0u8; 64];
@@ -145,18 +366,19 @@ fn reader_thread(listener: Listener, tx: mpsc::Sender<u8>, log: Logger) {
             Ok(n) => {
                 let data = &buf[..n];
                 if data.first() != Some(&0x04) {
-                    continue; // not a DPI-button vendor report
+                    continue;
                 }
                 let cur: HashSet<u8> = data[1..].iter().copied().filter(|&b| b != 0).collect();
                 for &code in cur.difference(&prev) {
-                    if tx.send(code).is_err() {
-                        return; // main loop gone
+                    if tx.send(Event::Button(code)).is_err() {
+                        return;
                     }
                 }
                 prev = cur;
             }
             Err(e) => {
                 log.log(&format!("Listener {label} closed: {e}"));
+                let _ = tx.send(Event::ListenerClosed);
                 return;
             }
         }
@@ -164,7 +386,6 @@ fn reader_thread(listener: Listener, tx: mpsc::Sender<u8>, log: Logger) {
 }
 
 fn handle_code(code: u8, bindings: &Bindings, log: &Logger, last_fire: &mut Option<(u8, Instant)>) {
-    // Debounce: swallow the same code if it recurs within DEBOUNCE.
     if let Some((c, t)) = last_fire {
         if *c == code && t.elapsed() < DEBOUNCE {
             return;

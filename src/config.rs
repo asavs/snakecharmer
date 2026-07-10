@@ -18,6 +18,11 @@ pub struct Config {
     pub dpi_up: String,
     /// Action for the rear DPI button (vendor code 0x21).
     pub dpi_down: String,
+    /// Lighting effect applied at startup: `keep` (don't touch), `static`,
+    /// `breathing`, `spectrum`, or `off`.
+    pub lighting: String,
+    /// Color (`#RRGGBB`) used by the `static`/`breathing` lighting effects.
+    pub color: String,
     /// How often (seconds) to re-assert driver mode + DPI.
     pub reassert_interval_secs: u64,
 }
@@ -29,6 +34,8 @@ impl Default for Config {
             dpi_y: None,
             dpi_up: "copy".to_string(),
             dpi_down: "paste".to_string(),
+            lighting: "keep".to_string(),
+            color: "#00ff00".to_string(),
             reassert_interval_secs: 60,
         }
     }
@@ -111,6 +118,8 @@ mod tests {
             dpi_y: Some(800),
             dpi_up: "key:9".into(),
             dpi_down: "key:0".into(),
+            lighting: "static".into(),
+            color: "#ff8800".into(),
             reassert_interval_secs: 30,
         };
         let text = toml::to_string_pretty(&c).unwrap();
