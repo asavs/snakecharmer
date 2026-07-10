@@ -3,20 +3,20 @@ members = ["crates/razer-proto", "crates/razer-hid", "crates/platform"]
 
 [workspace.package]
 edition = "2021"
-license = "MIT"
+license = "GPL-2.0-or-later"
 authors = ["asa"]
 rust-version = "1.97"
 
 [package]
-name = "anti-synapse"
+name = "psylli"
 version = "0.1.0"
 edition = "2021"
 description = "Native Windows replacement for Razer Synapse, scoped to the DeathAdder Elite"
-default-run = "anti-synapse"
+default-run = "psylli"
 
 # Phase 1 milestone binary: reproduce the Python prototype end-to-end on the real mouse.
 [[bin]]
-name = "anti-synapse"
+name = "psylli"
 path = "src/main.rs"
 
 [dependencies]

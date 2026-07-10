@@ -1,6 +1,6 @@
-//! Anti-Synapse shared library: config, action parsing, logging, the headless
+//! Psylli shared library: config, action parsing, logging, the headless
 //! daemon (with tray), shared by the windowless daemon binary (`main.rs`) and
-//! the console CLI (`bin/asctl.rs`).
+//! the console CLI (`bin/psyctl.rs`).
 
 pub mod actions;
 pub mod config;

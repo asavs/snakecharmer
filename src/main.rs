@@ -1,15 +1,15 @@
-//! Anti-Synapse daemon (windowless): DPI-button remap + DPI lock + lighting +
+//! Psylli daemon (windowless): DPI-button remap + DPI lock + lighting +
 //! system tray, all in one process. No console window (see the `windows`
 //! subsystem attribute below). Command-line control lives in the separate
-//! console binary `asctl.exe`.
+//! console binary `psyctl.exe`.
 
 #![windows_subsystem = "windows"]
 
-use anti_synapse::config::Config;
-use anti_synapse::daemon;
-use anti_synapse::logger::Logger;
+use psylli::config::Config;
+use psylli::daemon;
+use psylli::logger::Logger;
 
-const SINGLE_INSTANCE_NAME: &str = "Local\\AntiSynapseDaemon";
+const SINGLE_INSTANCE_NAME: &str = "Local\\PsylliDaemon";
 
 fn main() {
     let log = Logger::new(Config::log_path());
