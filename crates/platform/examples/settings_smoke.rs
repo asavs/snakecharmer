@@ -10,7 +10,7 @@ fn main() {
     std::thread::spawn(|| {
         std::thread::sleep(std::time::Duration::from_secs(5));
         use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, PostMessageW, WM_CLOSE};
-        let cls: Vec<u16> = "PsylliSettings".encode_utf16().chain(std::iter::once(0)).collect();
+        let cls: Vec<u16> = "SnakecharmerSettings".encode_utf16().chain(std::iter::once(0)).collect();
         // SAFETY: FindWindowW/PostMessageW with a valid NUL-terminated class name.
         unsafe {
             let hwnd = FindWindowW(cls.as_ptr(), std::ptr::null());

@@ -1,6 +1,6 @@
-//! Psylli shared library: config, action parsing, logging, the headless
+//! Snakecharmer shared library: config, action parsing, logging, the headless
 //! daemon (with tray), shared by the windowless daemon binary (`main.rs`) and
-//! the console CLI (`bin/psyctl.rs`).
+//! the console CLI (`bin/charmctl.rs`).
 
 pub mod actions;
 pub mod config;

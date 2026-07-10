@@ -1,20 +1,20 @@
-# Contributing to Psylli
+# Contributing to Snakecharmer
 
 Two kinds of contributions are welcome:
 
 1. **Improving DeathAdder Elite support** — bug fixes, settings-window polish, footprint
    wins, more remap actions.
-2. **Teaching Psylli a new mouse** — the fun one, described below.
+2. **Teaching Snakecharmer a new mouse** — the fun one, described below.
 
 ---
 
-## Add your own mouse
+## charm your own snake... uh mouse (or keyboard! and probably headset??)
 
-> The Psylli charmed serpents they had never met by knowing how snakes *work*, not by
-> memorizing one. Psylli-the-program is the same: it speaks one mouse today, but the
-> protocol layer is small and the method is general. If you have a different mouse, you
-> can probably teach it a new one — and this is a near-perfect task to hand an AI coding
-> agent.
+> The **Psylli** — the ancient charmers this project almost got named after — handled
+> serpents they'd never met by knowing how snakes *work*, not by memorizing one.
+> Snakecharmer is the same: it speaks one mouse today, but the protocol layer is small and
+> the method is general. If you have a different mouse, you can probably teach it a new one
+> — and this is a near-perfect task to hand an AI coding agent.
 
 **The workflow:**
 
@@ -23,7 +23,7 @@ Two kinds of contributions are welcome:
    device-agnostic method: enumerate the mouse's HID collections, find the *reference
    implementation* for your brand (OpenRazer, libratbag, Solaar…), read the protocol out
    of it, confirm the control channel with a **read** before any write, then send + verify.
-   Tell the agent: *"Follow this guide to add support for my `<mouse>` to Psylli."*
+   Tell the agent: *"Follow this guide to add support for my `<mouse>` to Snakecharmer."*
    The [`reference/`](reference/) Python toolkit is the runnable version of exactly this
    method — the fastest way to poke an unknown device and confirm its protocol before you
    write any Rust.
@@ -70,7 +70,7 @@ amount of wiring. Keep unsafe code confined to `platform`.
 ## Dev setup
 
 ```powershell
-cargo build --release      # produces psylli.exe + psyctl.exe
+cargo build --release      # produces snakecharmer.exe + charmctl.exe
 cargo test --release       # unit tests (protocol/CRC/config/lighting)
 cargo clippy --release --all-targets   # keep it warning-clean
 ```
@@ -80,7 +80,7 @@ under 10 MB. New dependencies are weighed against that (`docs/SPEC.md` has the t
 
 ## Licensing
 
-Psylli is **GPL-2.0-or-later** (see [`LICENSE`](LICENSE)). By contributing you agree your
+Snakecharmer is **GPL-2.0-or-later** (see [`LICENSE`](LICENSE)). By contributing you agree your
 contribution is licensed the same way.
 
 Protocol code is typically **derived from a GPL project** (OpenRazer, libratbag). That's

@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Isolated Windows FFI for Psylli: keystroke injection (SendInput) and single-instance guard. All unsafe lives here."
+description = "Isolated Windows FFI for Snakecharmer: keystroke injection (SendInput) and single-instance guard. All unsafe lives here."
 
 [dependencies]
 windows-sys = { version = "0.61", features = [

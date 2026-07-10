@@ -70,7 +70,7 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
     // handed to the window via GWLP_USERDATA and freed on WM_DESTROY.
     unsafe {
         let hinstance = GetModuleHandleW(std::ptr::null());
-        let class_name = to_wide("PsylliTrayWnd");
+        let class_name = to_wide("SnakecharmerTrayWnd");
 
         let wc = WNDCLASSW {
             style: 0,
@@ -86,7 +86,7 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
         };
         RegisterClassW(&wc);
 
-        let title = to_wide("Psylli");
+        let title = to_wide("Snakecharmer");
         let hwnd = CreateWindowExW(
             0,
             class_name.as_ptr(),

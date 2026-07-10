@@ -1,15 +1,15 @@
-//! Psylli daemon (windowless): DPI-button remap + DPI lock + lighting +
+//! Snakecharmer daemon (windowless): DPI-button remap + DPI lock + lighting +
 //! system tray, all in one process. No console window (see the `windows`
 //! subsystem attribute below). Command-line control lives in the separate
-//! console binary `psyctl.exe`.
+//! console binary `charmctl.exe`.
 
 #![windows_subsystem = "windows"]
 
-use psylli::config::Config;
-use psylli::daemon;
-use psylli::logger::Logger;
+use snakecharmer::config::Config;
+use snakecharmer::daemon;
+use snakecharmer::logger::Logger;
 
-const SINGLE_INSTANCE_NAME: &str = "Local\\PsylliDaemon";
+const SINGLE_INSTANCE_NAME: &str = "Local\\SnakecharmerDaemon";
 
 fn main() {
     let log = Logger::new(Config::log_path());
