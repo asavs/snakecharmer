@@ -1,8 +1,8 @@
 //! Pure Razer HID protocol for the Razer DeathAdder Elite (`VID 0x1532 / PID 0x005C`).
 //!
-//! This is a faithful Rust port of `reference/razer_common.py`. It contains **no I/O**:
-//! it only builds the 90-byte feature reports and parses the 90-byte responses, so it is
-//! fully unit-testable. The `razer-hid` crate layers device access on top.
+//! This contains **no I/O**: it only builds the 90-byte feature reports and parses the
+//! 90-byte responses, so it is fully unit-testable. The `razer-hid` crate layers device
+//! access on top.
 //!
 //! Protocol source: OpenRazer (github.com/openrazer/openrazer), files
 //! `driver/razercommon.{c,h}`, `driver/razerchromacommon.c`, `driver/razermouse_driver.c`.
@@ -113,7 +113,7 @@ pub fn crc(report: &[u8; REPORT_LEN]) -> u8 {
 
 /// Build a 90-byte Razer report (with transaction id and CRC filled in).
 ///
-/// Mirrors `build_report` in `razer_common.py`.
+/// Builds the 90-byte control report (per OpenRazer `razercommon.c`).
 pub fn build_report(
     command_class: u8,
     command_id: u8,
@@ -267,7 +267,7 @@ pub fn effect_breathing_report(led_id: u8, rgb: Rgb) -> [u8; REPORT_LEN] {
 
 /// Validate a raw 90-byte response against the request that produced it.
 ///
-/// Mirrors the checks in `send_command` (`razer_common.py`): correct length,
+/// Validates the response (per OpenRazer's report handling): correct length,
 /// success status, and matching command-class/id echo. Returns the response
 /// slice on success so callers can parse arguments from it.
 pub fn validate_response<'a>(

@@ -24,6 +24,9 @@ Two kinds of contributions are welcome:
    implementation* for your brand (OpenRazer, libratbag, Solaar…), read the protocol out
    of it, confirm the control channel with a **read** before any write, then send + verify.
    Tell the agent: *"Follow this guide to add support for my `<mouse>` to Psylli."*
+   The [`reference/`](reference/) Python toolkit is the runnable version of exactly this
+   method — the fastest way to poke an unknown device and confirm its protocol before you
+   write any Rust.
 3. **Have it produce a protocol module + byte-exact tests** — mirroring `crates/razer-proto`:
    pure, no-I/O report building with unit tests that assert the exact bytes/CRC against the
    FOSS reference (see the `*_matches_openrazer` tests for the pattern).
@@ -58,7 +61,7 @@ crates/
   razer-hid/     # device open/enumerate, feature reports, input-report listener
   platform/      # Win32 FFI: single-instance, keystroke injection, WH_MOUSE_LL hook
 src/             # daemon, tray, native settings window, config, lighting
-reference/       # the original Python prototype the Rust port was validated against
+reference/       # runnable Python recon toolkit — the worked example to adapt for a new device
 ```
 
 A new device is mostly **new protocol code + tests** in the proto layer, plus a small
