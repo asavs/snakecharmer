@@ -118,12 +118,19 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
         nid.szTip[..n].copy_from_slice(&tip[..n]);
         Shell_NotifyIconW(NIM_ADD, &nid);
 
+        // Install the low-level mouse hook on THIS message-pumping thread (a
+        // WH_MOUSE_LL hook requires its owning thread to pump messages). It is
+        // pass-through until thumb-button remaps are configured.
+        crate::mouse_hook::install();
+
         // Message loop.
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
+
+        crate::mouse_hook::uninstall();
     }
 }
 

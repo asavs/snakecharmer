@@ -30,6 +30,8 @@ fn main() {
             .collect(),
         up_index: 0,
         down_index: 1,
+        thumb_back_index: 3,
+        thumb_forward_index: 0,
         effect_labels: ["keep", "static", "breathing", "spectrum", "off"]
             .iter()
             .map(|s| s.to_string())

@@ -40,6 +40,8 @@ const ID_LBL_DPI: u16 = 102;
 const ID_CB_UP: u16 = 103;
 const ID_CB_DOWN: u16 = 104;
 const ID_CB_EFFECT: u16 = 105;
+const ID_CB_THUMB_BACK: u16 = 111;
+const ID_CB_THUMB_FWD: u16 = 112;
 const ID_SWATCH: u16 = 106;
 const ID_BTN_COLOR: u16 = 107;
 const ID_BTN_APPLY: u16 = 108;
@@ -54,6 +56,8 @@ pub struct SettingsInit {
     pub action_labels: Vec<String>,
     pub up_index: usize,
     pub down_index: usize,
+    pub thumb_back_index: usize,
+    pub thumb_forward_index: usize,
     pub effect_labels: Vec<String>,
     pub effect_index: usize,
     pub color: (u8, u8, u8),
@@ -65,6 +69,8 @@ pub enum SettingsEvent {
     Dpi(u16),
     UpAction(usize),
     DownAction(usize),
+    ThumbBack(usize),
+    ThumbForward(usize),
     Effect(usize),
     Color(u8, u8, u8),
     Apply,
@@ -135,8 +141,8 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             style,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            380,
-            360,
+            390,
+            470,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             hinstance,
@@ -179,22 +185,33 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         );
         SendMessageW(tb, TBM_SETPOS, 1, init.dpi as LPARAM);
 
-        // Button action combos.
-        let _ = mk("STATIC", "Front button (dpi_up):", 0, 0, 20, 74, 330, 18);
-        let cb_up = mk("COMBOBOX", "", (CBS_DROPDOWNLIST as u32) | WS_TABSTOP, ID_CB_UP, 20, 94, 330, 200);
-        let _ = mk("STATIC", "Rear button (dpi_down):", 0, 0, 20, 128, 330, 18);
-        let cb_down = mk("COMBOBOX", "", (CBS_DROPDOWNLIST as u32) | WS_TABSTOP, ID_CB_DOWN, 20, 148, 330, 200);
-        for label in &init.action_labels {
-            let w = to_wide(label);
-            SendMessageW(cb_up, CB_ADDSTRING, 0, w.as_ptr() as LPARAM);
-            SendMessageW(cb_down, CB_ADDSTRING, 0, w.as_ptr() as LPARAM);
-        }
-        SendMessageW(cb_up, CB_SETCURSEL, init.up_index, 0);
-        SendMessageW(cb_down, CB_SETCURSEL, init.down_index, 0);
+        // Helper to create an action combo populated with the shared labels.
+        let combo_style = (CBS_DROPDOWNLIST as u32) | WS_TABSTOP;
+        let make_action_combo = |id: u16, y: i32, sel: usize| -> HWND {
+            let cb = mk("COMBOBOX", "", combo_style, id, 20, y, 330, 220);
+            for label in &init.action_labels {
+                let w = to_wide(label);
+                SendMessageW(cb, CB_ADDSTRING, 0, w.as_ptr() as LPARAM);
+            }
+            SendMessageW(cb, CB_SETCURSEL, sel, 0);
+            cb
+        };
+
+        // DPI-button action combos.
+        let _ = mk("STATIC", "Front DPI button (dpi_up):", 0, 0, 20, 74, 330, 18);
+        let _cb_up = make_action_combo(ID_CB_UP, 94, init.up_index);
+        let _ = mk("STATIC", "Rear DPI button (dpi_down):", 0, 0, 20, 128, 330, 18);
+        let _cb_down = make_action_combo(ID_CB_DOWN, 148, init.down_index);
+
+        // Thumb-button action combos (XBUTTON1 / XBUTTON2).
+        let _ = mk("STATIC", "Back thumb button (XBUTTON1):", 0, 0, 20, 182, 330, 18);
+        let _cb_tb = make_action_combo(ID_CB_THUMB_BACK, 202, init.thumb_back_index);
+        let _ = mk("STATIC", "Forward thumb button (XBUTTON2):", 0, 0, 20, 236, 330, 18);
+        let _cb_tf = make_action_combo(ID_CB_THUMB_FWD, 256, init.thumb_forward_index);
 
         // Lighting effect combo.
-        let _ = mk("STATIC", "Lighting effect:", 0, 0, 20, 182, 330, 18);
-        let cb_effect = mk("COMBOBOX", "", (CBS_DROPDOWNLIST as u32) | WS_TABSTOP, ID_CB_EFFECT, 20, 202, 330, 200);
+        let _ = mk("STATIC", "Lighting effect:", 0, 0, 20, 290, 330, 18);
+        let cb_effect = mk("COMBOBOX", "", combo_style, ID_CB_EFFECT, 20, 310, 330, 200);
         for label in &init.effect_labels {
             let w = to_wide(label);
             SendMessageW(cb_effect, CB_ADDSTRING, 0, w.as_ptr() as LPARAM);
@@ -202,14 +219,14 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         SendMessageW(cb_effect, CB_SETCURSEL, init.effect_index, 0);
 
         // Color swatch + picker button.
-        let _ = mk("STATIC", "Color:", 0, 0, 20, 244, 40, 20);
-        let swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH, 66, 242, 80, 22);
-        let _ = mk("BUTTON", "Choose...", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_COLOR, 156, 240, 90, 26);
+        let _ = mk("STATIC", "Color:", 0, 0, 20, 352, 40, 20);
+        let swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH, 66, 350, 80, 22);
+        let _ = mk("BUTTON", "Choose...", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_COLOR, 156, 348, 90, 26);
 
         // Action buttons.
-        let _ = mk("BUTTON", "Apply", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_APPLY, 20, 286, 90, 28);
-        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, 130, 286, 90, 28);
-        let _ = mk("BUTTON", "Close", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_CLOSE, 260, 286, 90, 28);
+        let _ = mk("BUTTON", "Apply", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_APPLY, 20, 394, 90, 28);
+        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, 130, 394, 90, 28);
+        let _ = mk("BUTTON", "Close", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_CLOSE, 260, 394, 90, 28);
 
         let state = Box::new(WindowState {
             on_event: Box::new(on_event),
@@ -281,6 +298,18 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                         let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
                         if i >= 0 {
                             (st.on_event)(SettingsEvent::DownAction(i as usize));
+                        }
+                    }
+                    (ID_CB_THUMB_BACK, CBN_SELCHANGE) => {
+                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                        if i >= 0 {
+                            (st.on_event)(SettingsEvent::ThumbBack(i as usize));
+                        }
+                    }
+                    (ID_CB_THUMB_FWD, CBN_SELCHANGE) => {
+                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                        if i >= 0 {
+                            (st.on_event)(SettingsEvent::ThumbForward(i as usize));
                         }
                     }
                     (ID_CB_EFFECT, CBN_SELCHANGE) => {
