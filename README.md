@@ -111,7 +111,8 @@ psylli/
 │  ├─ razer-proto/   # pure protocol: report builder, CRC, mode/DPI/RGB commands (no I/O)
 │  ├─ razer-hid/     # device open/enumerate, feature reports, input-report listener
 │  └─ platform/      # Win32: single-instance, keystroke injection, WH_MOUSE_LL hook
-└─ src/              # daemon, tray, native settings window, config, lighting
+├─ src/              # daemon, tray, native settings window, config, lighting
+└─ reference/        # runnable Python recon toolkit — worked example for cracking new devices
 ```
 
 See [`docs/SPEC.md`](docs/SPEC.md) for the full design and the protocol notes.

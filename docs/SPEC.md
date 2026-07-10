@@ -21,7 +21,7 @@ resources refutes itself.
 ## Capabilities (v1 — all four, per user decision)
 1. **DPI-button remap** — the two buttons behind the wheel emit private Razer vendor
    codes (`0x20`/`0x21`) invisible to the OS; we catch them at the HID layer and inject
-   keystrokes. *(Already proven in the Python prototype.)*
+   keystrokes.
 2. **DPI level** — set/lock sensitivity to any value, applied at login.
 3. **RGB lighting** — static / breathing / spectrum / off, for the mouse's two lit
    zones (scroll wheel + logo).
@@ -43,7 +43,7 @@ resources refutes itself.
 psylli/
 ├─ crates/
 │  ├─ razer-proto/      # pure protocol: report builder, CRC, mode/DPI/RGB commands
-│  │                    #   port of reference/razer_common.py — no I/O, unit-testable
+│  │                    #   pure protocol from OpenRazer — no I/O, unit-testable
 │  ├─ razer-hid/        # device open/enumerate, feature reports, input-report listener
 │  │                    #   (hidapi crate, or windows-rs HID); the CefSharp-free core
 │  └─ input-hook/       # WH_MOUSE_LL hook for thumb-button remap + suppression
@@ -52,7 +52,7 @@ psylli/
 ```
 
 Candidate deps (keep the tree lean for the ≤2 MB target — audit each):
-- HID: `hidapi` (proven in the Python prototype) **or** raw `windows` crate HID APIs
+- HID: `hidapi` **or** raw `windows` crate HID APIs
 - Tray + window: evaluate `tray-icon` + `egui/eframe` vs. native `windows` crate
   (`Shell_NotifyIcon` + a dialog). eframe is heavier but far faster to build; a native
   Win32 window is the true-featherweight path. **Decide at Phase 3.**
@@ -70,12 +70,12 @@ Driver mode:     00  3F  00 00 00    02  00  04  03 00     (78x00)     05  00
 Hardware mode:   00  3F  00 00 00    02  00  04  00 00     (78x00)     06  00
 Get mode (read): 00  3F  00 00 00    02  00  84  00 00     (78x00)     86  00
 ```
-- **DPI set/get:** command_class `0x04`, ids `0x05`/`0x85` (see `reference/set_dpi.py`).
+- **DPI set/get:** command_class `0x04`, ids `0x05`/`0x85` (see OpenRazer `razermouse_driver.c`).
 - **DPI buttons in driver mode:** 16-byte input report, ID `0x04`, on the keyboard-
   protocol interface, vendor codes `0x20` (up) / `0x21` (down).
 - **RGB (Chroma):** command_class `0x03` matrix effects — **to be confirmed** from
   OpenRazer `razerchromacommon.c` for this device (static/breathing/spectrum/none).
-- Full working reference implementation: [`reference/razer_common.py`](../reference/razer_common.py).
+- Full protocol reference: [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razercommon.*`, `razerchromacommon.c`).
 
 ## Safety
 - Only documented Razer commands (OpenRazer-sourced). No firmware/bootloader/DFU. No
@@ -85,10 +85,10 @@ Get mode (read): 00  3F  00 00 00    02  00  84  00 00     (78x00)     86  00
 
 ## Phasing (multi-session)
 - **P1 — Foundation:** toolchain, workspace, `razer-proto` ported + unit-tested;
-  `razer-hid` opens the device and reproduces the Python prototype's set-mode / set-DPI /
-  get-mode from Rust. *Milestone: Rust talks to the mouse.*  ← tonight
-- **P2 — Daemon core:** input-report listener + keystroke injection for the DPI buttons
-  (parity with the Python daemon), running headless.
+  `razer-hid` opens the device and does set-mode / set-DPI / get-mode from Rust.
+  *Milestone: Rust talks to the mouse.*
+- **P2 — Daemon core:** input-report listener + keystroke injection for the DPI buttons,
+  running headless.
 - **P3 — RGB + tray:** Chroma commands; tray icon + menu.
 - **P4 — Settings window:** DPI slider, color picker, button dropdowns, config persistence.
 - **P5 — Thumb-button remap:** `WH_MOUSE_LL` hook + suppression; login autostart; polish
@@ -98,6 +98,6 @@ Get mode (read): 00  3F  00 00 00    02  00  84  00 00     (78x00)     86  00
 | # | Deliverable |
 |---|---|
 | M1 | Rust sets driver mode + DPI on the real mouse (P1) |
-| M2 | Headless daemon = Python-prototype parity (P2) |
+| M2 | Headless daemon: DPI buttons remap + injection, running headless (P2) |
 | M3 | Tray app sets RGB + DPI (P3–P4) |
 | M4 | Full app incl. thumb remap, within the ≤2 MB / <10 MB gate (P5) |

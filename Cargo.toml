@@ -14,7 +14,7 @@ edition = "2021"
 description = "Native Windows replacement for Razer Synapse, scoped to the DeathAdder Elite"
 default-run = "psylli"
 
-# Phase 1 milestone binary: reproduce the Python prototype end-to-end on the real mouse.
+# The daemon binary: DPI/lighting/remap + tray, talking to the real mouse.
 [[bin]]
 name = "psylli"
 path = "src/main.rs"

@@ -1,9 +1,8 @@
 //! Device access for the Razer DeathAdder Elite control interface.
 //!
 //! This layers real HID I/O (via the `hidapi` crate) on top of the pure
-//! [`razer_proto`] protocol. It is the direct port of the I/O half of
-//! `reference/razer_common.py` (`open_control`, `send_command`, and the
-//! device-mode / DPI wrappers).
+//! [`razer_proto`] protocol: opening the control endpoint, sending feature
+//! reports, and the device-mode / DPI wrappers.
 //!
 //! On Windows the Razer control endpoint is the **interface-0 mouse top-level
 //! collection** (`usage_page 0x0001`, `usage 0x0002`) — the only collection
@@ -102,8 +101,7 @@ impl DeathAdder {
 
     /// Send one 90-byte report as feature report 0 and return the 90-byte response.
     ///
-    /// Retries on BUSY, mirroring `send_command` in the Python prototype and
-    /// openrazer's `razer_send_payload` loop.
+    /// Retries on BUSY, mirroring OpenRazer's `razer_send_payload` loop.
     pub fn send_command(&self, request: &[u8; REPORT_LEN]) -> Result<[u8; REPORT_LEN]> {
         // hidapi wants a leading report-id byte (0x00) -> 91-byte write buffer.
         let mut out = [0u8; REPORT_LEN + 1];

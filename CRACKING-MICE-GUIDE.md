@@ -256,9 +256,13 @@ Run this exact sequence for any new mouse:
 ---
 
 ## Appendix — where the worked example lives
-Both live in this repository:
-- Prototype (Python): [`reference/`](reference/) — `razer_common.py` (protocol/CRC),
-  `dpi_button_daemon.py` (listener/injector), `set_device_mode.py`, `set_dpi.py`.
-- Native rewrite (Rust): `crates/razer-proto` (pure protocol + unit tests asserting the
-  exact driver-mode bytes/CRC), `crates/razer-hid`, plus tray/RGB/settings/thumb-hook.
-  See [`docs/SPEC.md`](docs/SPEC.md).
+This repository *is* a worked example, at two levels:
+- **Runnable recon toolkit (Python):** [`reference/`](reference/) — `razer_common.py`
+  (protocol + CRC), `dpi_button_daemon.py` (self-logging listener/injector),
+  `set_device_mode.py`, `set_dpi.py`. The whole method above, running, in ~150 lines.
+  **Start here to crack a new device.**
+- **Shipping implementation (Rust):** `crates/razer-proto` (pure protocol + unit tests
+  asserting the exact driver-mode bytes/CRC against OpenRazer), `crates/razer-hid` (HID
+  I/O), plus tray/RGB/settings/thumb-hook. See [`docs/SPEC.md`](docs/SPEC.md).
+
+The protocol itself was sourced from [OpenRazer](https://github.com/openrazer/openrazer).
