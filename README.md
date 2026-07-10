@@ -42,8 +42,10 @@ over Win32 HID and then gets out of the way.
 ## Scope
 
 Deliberately **one device**: the DeathAdder Elite (`VID 0x1532 / PID 0x005C`). The
-protocol layer is small and well-tested; adding another Razer device is a contained job —
-see [`CONTRIBUTING.md`](CONTRIBUTING.md) *(coming soon)*.
+protocol layer is small and well-tested; adding another mouse — Razer or otherwise — is a
+contained job, and a great one to hand an AI coding agent. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) and the general method in
+[`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md).
 
 ## Requirements
 
