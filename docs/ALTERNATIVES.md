@@ -23,7 +23,7 @@ own (see the README table); for everything else, check the linked project's docs
 | [dawctl](https://github.com/marcospb19/dawctl) | CLI | yes | yes | no | no | no | DeathAdder *Essential* only. Same spirit as us, different mouse. |
 | [razer-ctl](https://github.com/tdakhran/razer-ctl) | Windows tray | — | — | — | — | yes, light | For Razer **Blade laptops** (fan/power modes), not mice. Listed because people find it searching for the same escape hatch. |
 | [MiniSynapse](https://github.com/miyu/MiniSynapse) | Windows | — | — | — | — | no | Historical: piggybacked on Synapse 2 DLLs. Abandoned, does not work with modern hardware. Ancestor-in-spirit. |
-| **Snakecharmer** | Windows | static / breathing / spectrum / off | DPI set + lock | thumb buttons | **yes** — native HID listener | yes, ~0 idle | One device (DeathAdder Elite), one small native exe. |
+| **Snakecharmer** | Windows | static / breathing / spectrum / off | DPI set + lock | thumb buttons | **yes** — native HID listener | yes, ~0 idle | A short list of [supported mice](SUPPORTED-DEVICES.md), one small native exe. |
 
 ## Pick by need
 
@@ -38,8 +38,8 @@ own (see the README table); for everything else, check the linked project's docs
 - **"I don't want to install anything"** → usemice (or Synapse Web if you own a
   supported flagship device).
 - **"I have a DeathAdder Essential"** → dawctl.
-- **"I have a DeathAdder Elite on Windows and want it to just work, forever, for free,
-  with no bloat"** → you're home.
+- **"I have a [supported Razer mouse](SUPPORTED-DEVICES.md) on Windows and want it to
+  just work, forever, for free, with no bloat"** → you're home.
 
 ## Pain points we could still adopt
 

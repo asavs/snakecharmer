@@ -72,9 +72,11 @@ Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI
 
 ## Scope
 
-One device on purpose: the DeathAdder Elite (`VID 0x1532 / PID 0x005C`). The protocol
-layer is small and well-tested, so adding another mouse (Razer or not) is a contained job,
-and a good one to hand an AI coding agent. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
+A short, deliberate list of devices — see
+[`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md) for the current table. Each
+device is described by a small `DeviceSpec`, so adding another mouse is a one-file diff
+and a contained job — a good one to hand an AI coding agent. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) and
 [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md).
 
 Snakecharmer also isn't trying to be everything — if you want cross-brand RGB game sync,
@@ -85,7 +87,7 @@ which tool fits which need.
 ## Requirements
 
 - Windows 10/11
-- A Razer DeathAdder Elite
+- A [supported Razer mouse](docs/SUPPORTED-DEVICES.md)
 - To build from source: [Rust](https://rustup.rs/) 1.97+ — or just grab a prebuilt
   `snakecharmer.exe` from the Releases page
 - Optional: Python 3, only if you're using the `reference/` toolkit to crack a new device
@@ -212,19 +214,18 @@ the full argument (and the ladder of what "going deeper" would actually mean), s
 <details>
 <summary><b>…I unplug the mouse while Snakecharmer is running?</b></summary>
 
-The session ends and the daemon retries every 3 seconds. When the mouse comes back
-(same one or another DeathAdder Elite), it reconnects and re-applies your DPI, driver
-mode, and lighting automatically. Nothing to restart.
+The session ends and the daemon retries every 3 seconds. When a supported mouse comes
+back (the same one or a different supported model), it reconnects and re-applies your
+DPI, driver mode, and lighting automatically. Nothing to restart.
 </details>
 
 <details>
 <summary><b>…I run it with a Naga, a keyboard, or any other Razer device?</b></summary>
 
-Nothing is ever written to it. Snakecharmer only opens a device matching
-`VID 0x1532 / PID 0x005C` — the DeathAdder Elite exactly. Any other device, Razer or
-not, is never touched; the daemon just waits in its 3-second retry loop for an Elite
-to appear. A "different version" DeathAdder (V2, V3, …) has a different product ID and
-counts as unsupported too.
+Nothing is ever written to it. Snakecharmer only opens devices whose USB product id is
+in its [supported-devices table](docs/SUPPORTED-DEVICES.md); anything else, Razer or
+not — including DeathAdder versions not yet in the table — is never touched. The daemon
+just waits in its 3-second retry loop for a supported mouse to appear.
 </details>
 
 <details>
@@ -238,9 +239,9 @@ Back/Forward untouched), and quitting Snakecharmer removes the hook. Everything 
 </details>
 
 <details>
-<summary><b>…I plug in two DeathAdder Elites at once?</b></summary>
+<summary><b>…I plug in two supported mice at once?</b></summary>
 
-Not really supported: DPI/lighting commands go to whichever unit Windows enumerates
-first, while DPI-button presses from *either* mouse trigger actions. Harmless, but
+Not really supported: commands go to whichever unit Windows enumerates first, and
+DPI-button presses from either mouse of the same model trigger actions. Harmless, but
 arbitrary — plug in one at a time.
 </details>
