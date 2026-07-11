@@ -171,8 +171,6 @@ Candidate features, filtered for compatibility with the zero-overhead ethos (see
 [`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md) for where these came from). Roughly in
 order of plausibility; none are promises:
 
-- **DPI stages** — cycle presets from the DPI buttons instead of remapping them; pure
-  software, no new protocol work.
 - **More devices** — the protocol crate is built for it; crack your own mouse with
   [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md) and send a PR.
 - **Lift-off distance / surface calibration** — protocol exists in OpenRazer; needs
@@ -185,7 +183,9 @@ order of plausibility; none are promises:
   Research track, not a shipping feature.
 
 Non-goals, so you don't wait for them: game-synced RGB, audio visualizers, cloud
-profiles, accounts, telemetry. If you need those, see the
+profiles, accounts, telemetry — and **DPI stages**: you get used to one pointer speed
+and keep it, and those two buttons are far more useful rebound to something you
+actually do. Reclaiming them is why this project exists. If you need the rest, see the
 [alternatives](docs/ALTERNATIVES.md) — some are genuinely good.
 
 ## Relationship to OpenRazer & license
