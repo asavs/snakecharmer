@@ -40,6 +40,27 @@ pub struct DpiButtons {
     pub down: u8,
 }
 
+/// Which OpenRazer polling-rate command family a device speaks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PollingProtocol {
+    /// One-byte command, class 0x00, id 0x05 set / 0x85 get
+    /// (`razer_chroma_misc_set_polling_rate`). Tops out at 1000 Hz.
+    Classic,
+    /// Two-byte command, class 0x00, id 0x40 set / 0xC0 get
+    /// (`razer_chroma_misc_set_polling_rate2`). Reaches 8000 Hz.
+    Extended,
+}
+
+/// A device's polling-rate capability: the command family plus the rates (Hz)
+/// the hardware accepts, per its cases in OpenRazer's `razermouse_driver.c`
+/// (`razer_attr_write_polling_rate` / `razer_attr_read_polling_rate`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PollingSpec {
+    pub protocol: PollingProtocol,
+    /// Supported rates in Hz, ascending.
+    pub rates: &'static [u16],
+}
+
 /// Per-device protocol parameters and hardware feature set.
 ///
 /// The Razer control protocol is shared across the mouse family; a `DeviceSpec`
@@ -68,6 +89,8 @@ pub struct DeviceSpec {
     /// Highest DPI the sensor accepts. Drives report validation and the
     /// settings-window slider range.
     pub dpi_max: u16,
+    /// Polling-rate command family and the rates the hardware accepts.
+    pub polling: PollingSpec,
 }
 
 impl DeviceSpec {
@@ -86,6 +109,7 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
     dpi_buttons: Some(DpiButtons { up: 0x20, down: 0x21 }),
     dpi_min: 100,
     dpi_max: 16000,
+    polling: PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] },
 };
 
 /// DeathAdder V3 wired (`PID 0x00B2`): no lighting, no wheel DPI buttons, 30000 DPI.
@@ -98,6 +122,10 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
     dpi_buttons: None,
     dpi_min: 100,
     dpi_max: 30000,
+    polling: PollingSpec {
+        protocol: PollingProtocol::Extended,
+        rates: &[125, 500, 1000, 2000, 4000, 8000],
+    },
 };
 
 /// Every device Snakecharmer knows how to drive.
@@ -154,6 +182,10 @@ pub enum ProtoError {
     /// A DPI value fell outside the target device's supported range
     /// (`DeviceSpec::dpi_min ..= dpi_max`).
     DpiOutOfRange(u16),
+    /// A polling rate the target device's spec (`DeviceSpec::polling`) does not list.
+    PollingRateUnsupported { hz: u16, supported: &'static [u16] },
+    /// A get-polling-rate response byte outside the known encoding.
+    UnknownPollingRate(u8),
     /// A response was not [`REPORT_LEN`] bytes.
     BadResponseLen(usize),
     /// The device reported a non-success status byte.
@@ -169,6 +201,11 @@ impl core::fmt::Display for ProtoError {
         match self {
             ProtoError::ArgsTooLong(n) => write!(f, "arguments too long: {n} > 80"),
             ProtoError::DpiOutOfRange(v) => write!(f, "DPI {v} out of the device's supported range"),
+            ProtoError::PollingRateUnsupported { hz, supported } => {
+                let list: Vec<String> = supported.iter().map(|r| r.to_string()).collect();
+                write!(f, "polling rate {hz} Hz unsupported (supported: {} Hz)", list.join(", "))
+            }
+            ProtoError::UnknownPollingRate(b) => write!(f, "unknown polling-rate byte 0x{b:02x}"),
             ProtoError::BadResponseLen(n) => write!(f, "unexpected response length {n} (want {REPORT_LEN})"),
             ProtoError::DeviceStatus(s) => write!(f, "device returned status 0x{s:02x}"),
             ProtoError::CommandEchoMismatch { sent, got } => write!(
@@ -254,6 +291,80 @@ pub fn set_dpi_report(
 /// get DPI (xy): class 0x04, id 0x85.
 pub fn get_dpi_report(transaction_id: u8) -> [u8; REPORT_LEN] {
     build_report(transaction_id, 0x04, 0x85, 0x07, &[]).expect("no args always valid")
+}
+
+// --- Polling rate -----------------------------------------------------------
+//
+// Two command families, selected per device by `DeviceSpec::polling`:
+//  * Classic (`razer_chroma_misc_{get,set}_polling_rate`): class 0x00,
+//    id 0x05/0x85, one rate byte: 0x01=1000, 0x02=500, 0x08=125 Hz.
+//  * Extended (`razer_chroma_misc_{get,set}_polling_rate2`): class 0x00,
+//    id 0x40/0xC0, set args [0x00, rate]: 0x01=8000, 0x02=4000, 0x04=2000,
+//    0x08=1000, 0x10=500, 0x20=250, 0x40=125 Hz; the get response carries the
+//    rate byte in arguments[1].
+
+/// Hz -> on-the-wire rate byte for the given command family.
+fn polling_rate_byte(protocol: PollingProtocol, hz: u16) -> Option<u8> {
+    match (protocol, hz) {
+        (PollingProtocol::Classic, 1000) => Some(0x01),
+        (PollingProtocol::Classic, 500) => Some(0x02),
+        (PollingProtocol::Classic, 125) => Some(0x08),
+        (PollingProtocol::Extended, 8000) => Some(0x01),
+        (PollingProtocol::Extended, 4000) => Some(0x02),
+        (PollingProtocol::Extended, 2000) => Some(0x04),
+        (PollingProtocol::Extended, 1000) => Some(0x08),
+        (PollingProtocol::Extended, 500) => Some(0x10),
+        (PollingProtocol::Extended, 250) => Some(0x20),
+        (PollingProtocol::Extended, 125) => Some(0x40),
+        _ => None,
+    }
+}
+
+/// On-the-wire rate byte -> Hz (inverse of [`polling_rate_byte`]).
+fn polling_rate_hz(protocol: PollingProtocol, byte: u8) -> Option<u16> {
+    let all: &[u16] = match protocol {
+        PollingProtocol::Classic => &[125, 500, 1000],
+        PollingProtocol::Extended => &[125, 250, 500, 1000, 2000, 4000, 8000],
+    };
+    all.iter().copied().find(|&hz| polling_rate_byte(protocol, hz) == Some(byte))
+}
+
+/// set polling rate: `razer_chroma_misc_set_polling_rate` (classic) or
+/// `..._set_polling_rate2` (extended), per `polling.protocol`. `polling.rates`
+/// gates `hz`; pass the target device's [`DeviceSpec::polling`].
+pub fn set_polling_rate_report(
+    transaction_id: u8,
+    polling: PollingSpec,
+    hz: u16,
+) -> Result<[u8; REPORT_LEN], ProtoError> {
+    let unsupported = ProtoError::PollingRateUnsupported { hz, supported: polling.rates };
+    if !polling.rates.contains(&hz) {
+        return Err(unsupported);
+    }
+    let b = polling_rate_byte(polling.protocol, hz).ok_or(unsupported)?;
+    match polling.protocol {
+        PollingProtocol::Classic => build_report(transaction_id, 0x00, 0x05, 0x01, &[b]),
+        PollingProtocol::Extended => build_report(transaction_id, 0x00, 0x40, 0x02, &[0x00, b]),
+    }
+}
+
+/// get polling rate: class 0x00, id 0x85 (classic) / 0xC0 (extended).
+pub fn get_polling_rate_report(transaction_id: u8, protocol: PollingProtocol) -> [u8; REPORT_LEN] {
+    match protocol {
+        PollingProtocol::Classic => build_report(transaction_id, 0x00, 0x85, 0x01, &[]),
+        PollingProtocol::Extended => build_report(transaction_id, 0x00, 0xC0, 0x01, &[]),
+    }
+    .expect("no args always valid")
+}
+
+/// Parse Hz from a validated get-polling-rate response (classic: byte 8, i.e.
+/// arguments[0]; extended: byte 9, i.e. arguments[1]).
+pub fn parse_polling_rate(protocol: PollingProtocol, response: &[u8]) -> Result<u16, ProtoError> {
+    let b = match protocol {
+        PollingProtocol::Classic => response[8],
+        PollingProtocol::Extended => response[9],
+    };
+    polling_rate_hz(protocol, b).ok_or(ProtoError::UnknownPollingRate(b))
 }
 
 // --- Chroma / RGB lighting ------------------------------------------------
@@ -434,6 +545,7 @@ mod tests {
         dpi_buttons: None,
         dpi_min: 100,
         dpi_max: 30000,
+        polling: PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] },
     };
 
     /// The transaction id lives at byte 1, which is *outside* the CRC range
@@ -548,6 +660,115 @@ mod tests {
         assert_eq!(parse_dpi(v), (1600, 800));
     }
 
+    // --- Polling rate: byte-exact against OpenRazer razerchromacommon.c -----
+
+    #[test]
+    fn set_polling_rate_classic_bytes() {
+        // razer_chroma_misc_set_polling_rate: class 0x00, id 0x05, args [rate].
+        let p = DEATHADDER_ELITE.polling;
+        let r = set_polling_rate_report(T, p, 500).unwrap();
+        assert_eq!(&r[0..9], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x01, 0x00, 0x05, 0x02]);
+        assert!(r[9..88].iter().all(|&b| b == 0));
+        assert_eq!(r[88], crc(&r));
+        // Full classic map: 0x01=1000, 0x02=500, 0x08=125.
+        assert_eq!(set_polling_rate_report(T, p, 1000).unwrap()[8], 0x01);
+        assert_eq!(set_polling_rate_report(T, p, 125).unwrap()[8], 0x08);
+    }
+
+    #[test]
+    fn get_polling_rate_classic_bytes() {
+        // razer_chroma_misc_get_polling_rate: class 0x00, id 0x85, data_size 0x01.
+        let r = get_polling_rate_report(T, PollingProtocol::Classic);
+        assert_eq!(&r[0..8], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x01, 0x00, 0x85]);
+        assert_eq!(r[88], crc(&r));
+    }
+
+    #[test]
+    fn set_polling_rate_extended_bytes() {
+        // razer_chroma_misc_set_polling_rate2: class 0x00, id 0x40, args
+        // [argument=0x00, rate] (the V3's case passes argument 0x00).
+        let v = DEATHADDER_V3;
+        let r = set_polling_rate_report(v.transaction_id, v.polling, 1000).unwrap();
+        assert_eq!(&r[0..10], &[0x00, 0x1F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x40, 0x00, 0x08]);
+        assert!(r[10..88].iter().all(|&b| b == 0));
+        assert_eq!(r[88], crc(&r));
+        // Full extended map.
+        for (hz, b) in [(8000u16, 0x01u8), (4000, 0x02), (2000, 0x04), (500, 0x10), (125, 0x40)] {
+            assert_eq!(set_polling_rate_report(v.transaction_id, v.polling, hz).unwrap()[9], b);
+        }
+    }
+
+    #[test]
+    fn get_polling_rate_extended_bytes() {
+        // razer_chroma_misc_get_polling_rate2: class 0x00, id 0xC0, data_size 0x01.
+        let r = get_polling_rate_report(DEATHADDER_V3.transaction_id, PollingProtocol::Extended);
+        assert_eq!(&r[0..8], &[0x00, 0x1F, 0x00, 0x00, 0x00, 0x01, 0x00, 0xC0]);
+        assert_eq!(r[88], crc(&r));
+    }
+
+    #[test]
+    fn unsupported_polling_rates_rejected() {
+        let e = DEATHADDER_ELITE;
+        assert_eq!(
+            set_polling_rate_report(e.transaction_id, e.polling, 2000),
+            Err(ProtoError::PollingRateUnsupported { hz: 2000, supported: e.polling.rates })
+        );
+        let v = DEATHADDER_V3;
+        assert!(matches!(
+            set_polling_rate_report(v.transaction_id, v.polling, 750),
+            Err(ProtoError::PollingRateUnsupported { hz: 750, .. })
+        ));
+        // 250 Hz encodes on the wire (0x20) but neither device lists it.
+        assert!(set_polling_rate_report(v.transaction_id, v.polling, 250).is_err());
+    }
+
+    #[test]
+    fn validate_and_parse_polling_rate() {
+        // Classic: rate byte at arguments[0] (byte 8).
+        let req = get_polling_rate_report(T, PollingProtocol::Classic);
+        let mut resp = [0u8; REPORT_LEN];
+        resp[0] = status::SUCCESS;
+        resp[6] = 0x00;
+        resp[7] = 0x85;
+        resp[8] = 0x01; // 1000 Hz
+        let v = validate_response(&req, &resp).unwrap();
+        assert_eq!(parse_polling_rate(PollingProtocol::Classic, v), Ok(1000));
+
+        // Extended: rate byte at arguments[1] (byte 9).
+        let req = get_polling_rate_report(0x1F, PollingProtocol::Extended);
+        let mut resp = [0u8; REPORT_LEN];
+        resp[0] = status::SUCCESS;
+        resp[6] = 0x00;
+        resp[7] = 0xC0;
+        resp[9] = 0x01; // 8000 Hz
+        let v = validate_response(&req, &resp).unwrap();
+        assert_eq!(parse_polling_rate(PollingProtocol::Extended, v), Ok(8000));
+
+        // A byte outside either encoding is an error, not a guess.
+        assert_eq!(
+            parse_polling_rate(PollingProtocol::Classic, &[0u8; REPORT_LEN]),
+            Err(ProtoError::UnknownPollingRate(0x00))
+        );
+    }
+
+    /// Pin each device's polling capability to its OpenRazer cases
+    /// (`razer_attr_write_polling_rate` uses the classic command on the Elite,
+    /// `..._polling_rate2` on the V3).
+    #[test]
+    fn polling_specs_match_openrazer() {
+        assert_eq!(
+            DEATHADDER_ELITE.polling,
+            PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] }
+        );
+        assert_eq!(
+            DEATHADDER_V3.polling,
+            PollingSpec {
+                protocol: PollingProtocol::Extended,
+                rates: &[125, 500, 1000, 2000, 4000, 8000],
+            }
+        );
+    }
+
     // --- Chroma tests: assert exact bytes against OpenRazer doc examples ----
 
     #[test]
@@ -630,6 +851,15 @@ mod tests {
                 ("model name", spec.name.to_string()),
                 ("transaction id", format!("0x{:02X}", spec.transaction_id)),
                 ("DPI range", format!("{}–{}", spec.dpi_min, spec.dpi_max)),
+                (
+                    "polling rates",
+                    spec.polling
+                        .rates
+                        .iter()
+                        .map(|r| r.to_string())
+                        .collect::<Vec<_>>()
+                        .join("/"),
+                ),
             ] {
                 assert!(
                     row.contains(&needle),

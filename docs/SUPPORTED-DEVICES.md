@@ -6,10 +6,10 @@ source of truth; this page is its human-readable twin, and a test
 (`supported_devices_doc_matches_table`) fails CI if the two drift. All protocol knowledge is sourced
 from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_driver.c`).
 
-| Model | USB id | txn | RGB zones | DPI buttons | DPI range | Verified on hardware |
-|---|---|---|---|---|---|---|
-| DeathAdder Elite | `1532:005C` | `0x3F` | scroll wheel, logo | yes (`0x20`/`0x21`) | 100–16000 | ✅ |
-| DeathAdder V3 (wired) | `1532:00B2` | `0x1F` | — | — | 100–30000 | ✅ |
+| Model | USB id | txn | RGB zones | DPI buttons | DPI range | Polling (Hz) | Verified on hardware |
+|---|---|---|---|---|---|---|---|
+| DeathAdder Elite | `1532:005C` | `0x3F` | scroll wheel, logo | yes (`0x20`/`0x21`) | 100–16000 | 125/500/1000 | ✅ |
+| DeathAdder V3 (wired) | `1532:00B2` | `0x1F` | — | — | 100–30000 | 125/500/1000/2000/4000/8000 | ✅ |
 
 **Column notes**
 
@@ -19,6 +19,9 @@ from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_dri
 - **DPI buttons** — whether the model has the wheel DPI buttons that emit private vendor
   codes in driver mode. Without them, driver mode and the button listeners are skipped
   entirely.
+- **Polling (Hz)** — the report rates the hardware accepts. Which command family the
+  device speaks (classic `razer_chroma_misc_set_polling_rate` vs the extended
+  `..._rate2` that reaches 8000 Hz) is spec data too (`DeviceSpec::polling`).
 - **Verified on hardware** — someone ran the daemon against the real device and confirmed
   DPI set/read round-trips and correct feature gating, not just a table entry copied from
   OpenRazer.

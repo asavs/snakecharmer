@@ -36,6 +36,7 @@ Fill these in — they're the entire "crack", distilled:
 | `rgb_zones` | e.g. `&[led::SCROLL_WHEEL, led::LOGO]`, or `&[]` for none | which lighting zones does the hardware have? |
 | `dpi_buttons` | `Some(DpiButtons { up: 0x__, down: 0x__ })` / `None` | does it have wheel DPI buttons, and what vendor codes do they emit in driver mode? |
 | `dpi_min` / `dpi_max` | `100` / `____` | the sensor's full range — **the UI must be actionable over all of it** |
+| `polling` | `PollingSpec { protocol: Classic\|Extended, rates: &[...] }` | which command family (OpenRazer `razer_chroma_misc_set_polling_rate` vs `..._rate2`) and which Hz values the hardware accepts |
 
 ## Checklist
 

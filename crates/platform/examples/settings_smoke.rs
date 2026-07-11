@@ -24,6 +24,11 @@ fn main() {
         dpi: 1800,
         dpi_min: 100,
         dpi_max: 3200,
+        polling_labels: ["keep", "125 Hz", "500 Hz", "1000 Hz"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        polling_index: 3,
         action_labels: ["copy", "paste", "cut", "none", "key:9", "key:0"]
             .iter()
             .map(|s| s.to_string())

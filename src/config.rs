@@ -28,6 +28,9 @@ pub struct Config {
     pub lighting: String,
     /// Color (`#RRGGBB`) used by the `static`/`breathing` lighting effects.
     pub color: String,
+    /// Optional polling rate in Hz, applied (and re-asserted) at startup.
+    /// Absent = leave the hardware setting alone.
+    pub polling_rate: Option<u16>,
     /// How often (seconds) to re-assert driver mode + DPI.
     pub reassert_interval_secs: u64,
 }
@@ -43,6 +46,7 @@ impl Default for Config {
             thumb_forward: "none".to_string(),
             lighting: "keep".to_string(),
             color: "#00ff00".to_string(),
+            polling_rate: None,
             reassert_interval_secs: 60,
         }
     }
@@ -129,6 +133,7 @@ mod tests {
             thumb_forward: "none".into(),
             lighting: "static".into(),
             color: "#ff8800".into(),
+            polling_rate: Some(500),
             reassert_interval_secs: 30,
         };
         let text = toml::to_string_pretty(&c).unwrap();
@@ -143,6 +148,7 @@ mod tests {
         let back: Config = toml::from_str("dpi = 1200\n").unwrap();
         assert_eq!(back.dpi, 1200);
         assert_eq!(back.dpi_up, "copy");
+        assert_eq!(back.polling_rate, None, "absent polling_rate must mean leave-as-is");
         assert_eq!(back.reassert_interval_secs, 60);
     }
 }

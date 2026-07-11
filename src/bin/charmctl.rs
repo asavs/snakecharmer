@@ -3,8 +3,9 @@
 //! the terminal cleanly.
 //!
 //! Usage:
-//!   charmctl status                         device mode + DPI (read-only)
+//!   charmctl status                         device mode + DPI + polling rate (read-only)
 //!   charmctl set-dpi X [Y]                  set DPI
+//!   charmctl set-poll <hz>                  set polling rate (Hz)
 //!   charmctl set-mode driver|hardware       set device mode
 //!   charmctl set-color <#RRGGBB>            static color (both zones)
 //!   charmctl set-effect static [#RRGGBB]    static color effect
@@ -35,6 +36,7 @@ fn main() {
     let result: Result<(), Box<dyn std::error::Error>> = match cmd {
         "status" => status(),
         "set-dpi" => set_dpi(rest),
+        "set-poll" => set_poll(rest),
         "set-mode" => set_mode(rest),
         "set-color" => set_color(rest),
         "set-effect" => set_effect(rest),
@@ -61,8 +63,9 @@ fn print_help() {
     println!(
         "charmctl — Snakecharmer control CLI (supported Razer mice)\n\n\
          USAGE:\n\
-         \x20 charmctl status                          device mode + DPI (read-only)\n\
+         \x20 charmctl status                          device mode + DPI + polling rate (read-only)\n\
          \x20 charmctl set-dpi X [Y]                   set DPI\n\
+         \x20 charmctl set-poll <hz>                   set polling rate (Hz)\n\
          \x20 charmctl set-mode driver|hardware        set device mode\n\
          \x20 charmctl set-color <#RRGGBB>             static color (both zones)\n\
          \x20 charmctl set-effect static [#RRGGBB]     static color effect\n\
@@ -79,12 +82,26 @@ fn status() -> Result<(), Box<dyn std::error::Error>> {
     let spec = mouse.spec();
     let mode = mouse.get_device_mode()?;
     let (x, y) = mouse.get_dpi()?;
+    // Degrade gracefully: a device whose firmware rejects the get command
+    // still gets the rest of the status line.
+    let poll = match mouse.get_polling_rate() {
+        Ok(hz) => format!("{hz} Hz"),
+        Err(e) => format!("unavailable ({e})"),
+    };
     println!(
-        "device = {} (PID 0x{:04X}), mode = {}, dpi = {x} x {y}",
+        "device = {} (PID 0x{:04X}), mode = {}, dpi = {x} x {y}, polling = {poll}",
         spec.name,
         spec.product_id,
         mode_name(mode)
     );
+    Ok(())
+}
+
+fn set_poll(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let hz: u16 = args.first().ok_or("usage: set-poll <hz>")?.parse()?;
+    let mouse = Mouse::open()?;
+    let read = mouse.set_polling_rate(hz)?;
+    println!("Polling rate set to {read} Hz.");
     Ok(())
 }
 

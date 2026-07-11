@@ -202,6 +202,34 @@ impl Mouse {
         Ok(read)
     }
 
+    /// Read the current polling rate in Hz.
+    pub fn get_polling_rate(&self) -> Result<u16> {
+        let resp = self.send_command(&proto::get_polling_rate_report(
+            self.spec.transaction_id,
+            self.spec.polling.protocol,
+        ))?;
+        Ok(proto::parse_polling_rate(self.spec.polling.protocol, &resp)?)
+    }
+
+    /// Set the polling rate (Hz) and return the read-back value for
+    /// verification. Rates the spec's `polling.rates` doesn't list are
+    /// rejected up front (the error names the supported rates).
+    pub fn set_polling_rate(&self, hz: u16) -> Result<u16> {
+        self.send_command(&proto::set_polling_rate_report(
+            self.spec.transaction_id,
+            self.spec.polling,
+            hz,
+        )?)?;
+        sleep(Duration::from_millis(50));
+        let read = self.get_polling_rate()?;
+        if read != hz {
+            return Err(Error::Verify(format!(
+                "requested polling rate {hz} Hz, device reports {read} Hz"
+            )));
+        }
+        Ok(read)
+    }
+
     // --- Chroma / RGB lighting ---------------------------------------------
     //
     // Each effect is applied to every zone in the spec's `rgb_zones`, in order.

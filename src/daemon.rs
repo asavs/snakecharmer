@@ -23,6 +23,8 @@ const DEBOUNCE: Duration = Duration::from_millis(200);
 #[derive(Debug, Clone)]
 pub enum MenuAction {
     SetDpi(u16),
+    /// `Some(hz)` = set + manage; `None` = "keep" (stop managing, leave hardware).
+    SetPollingRate(Option<u16>),
     Effect(EffectSpec),
     SetUpAction(String),
     SetDownAction(String),
@@ -91,6 +93,18 @@ fn thumb_indices(cfg: &Config, labels: &[String]) -> (usize, usize) {
     (find(&cfg.thumb_back), find(&cfg.thumb_forward))
 }
 
+/// Polling dropdown labels ("keep" + the device's supported rates) and the
+/// selected index matching the config (`None` -> "keep").
+fn polling_options(cfg: &Config, spec: &DeviceSpec) -> (Vec<String>, usize) {
+    let mut labels = vec!["keep".to_string()];
+    labels.extend(spec.polling.rates.iter().map(|hz| format!("{hz} Hz")));
+    let idx = cfg
+        .polling_rate
+        .and_then(|hz| spec.polling.rates.iter().position(|&r| r == hz).map(|i| i + 1))
+        .unwrap_or(0);
+    (labels, idx)
+}
+
 fn effect_options(cfg: &Config) -> (Vec<String>, usize) {
     let labels: Vec<String> = EFFECT_PRESETS.iter().map(|s| s.to_string()).collect();
     let idx = labels
@@ -107,11 +121,14 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
     let (action_labels, up_index, down_index) = action_options(cfg);
     let (thumb_back_index, thumb_forward_index) = thumb_indices(cfg, &action_labels);
     let (effect_labels, effect_index) = effect_options(cfg);
+    let (polling_labels, polling_index) = polling_options(cfg, &spec);
     let color = Rgb::parse_hex(&cfg.color).unwrap_or(Rgb::new(0, 0xFF, 0));
     let init = platform::settings::SettingsInit {
         dpi: cfg.dpi,
         dpi_min: spec.dpi_min,
         dpi_max: spec.dpi_max,
+        polling_labels,
+        polling_index,
         action_labels: action_labels.clone(),
         up_index,
         down_index,
@@ -128,6 +145,13 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
         platform::settings::open(init, move |ev| {
             let cmd = match ev {
                 SE::Dpi(v) => Some(MenuAction::SetDpi(v)),
+                // Index 0 = "keep" (stop managing); 1.. = the spec's rates.
+                SE::Polling(0) => Some(MenuAction::SetPollingRate(None)),
+                SE::Polling(i) => spec
+                    .polling
+                    .rates
+                    .get(i - 1)
+                    .map(|&hz| MenuAction::SetPollingRate(Some(hz))),
                 SE::UpAction(i) => action_labels.get(i).map(|s| MenuAction::SetUpAction(s.clone())),
                 SE::DownAction(i) => {
                     action_labels.get(i).map(|s| MenuAction::SetDownAction(s.clone()))
@@ -372,6 +396,14 @@ fn run_session(
         Err(e) => log.log(&format!("WARN could not set DPI: {e}")),
     }
 
+    // Lock the polling rate if configured (non-fatal, like DPI); absent = leave as-is.
+    if let Some(hz) = cfg.polling_rate {
+        match ctrl.set_polling_rate(hz) {
+            Ok(r) => log.log(&format!("Polling rate locked to {r} Hz.")),
+            Err(e) => log.log(&format!("WARN could not set polling rate: {e}")),
+        }
+    }
+
     // Apply configured startup lighting (unless "keep"; a logged no-op on
     // devices without lighting hardware — see `apply_startup_lighting`).
     apply_startup_lighting(&ctrl, cfg, log);
@@ -526,6 +558,18 @@ fn handle_menu(
             save_config(cfg, log);
             log.log(&format!("Menu: DPI set to {rx} x {ry}."));
         }
+        MenuAction::SetPollingRate(Some(hz)) => {
+            let r = ctrl.set_polling_rate(hz)?;
+            cfg.polling_rate = Some(hz);
+            save_config(cfg, log);
+            log.log(&format!("Settings: polling rate set to {r} Hz."));
+        }
+        MenuAction::SetPollingRate(None) => {
+            // "keep": stop managing; leave whatever the hardware is set to.
+            cfg.polling_rate = None;
+            save_config(cfg, log);
+            log.log("Settings: polling rate -> keep (unmanaged).");
+        }
         MenuAction::Effect(spec) => {
             spec.apply(ctrl)?;
             let (lighting, color) = spec.to_config();
@@ -608,6 +652,9 @@ fn handle_menu(
         MenuAction::Apply => {
             let (dx, dy) = cfg.dpi_xy();
             let _ = ctrl.set_dpi(dx, dy);
+            if let Some(hz) = cfg.polling_rate {
+                let _ = ctrl.set_polling_rate(hz);
+            }
             apply_startup_lighting(ctrl, cfg, log);
             log.log("Settings: applied current config to device.");
         }
@@ -627,6 +674,9 @@ fn handle_menu(
             *bindings = Bindings::from_config(cfg, log);
             let (dx, dy) = cfg.dpi_xy();
             let _ = ctrl.set_dpi(dx, dy);
+            if let Some(hz) = cfg.polling_rate {
+                let _ = ctrl.set_polling_rate(hz);
+            }
             apply_startup_lighting(ctrl, cfg, log);
             apply_thumb_hook(cfg, log);
             log.log("Menu: config reloaded and reapplied.");
@@ -719,6 +769,13 @@ fn reassert(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::E
         let (rx, ry) = ctrl.set_dpi(want_x, want_y)?;
         log.log(&format!("Re-locked DPI (was {cx}x{cy}, now {rx}x{ry})."));
     }
+    if let Some(want_hz) = cfg.polling_rate {
+        let cur = ctrl.get_polling_rate()?;
+        if cur != want_hz {
+            let hz = ctrl.set_polling_rate(want_hz)?;
+            log.log(&format!("Re-locked polling rate (was {cur} Hz, now {hz} Hz)."));
+        }
+    }
     Ok(())
 }
 
@@ -754,6 +811,25 @@ mod tests {
         let (labels, up, _) = action_options(&cfg);
         assert_eq!(labels[up], "ctrl+shift+v");
         assert!(labels.iter().filter(|l| *l == "ctrl+shift+v").count() == 1);
+    }
+
+    #[test]
+    fn polling_options_track_config_and_spec() {
+        let v3 = razer_proto::DEATHADDER_V3;
+        let mut cfg = Config::default(); // polling_rate = None
+        let (labels, idx) = polling_options(&cfg, &v3);
+        assert_eq!(labels[0], "keep");
+        assert_eq!(idx, 0, "unmanaged config must select keep");
+        assert_eq!(labels.len(), v3.polling.rates.len() + 1);
+
+        cfg.polling_rate = Some(4000);
+        let (labels, idx) = polling_options(&cfg, &v3);
+        assert_eq!(labels[idx], "4000 Hz");
+
+        // A configured rate this device doesn't support falls back to "keep".
+        cfg.polling_rate = Some(9999);
+        let (_, idx) = polling_options(&cfg, &v3);
+        assert_eq!(idx, 0);
     }
 
     #[test]

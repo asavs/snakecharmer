@@ -61,6 +61,9 @@ Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI
 ## Features
 
 - **DPI level** — set and lock sensitivity; re-asserted at login and periodically.
+- **Polling rate** — set and lock the report rate (up to 8000 Hz on devices that
+  support it), from the settings window, the config, or `charmctl set-poll`; the
+  dropdown offers exactly the connected device's supported rates.
 - **DPI-button remap** — the two buttons behind the wheel emit private Razer vendor codes
   (`0x20`/`0x21`) the OS can't see. Snakecharmer catches them at the HID layer and turns
   them into keystrokes (default: copy / paste).
@@ -129,13 +132,15 @@ thumb_forward = "none"    # "none" = keep native Forward
 lighting = "keep"         # keep | static | breathing | spectrum | off
 color = "#00ff00"
 reassert_interval_secs = 60
+# polling_rate = 1000    # Hz, per-device (see docs/SUPPORTED-DEVICES.md); omit = leave as-is
 ```
 
 ## `charmctl` — command-line control
 
 ```
-charmctl status                          device mode + DPI (read-only)
+charmctl status                          device mode + DPI + polling rate (read-only)
 charmctl set-dpi X [Y]                    set DPI
+charmctl set-poll <hz>                    set polling rate (Hz)
 charmctl set-mode driver|hardware         set device mode
 charmctl set-color <#RRGGBB>              static color (both zones)
 charmctl set-effect static [#RRGGBB]      static color effect
@@ -166,8 +171,6 @@ Candidate features, filtered for compatibility with the zero-overhead ethos (see
 [`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md) for where these came from). Roughly in
 order of plausibility; none are promises:
 
-- **Polling rate control** — a known DeathAdder Elite command in OpenRazer; small and
-  static, fits perfectly.
 - **DPI stages** — cycle presets from the DPI buttons instead of remapping them; pure
   software, no new protocol work.
 - **More devices** — the protocol crate is built for it; crack your own mouse with

@@ -1,5 +1,6 @@
 //! Minimal example of driving the mouse straight through `razer-hid`.
-//! Read-only: prints the current device mode and DPI. Safe to run any time.
+//! Read-only: prints the current device mode, DPI, and polling rate. Safe to
+//! run any time.
 //!
 //!   cargo run -p razer-hid --example m1
 
@@ -12,5 +13,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("device: {}", mouse.spec().name);
     println!("device mode byte: 0x{mode:02x}");
     println!("dpi: {x} x {y}");
+    match mouse.get_polling_rate() {
+        Ok(hz) => println!("polling: {hz} Hz"),
+        Err(e) => println!("polling: unavailable ({e})"),
+    }
     Ok(())
 }

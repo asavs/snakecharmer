@@ -42,6 +42,7 @@ const ID_CB_DOWN: u16 = 104;
 const ID_CB_EFFECT: u16 = 105;
 const ID_CB_THUMB_BACK: u16 = 111;
 const ID_CB_THUMB_FWD: u16 = 112;
+const ID_CB_POLL: u16 = 113;
 const ID_SWATCH: u16 = 106;
 const ID_BTN_COLOR: u16 = 107;
 const ID_BTN_APPLY: u16 = 108;
@@ -53,6 +54,8 @@ pub struct SettingsInit {
     pub dpi: u16,
     pub dpi_min: u16,
     pub dpi_max: u16,
+    pub polling_labels: Vec<String>,
+    pub polling_index: usize,
     pub action_labels: Vec<String>,
     pub up_index: usize,
     pub down_index: usize,
@@ -67,6 +70,7 @@ pub struct SettingsInit {
 #[derive(Debug, Clone, Copy)]
 pub enum SettingsEvent {
     Dpi(u16),
+    Polling(usize),
     UpAction(usize),
     DownAction(usize),
     ThumbBack(usize),
@@ -142,7 +146,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             390,
-            470,
+            524,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             hinstance,
@@ -197,21 +201,30 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             cb
         };
 
+        // Polling rate combo (the device's supported rates; "keep" = don't manage).
+        let _ = mk("STATIC", "Polling rate:", 0, 0, 20, 74, 330, 18);
+        let cb_poll = mk("COMBOBOX", "", combo_style, ID_CB_POLL, 20, 94, 330, 200);
+        for label in &init.polling_labels {
+            let w = to_wide(label);
+            SendMessageW(cb_poll, CB_ADDSTRING, 0, w.as_ptr() as LPARAM);
+        }
+        SendMessageW(cb_poll, CB_SETCURSEL, init.polling_index, 0);
+
         // DPI-button action combos.
-        let _ = mk("STATIC", "Front DPI button (dpi_up):", 0, 0, 20, 74, 330, 18);
-        let _cb_up = make_action_combo(ID_CB_UP, 94, init.up_index);
-        let _ = mk("STATIC", "Rear DPI button (dpi_down):", 0, 0, 20, 128, 330, 18);
-        let _cb_down = make_action_combo(ID_CB_DOWN, 148, init.down_index);
+        let _ = mk("STATIC", "Front DPI button (dpi_up):", 0, 0, 20, 128, 330, 18);
+        let _cb_up = make_action_combo(ID_CB_UP, 148, init.up_index);
+        let _ = mk("STATIC", "Rear DPI button (dpi_down):", 0, 0, 20, 182, 330, 18);
+        let _cb_down = make_action_combo(ID_CB_DOWN, 202, init.down_index);
 
         // Thumb-button action combos (XBUTTON1 / XBUTTON2).
-        let _ = mk("STATIC", "Back thumb button (XBUTTON1):", 0, 0, 20, 182, 330, 18);
-        let _cb_tb = make_action_combo(ID_CB_THUMB_BACK, 202, init.thumb_back_index);
-        let _ = mk("STATIC", "Forward thumb button (XBUTTON2):", 0, 0, 20, 236, 330, 18);
-        let _cb_tf = make_action_combo(ID_CB_THUMB_FWD, 256, init.thumb_forward_index);
+        let _ = mk("STATIC", "Back thumb button (XBUTTON1):", 0, 0, 20, 236, 330, 18);
+        let _cb_tb = make_action_combo(ID_CB_THUMB_BACK, 256, init.thumb_back_index);
+        let _ = mk("STATIC", "Forward thumb button (XBUTTON2):", 0, 0, 20, 290, 330, 18);
+        let _cb_tf = make_action_combo(ID_CB_THUMB_FWD, 310, init.thumb_forward_index);
 
         // Lighting effect combo.
-        let _ = mk("STATIC", "Lighting effect:", 0, 0, 20, 290, 330, 18);
-        let cb_effect = mk("COMBOBOX", "", combo_style, ID_CB_EFFECT, 20, 310, 330, 200);
+        let _ = mk("STATIC", "Lighting effect:", 0, 0, 20, 344, 330, 18);
+        let cb_effect = mk("COMBOBOX", "", combo_style, ID_CB_EFFECT, 20, 364, 330, 200);
         for label in &init.effect_labels {
             let w = to_wide(label);
             SendMessageW(cb_effect, CB_ADDSTRING, 0, w.as_ptr() as LPARAM);
@@ -219,14 +232,14 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         SendMessageW(cb_effect, CB_SETCURSEL, init.effect_index, 0);
 
         // Color swatch + picker button.
-        let _ = mk("STATIC", "Color:", 0, 0, 20, 352, 40, 20);
-        let swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH, 66, 350, 80, 22);
-        let _ = mk("BUTTON", "Choose...", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_COLOR, 156, 348, 90, 26);
+        let _ = mk("STATIC", "Color:", 0, 0, 20, 406, 40, 20);
+        let swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH, 66, 404, 80, 22);
+        let _ = mk("BUTTON", "Choose...", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_COLOR, 156, 402, 90, 26);
 
         // Action buttons.
-        let _ = mk("BUTTON", "Apply", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_APPLY, 20, 394, 90, 28);
-        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, 130, 394, 90, 28);
-        let _ = mk("BUTTON", "Close", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_CLOSE, 260, 394, 90, 28);
+        let _ = mk("BUTTON", "Apply", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_APPLY, 20, 448, 90, 28);
+        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, 130, 448, 90, 28);
+        let _ = mk("BUTTON", "Close", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_CLOSE, 260, 448, 90, 28);
 
         let state = Box::new(WindowState {
             on_event: Box::new(on_event),
@@ -316,6 +329,12 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                         let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
                         if i >= 0 {
                             (st.on_event)(SettingsEvent::Effect(i as usize));
+                        }
+                    }
+                    (ID_CB_POLL, CBN_SELCHANGE) => {
+                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                        if i >= 0 {
+                            (st.on_event)(SettingsEvent::Polling(i as usize));
                         }
                     }
                     (ID_BTN_COLOR, BN_CLICKED) => {
