@@ -12,7 +12,7 @@
 //! ```text
 //! offset 0     status            (0x00 on request; response: 0x02=OK, 0x01=busy,
 //!                                 0x03=failure, 0x04=timeout, 0x05=not supported)
-//! offset 1     transaction_id    (0x3F for the DeathAdder Elite)
+//! offset 1     transaction_id    (per-device: 0x3F on the Elite, 0x1F on the V3)
 //! offset 2-3   remaining_packets (big-endian, 0)
 //! offset 4     protocol_type     (0)
 //! offset 5     data_size
@@ -27,10 +27,55 @@
 
 /// USB vendor id for Razer.
 pub const VENDOR_ID: u16 = 0x1532;
-/// USB product id for the DeathAdder Elite.
-pub const PRODUCT_ID: u16 = 0x005C;
-/// Transaction id used by the DeathAdder Elite (per openrazer `razermouse_driver.c`).
-pub const TRANSACTION_ID: u8 = 0x3F;
+
+/// Per-device protocol parameters and hardware feature set.
+///
+/// The Razer control protocol is shared across the mouse family, but two things
+/// vary by model: the `transaction_id` byte stamped into every report, and which
+/// features the hardware actually has. A `DeviceSpec` captures both so the upper
+/// layers can build correct reports and skip features a device lacks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeviceSpec {
+    /// USB product id.
+    pub product_id: u16,
+    /// transaction_id byte (offset 1 of every report). Varies by model
+    /// generation — 0x3F on the DeathAdder Elite, 0x1F on the V3.
+    pub transaction_id: u8,
+    /// Human-readable model name (for logs and the tray tooltip).
+    pub name: &'static str,
+    /// Whether the device has addressable RGB lighting zones.
+    pub has_rgb: bool,
+    /// Whether the device has the pair of wheel DPI buttons that, in driver
+    /// mode, emit the private `0x20`/`0x21` vendor codes. The V3 has no such
+    /// buttons, so it needs neither driver mode nor the vendor-code listener.
+    pub has_dpi_buttons: bool,
+    /// Lowest DPI the sensor accepts.
+    pub dpi_min: u16,
+    /// Highest DPI the sensor accepts — the Elite tops out at 16000, the V3's
+    /// Focus Pro sensor at 30000. Drives both report validation and the
+    /// settings-window slider range, so the UI is actionable over the whole
+    /// capable range of whichever device is plugged in.
+    pub dpi_max: u16,
+}
+
+/// DeathAdder Elite (`PID 0x005C`): two RGB zones, wheel DPI buttons, 16000 DPI.
+pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
+    product_id: 0x005C,
+    transaction_id: 0x3F,
+    name: "DeathAdder Elite",
+    has_rgb: true,
+    has_dpi_buttons: true,
+    dpi_min: 100,
+    dpi_max: 16000,
+};
+
+/// Every device Snakecharmer knows how to drive.
+pub const SUPPORTED: &[DeviceSpec] = &[DEATHADDER_ELITE];
+
+/// Look up the [`DeviceSpec`] for a USB product id, if it's supported.
+pub fn spec_for(product_id: u16) -> Option<DeviceSpec> {
+    SUPPORTED.iter().copied().find(|s| s.product_id == product_id)
+}
 
 /// Length of a Razer control report / response, in bytes.
 pub const REPORT_LEN: usize = 90;
@@ -75,7 +120,8 @@ impl DeviceMode {
 pub enum ProtoError {
     /// More than 80 argument bytes were supplied.
     ArgsTooLong(usize),
-    /// A DPI value fell outside the DeathAdder Elite's 100..=16000 range.
+    /// A DPI value fell outside the target device's supported range
+    /// (`DeviceSpec::dpi_min ..= dpi_max`).
     DpiOutOfRange(u16),
     /// A response was not [`REPORT_LEN`] bytes.
     BadResponseLen(usize),
@@ -91,7 +137,7 @@ impl core::fmt::Display for ProtoError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ProtoError::ArgsTooLong(n) => write!(f, "arguments too long: {n} > 80"),
-            ProtoError::DpiOutOfRange(v) => write!(f, "DPI {v} out of range (100..=16000)"),
+            ProtoError::DpiOutOfRange(v) => write!(f, "DPI {v} out of the device's supported range"),
             ProtoError::BadResponseLen(n) => write!(f, "unexpected response length {n} (want {REPORT_LEN})"),
             ProtoError::DeviceStatus(s) => write!(f, "device returned status 0x{s:02x}"),
             ProtoError::CommandEchoMismatch { sent, got } => write!(
@@ -115,6 +161,7 @@ pub fn crc(report: &[u8; REPORT_LEN]) -> u8 {
 ///
 /// Builds the 90-byte control report (per OpenRazer `razercommon.c`).
 pub fn build_report(
+    transaction_id: u8,
     command_class: u8,
     command_id: u8,
     data_size: u8,
@@ -124,7 +171,7 @@ pub fn build_report(
         return Err(ProtoError::ArgsTooLong(args.len()));
     }
     let mut buf = [0u8; REPORT_LEN];
-    buf[1] = TRANSACTION_ID;
+    buf[1] = transaction_id;
     buf[5] = data_size;
     buf[6] = command_class;
     buf[7] = command_id;
@@ -136,19 +183,28 @@ pub fn build_report(
 // --- Command constructors -------------------------------------------------
 
 /// set device mode: class 0x00, id 0x04, args [mode, 0x00].
-pub fn set_device_mode_report(mode: DeviceMode) -> [u8; REPORT_LEN] {
-    build_report(0x00, 0x04, 0x02, &[mode.as_byte(), 0x00]).expect("2 args always valid")
+pub fn set_device_mode_report(transaction_id: u8, mode: DeviceMode) -> [u8; REPORT_LEN] {
+    build_report(transaction_id, 0x00, 0x04, 0x02, &[mode.as_byte(), 0x00]).expect("2 args always valid")
 }
 
 /// get device mode: class 0x00, id 0x84.
-pub fn get_device_mode_report() -> [u8; REPORT_LEN] {
-    build_report(0x00, 0x84, 0x02, &[]).expect("no args always valid")
+pub fn get_device_mode_report(transaction_id: u8) -> [u8; REPORT_LEN] {
+    build_report(transaction_id, 0x00, 0x84, 0x02, &[]).expect("no args always valid")
 }
 
 /// set DPI (xy): class 0x04, id 0x05, args [0x00 (NOSTORE), x_hi, x_lo, y_hi, y_lo, 0, 0].
-pub fn set_dpi_report(dpi_x: u16, dpi_y: u16) -> Result<[u8; REPORT_LEN], ProtoError> {
+///
+/// `dpi_min`/`dpi_max` bound the accepted values; pass them from the target
+/// device's [`DeviceSpec`] so validation matches the actual hardware.
+pub fn set_dpi_report(
+    transaction_id: u8,
+    dpi_min: u16,
+    dpi_max: u16,
+    dpi_x: u16,
+    dpi_y: u16,
+) -> Result<[u8; REPORT_LEN], ProtoError> {
     for v in [dpi_x, dpi_y] {
-        if !(100..=16000).contains(&v) {
+        if !(dpi_min..=dpi_max).contains(&v) {
             return Err(ProtoError::DpiOutOfRange(v));
         }
     }
@@ -161,12 +217,12 @@ pub fn set_dpi_report(dpi_x: u16, dpi_y: u16) -> Result<[u8; REPORT_LEN], ProtoE
         0x00,
         0x00,
     ];
-    build_report(0x04, 0x05, 0x07, &args)
+    build_report(transaction_id, 0x04, 0x05, 0x07, &args)
 }
 
 /// get DPI (xy): class 0x04, id 0x85.
-pub fn get_dpi_report() -> [u8; REPORT_LEN] {
-    build_report(0x04, 0x85, 0x07, &[]).expect("no args always valid")
+pub fn get_dpi_report(transaction_id: u8) -> [u8; REPORT_LEN] {
+    build_report(transaction_id, 0x04, 0x85, 0x07, &[]).expect("no args always valid")
 }
 
 // --- Chroma / RGB lighting ------------------------------------------------
@@ -219,28 +275,29 @@ impl Rgb {
 
 /// The `razer_chroma_extended_matrix_effect_base`: class 0x0F, id 0x02.
 fn extended_matrix_effect_base(
+    transaction_id: u8,
     arg_size: u8,
     variable_storage: u8,
     led_id: u8,
     effect_id: u8,
 ) -> [u8; REPORT_LEN] {
-    build_report(0x0F, 0x02, arg_size, &[variable_storage, led_id, effect_id])
+    build_report(transaction_id, 0x0F, 0x02, arg_size, &[variable_storage, led_id, effect_id])
         .expect("3 args always valid")
 }
 
 /// "None" (off) effect for a zone. `razer_chroma_extended_matrix_effect_none`.
-pub fn effect_none_report(led_id: u8) -> [u8; REPORT_LEN] {
-    extended_matrix_effect_base(0x06, VARSTORE, led_id, 0x00)
+pub fn effect_none_report(transaction_id: u8, led_id: u8) -> [u8; REPORT_LEN] {
+    extended_matrix_effect_base(transaction_id, 0x06, VARSTORE, led_id, 0x00)
 }
 
 /// "Spectrum" cycling effect for a zone. `..._effect_spectrum`.
-pub fn effect_spectrum_report(led_id: u8) -> [u8; REPORT_LEN] {
-    extended_matrix_effect_base(0x06, VARSTORE, led_id, 0x03)
+pub fn effect_spectrum_report(transaction_id: u8, led_id: u8) -> [u8; REPORT_LEN] {
+    extended_matrix_effect_base(transaction_id, 0x06, VARSTORE, led_id, 0x03)
 }
 
 /// "Static" single-color effect for a zone. `..._effect_static`.
-pub fn effect_static_report(led_id: u8, rgb: Rgb) -> [u8; REPORT_LEN] {
-    let mut r = extended_matrix_effect_base(0x09, VARSTORE, led_id, 0x01);
+pub fn effect_static_report(transaction_id: u8, led_id: u8, rgb: Rgb) -> [u8; REPORT_LEN] {
+    let mut r = extended_matrix_effect_base(transaction_id, 0x09, VARSTORE, led_id, 0x01);
     // arguments[5]=0x01, arguments[6..9]=RGB  (arguments start at byte offset 8)
     r[8 + 5] = 0x01;
     r[8 + 6] = rgb.r;
@@ -251,8 +308,8 @@ pub fn effect_static_report(led_id: u8, rgb: Rgb) -> [u8; REPORT_LEN] {
 }
 
 /// "Breathing" (single-color) effect for a zone. `..._effect_breathing_single`.
-pub fn effect_breathing_report(led_id: u8, rgb: Rgb) -> [u8; REPORT_LEN] {
-    let mut r = extended_matrix_effect_base(0x09, VARSTORE, led_id, 0x02);
+pub fn effect_breathing_report(transaction_id: u8, led_id: u8, rgb: Rgb) -> [u8; REPORT_LEN] {
+    let mut r = extended_matrix_effect_base(transaction_id, 0x09, VARSTORE, led_id, 0x02);
     // arguments[3]=0x01, arguments[5]=0x01, arguments[6..9]=RGB
     r[8 + 3] = 0x01;
     r[8 + 5] = 0x01;
@@ -306,10 +363,15 @@ pub fn parse_dpi(response: &[u8]) -> (u16, u16) {
 mod tests {
     use super::*;
 
+    /// The DeathAdder Elite's transaction id, used across the byte-exact tests
+    /// below (these assertions predate multi-device support and pin the Elite's
+    /// on-the-wire bytes; threading its txn keeps them a regression guard).
+    const T: u8 = DEATHADDER_ELITE.transaction_id;
+
     // The SPEC table: driver-mode report is `... 02 00 04 03 00 ... 05 00`.
     #[test]
     fn driver_mode_report_matches_spec() {
-        let r = set_device_mode_report(DeviceMode::Driver);
+        let r = set_device_mode_report(T, DeviceMode::Driver);
         assert_eq!(&r[0..10], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x04, 0x03, 0x00]);
         assert_eq!(r[88], 0x05, "driver-mode CRC");
         assert_eq!(r[89], 0x00, "reserved");
@@ -319,14 +381,14 @@ mod tests {
 
     #[test]
     fn hardware_mode_report_matches_spec() {
-        let r = set_device_mode_report(DeviceMode::Hardware);
+        let r = set_device_mode_report(T, DeviceMode::Hardware);
         assert_eq!(&r[0..10], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x04, 0x00, 0x00]);
         assert_eq!(r[88], 0x06, "hardware-mode CRC");
     }
 
     #[test]
     fn get_mode_report_matches_spec() {
-        let r = get_device_mode_report();
+        let r = get_device_mode_report(T);
         assert_eq!(&r[0..10], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x84, 0x00, 0x00]);
         assert_eq!(r[88], 0x86, "get-mode CRC");
     }
@@ -335,7 +397,7 @@ mod tests {
     #[allow(clippy::needless_range_loop)] // mirror openrazer's `for(i=2;i<88;i++)` verbatim
     fn crc_is_xor_of_bytes_2_to_87() {
         // Manual reference computation for the driver-mode report.
-        let r = set_device_mode_report(DeviceMode::Driver);
+        let r = set_device_mode_report(T, DeviceMode::Driver);
         let mut expected = 0u8;
         for i in 2..88 {
             expected ^= r[i];
@@ -347,7 +409,7 @@ mod tests {
     #[test]
     fn set_dpi_report_bytes() {
         // 1600 = 0x0640
-        let r = set_dpi_report(1600, 1600).unwrap();
+        let r = set_dpi_report(T, 100, 16000, 1600, 1600).unwrap();
         assert_eq!(&r[0..8], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x07, 0x04, 0x05]);
         // args: NOSTORE, x_hi, x_lo, y_hi, y_lo, 0, 0
         assert_eq!(&r[8..15], &[0x00, 0x06, 0x40, 0x06, 0x40, 0x00, 0x00]);
@@ -357,34 +419,36 @@ mod tests {
 
     #[test]
     fn set_dpi_asymmetric() {
-        let r = set_dpi_report(1600, 800).unwrap();
+        let r = set_dpi_report(T, 100, 16000, 1600, 800).unwrap();
         assert_eq!(&r[9..13], &[0x06, 0x40, 0x03, 0x20]); // 0x0640, 0x0320
     }
 
     #[test]
     fn get_dpi_report_bytes() {
-        let r = get_dpi_report();
+        let r = get_dpi_report(T);
         assert_eq!(&r[0..8], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x07, 0x04, 0x85]);
         assert_eq!(r[88], crc(&r));
     }
 
     #[test]
     fn dpi_range_is_enforced() {
-        assert_eq!(set_dpi_report(50, 50), Err(ProtoError::DpiOutOfRange(50)));
-        assert_eq!(set_dpi_report(20000, 1600), Err(ProtoError::DpiOutOfRange(20000)));
-        assert!(set_dpi_report(100, 100).is_ok());
-        assert!(set_dpi_report(16000, 16000).is_ok());
+        // Elite range (100..=16000): reject below/above, accept the endpoints.
+        let (lo, hi) = (DEATHADDER_ELITE.dpi_min, DEATHADDER_ELITE.dpi_max);
+        assert_eq!(set_dpi_report(T, lo, hi, 50, 50), Err(ProtoError::DpiOutOfRange(50)));
+        assert_eq!(set_dpi_report(T, lo, hi, 20000, 1600), Err(ProtoError::DpiOutOfRange(20000)));
+        assert!(set_dpi_report(T, lo, hi, 100, 100).is_ok());
+        assert!(set_dpi_report(T, lo, hi, 16000, 16000).is_ok());
     }
 
     #[test]
     fn args_too_long_rejected() {
         let big = [0u8; 81];
-        assert_eq!(build_report(0x00, 0x00, 0x00, &big), Err(ProtoError::ArgsTooLong(81)));
+        assert_eq!(build_report(T, 0x00, 0x00, 0x00, &big), Err(ProtoError::ArgsTooLong(81)));
     }
 
     #[test]
     fn validate_and_parse_device_mode() {
-        let req = get_device_mode_report();
+        let req = get_device_mode_report(T);
         let mut resp = [0u8; REPORT_LEN];
         resp[0] = status::SUCCESS;
         resp[6] = 0x00;
@@ -397,7 +461,7 @@ mod tests {
 
     #[test]
     fn validate_and_parse_dpi() {
-        let req = get_dpi_report();
+        let req = get_dpi_report(T);
         let mut resp = [0u8; REPORT_LEN];
         resp[0] = status::SUCCESS;
         resp[6] = 0x04;
@@ -415,7 +479,7 @@ mod tests {
     #[test]
     fn chroma_common_header() {
         // All effects: class 0x0F, id 0x02, txn 0x3F, arg[0]=VARSTORE.
-        let r = effect_spectrum_report(led::SCROLL_WHEEL);
+        let r = effect_spectrum_report(T, led::SCROLL_WHEEL);
         assert_eq!(r[0], 0x00); // status
         assert_eq!(r[1], 0x3F); // transaction id
         assert_eq!(r[6], 0x0F); // command class
@@ -426,7 +490,7 @@ mod tests {
     #[test]
     fn chroma_spectrum_matches_openrazer() {
         // Doc: data_size 06, args 01 <led> 03 00 00 00
-        let r = effect_spectrum_report(led::LOGO);
+        let r = effect_spectrum_report(T, led::LOGO);
         assert_eq!(r[5], 0x06); // data_size
         assert_eq!(&r[8..14], &[VARSTORE, led::LOGO, 0x03, 0x00, 0x00, 0x00]);
         assert_eq!(r[88], crc(&r));
@@ -435,7 +499,7 @@ mod tests {
     #[test]
     fn chroma_none_matches_openrazer() {
         // Doc: 010500000000 (data_size 06)
-        let r = effect_none_report(led::SCROLL_WHEEL);
+        let r = effect_none_report(T, led::SCROLL_WHEEL);
         assert_eq!(r[5], 0x06);
         assert_eq!(&r[8..14], &[VARSTORE, led::SCROLL_WHEEL, 0x00, 0x00, 0x00, 0x00]);
         assert_eq!(r[88], crc(&r));
@@ -444,7 +508,7 @@ mod tests {
     #[test]
     fn chroma_static_red_matches_openrazer() {
         // Doc pattern: data_size 09, args 01 <led> 01 00 00 01 RR GG BB
-        let r = effect_static_report(led::SCROLL_WHEEL, Rgb::new(0xFF, 0x00, 0x00));
+        let r = effect_static_report(T, led::SCROLL_WHEEL, Rgb::new(0xFF, 0x00, 0x00));
         assert_eq!(r[5], 0x09);
         assert_eq!(
             &r[8..17],
@@ -456,7 +520,7 @@ mod tests {
     #[test]
     fn chroma_breathing_green_matches_openrazer() {
         // Doc: 01 05 02 01 00 01 00 ff 00 (data_size 09)
-        let r = effect_breathing_report(led::LOGO, Rgb::new(0x00, 0xFF, 0x00));
+        let r = effect_breathing_report(T, led::LOGO, Rgb::new(0x00, 0xFF, 0x00));
         assert_eq!(r[5], 0x09);
         assert_eq!(
             &r[8..17],
@@ -475,7 +539,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_bad_status_and_echo() {
-        let req = get_device_mode_report();
+        let req = get_device_mode_report(T);
         let mut resp = [0u8; REPORT_LEN];
         resp[0] = status::BUSY;
         assert_eq!(validate_response(&req, &resp), Err(ProtoError::DeviceStatus(status::BUSY)));

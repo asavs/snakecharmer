@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use razer_hid::{aux_collection_paths, DeathAdder, Listener};
-use razer_proto::{DeviceMode, Rgb};
+use razer_proto::{DeviceMode, DeviceSpec, Rgb};
 
 use crate::actions::Action;
 use crate::config::Config;
@@ -105,15 +105,17 @@ fn effect_options(cfg: &Config) -> (Vec<String>, usize) {
 }
 
 /// Spawn the settings window on its own thread (message loop lives there).
-fn open_settings_window(cfg: &Config, tx: &Sender<Event>) {
+/// `spec` supplies the plugged-in device's DPI range so the slider covers the
+/// whole capable range of *that* mouse (16000 on the Elite, 30000 on the V3).
+fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
     let (action_labels, up_index, down_index) = action_options(cfg);
     let (thumb_back_index, thumb_forward_index) = thumb_indices(cfg, &action_labels);
     let (effect_labels, effect_index) = effect_options(cfg);
     let color = Rgb::parse_hex(&cfg.color).unwrap_or(Rgb::new(0, 0xFF, 0));
     let init = platform::settings::SettingsInit {
         dpi: cfg.dpi,
-        dpi_min: 100,
-        dpi_max: 3200,
+        dpi_min: spec.dpi_min,
+        dpi_max: spec.dpi_max,
         action_labels: action_labels.clone(),
         up_index,
         down_index,
@@ -305,7 +307,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         let tx = tx.clone();
         thread::spawn(move || {
             platform::tray::run(
-                "Snakecharmer - DeathAdder Elite",
+                "Snakecharmer",
                 build_menu_spec(),
                 move |id| {
                     if let Some(a) = menu_action_for(id) {
@@ -340,56 +342,73 @@ fn run_session(
 ) -> Result<(), razer_hid::Error> {
     let api = razer_hid::open_api()?;
     let ctrl = DeathAdder::open_with(&api)?;
+    let spec = ctrl.spec();
+    log.log(&format!(
+        "Opened {} (PID 0x{:04X}, txn 0x{:02X}; rgb={}, dpi_buttons={}).",
+        spec.name, spec.product_id, spec.transaction_id, spec.has_rgb, spec.has_dpi_buttons
+    ));
 
-    // Lock DPI (non-fatal if it fails).
+    // Lock DPI (non-fatal if it fails). Every supported device has DPI.
     let (dx, dy) = cfg.dpi_xy();
     match ctrl.set_dpi(dx, dy) {
         Ok((rx2, ry)) => log.log(&format!("DPI locked to {rx2} x {ry}.")),
         Err(e) => log.log(&format!("WARN could not set DPI: {e}")),
     }
 
-    // Enable driver mode (fatal if it fails).
-    let mode = ctrl.set_device_mode(DeviceMode::Driver)?;
-    log.log(&format!("Driver mode enabled (read back 0x{mode:02x})."));
-
-    // Apply configured startup lighting (unless "keep").
+    // Apply configured startup lighting (unless "keep"; a logged no-op on
+    // devices without lighting hardware — see `apply_startup_lighting`).
     apply_startup_lighting(&ctrl, cfg, log);
 
-    // Probe readable auxiliary collections; keep the survivors.
-    let mut listeners: Vec<Listener> = Vec::new();
-    let mut dropped = 0usize;
-    for path in aux_collection_paths(&api) {
-        let listener = match Listener::open(&api, &path) {
-            Ok(l) => l,
-            Err(_) => {
-                dropped += 1;
-                continue;
-            }
-        };
-        listener.set_blocking(false)?;
-        let mut probe = [0u8; 64];
-        match listener.read(&mut probe) {
-            Ok(_) => {
-                listener.set_blocking(true)?;
-                listeners.push(listener);
-            }
-            Err(_) => dropped += 1,
-        }
-    }
-    if listeners.is_empty() {
-        return Err(razer_hid::Error::DeviceNotFound);
-    }
-    log.log(&format!(
-        "Listening on {} collection(s); dropped {} unreadable.",
-        listeners.len(),
-        dropped
-    ));
+    // Driver mode and the DPI-button vendor-code listeners only apply to devices
+    // that actually have the wheel DPI buttons. On a device without them (e.g.
+    // the V3) there is nothing to switch into driver mode for and nothing to
+    // listen for, so we skip both and just run the DPI/lighting re-assert loop.
+    if spec.has_dpi_buttons {
+        // Enable driver mode (fatal if it fails) so the buttons emit 0x20/0x21.
+        let mode = ctrl.set_device_mode(DeviceMode::Driver)?;
+        log.log(&format!("Driver mode enabled (read back 0x{mode:02x})."));
 
-    // One blocking-read thread per collection -> channel. CPU stays ~0 idle.
-    for listener in listeners {
-        let tx = tx.clone();
-        let log = log.clone();
-        thread::spawn(move || reader_thread(listener, tx, log));
+        // Probe readable auxiliary collections; keep the survivors.
+        let mut listeners: Vec<Listener> = Vec::new();
+        let mut dropped = 0usize;
+        for path in aux_collection_paths(&api, spec.product_id) {
+            let listener = match Listener::open(&api, &path) {
+                Ok(l) => l,
+                Err(_) => {
+                    dropped += 1;
+                    continue;
+                }
+            };
+            listener.set_blocking(false)?;
+            let mut probe = [0u8; 64];
+            match listener.read(&mut probe) {
+                Ok(_) => {
+                    listener.set_blocking(true)?;
+                    listeners.push(listener);
+                }
+                Err(_) => dropped += 1,
+            }
+        }
+        if listeners.is_empty() {
+            return Err(razer_hid::Error::DeviceNotFound);
+        }
+        log.log(&format!(
+            "Listening on {} collection(s); dropped {} unreadable.",
+            listeners.len(),
+            dropped
+        ));
+
+        // One blocking-read thread per collection -> channel. CPU stays ~0 idle.
+        for listener in listeners {
+            let tx = tx.clone();
+            let log = log.clone();
+            thread::spawn(move || reader_thread(listener, tx, log));
+        }
+    } else {
+        log.log(&format!(
+            "{} has no wheel DPI buttons; skipping driver mode and vendor-code listeners.",
+            spec.name
+        ));
     }
 
     let interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
@@ -403,7 +422,7 @@ fn run_session(
                     log.log("Settings window already open.");
                 } else {
                     *settings_open = true;
-                    open_settings_window(cfg, tx);
+                    open_settings_window(cfg, spec, tx);
                     log.log("Opened settings window.");
                 }
             }
@@ -433,6 +452,16 @@ fn run_session(
 }
 
 fn apply_startup_lighting(ctrl: &DeathAdder, cfg: &Config, log: &Logger) {
+    if !ctrl.spec().has_rgb {
+        if !cfg.lighting.eq_ignore_ascii_case("keep") {
+            log.log(&format!(
+                "{} has no lighting hardware; ignoring lighting={:?}.",
+                ctrl.spec().name,
+                cfg.lighting
+            ));
+        }
+        return;
+    }
     match EffectSpec::from_config(&cfg.lighting, &cfg.color) {
         Ok(Some(effect)) => match effect.apply(ctrl) {
             Ok(()) => log.log(&format!("Lighting set to {}.", effect.describe())),
@@ -630,10 +659,15 @@ fn handle_code(code: u8, bindings: &Bindings, log: &Logger, last_fire: &mut Opti
 
 /// Re-assert driver mode and DPI; log only when something actually changed.
 fn reassert(ctrl: &DeathAdder, cfg: &Config, log: &Logger) -> Result<(), razer_hid::Error> {
-    let mode = ctrl.get_device_mode()?;
-    if mode != DeviceMode::Driver.as_byte() {
-        let m = ctrl.set_device_mode(DeviceMode::Driver)?;
-        log.log(&format!("Re-asserted driver mode (was 0x{mode:02x}, now 0x{m:02x})."));
+    // Driver mode only matters on devices with the DPI buttons; elsewhere the
+    // get/set-device-mode round-trip is pointless (and touches a command the
+    // hardware has no reason to support), so re-lock DPI only.
+    if ctrl.spec().has_dpi_buttons {
+        let mode = ctrl.get_device_mode()?;
+        if mode != DeviceMode::Driver.as_byte() {
+            let m = ctrl.set_device_mode(DeviceMode::Driver)?;
+            log.log(&format!("Re-asserted driver mode (was 0x{mode:02x}, now 0x{m:02x})."));
+        }
     }
     let (want_x, want_y) = cfg.dpi_xy();
     let (cx, cy) = ctrl.get_dpi()?;
