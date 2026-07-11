@@ -15,62 +15,67 @@
                   '-----------'
 ```
 
-> *Command the snake with a whisper, not a cage.*
+A small, open tool for configuring the **Razer DeathAdder Elite** on **Windows**: DPI,
+RGB lighting, and button remapping in one **436 KB** exe. No background browser, no
+telemetry, barely any idle CPU.
 
-A lightweight, open configuration tool for the **Razer DeathAdder Elite** on
-**Windows** — DPI, RGB lighting, and button remapping in a single **436 KB** native
-exe, with no background browser, no telemetry, and negligible idle CPU.
-
-Think of it as the **Windows sibling of [OpenRazer](https://openrazer.github.io/)**:
-OpenRazer opened up Razer's HID protocol on Linux, but it's Linux-only (it ships as
-kernel modules). Snakecharmer brings that same protocol to Windows as a plain userspace app —
-and adds the one genuinely useful thing OpenRazer leaves to other tools: **button
-remapping** (the feature you otherwise need Razer Synapse for).
-
-> **The name.** A snake charmer commands the serpent with a simple pipe, not a cage —
-> which is the whole idea: drive the mouse with a 436 KB whisper instead of Synapse's
-> five-process spectacle. Razer's mascot is a snake; this tames it. *(It nearly shipped as
-> **Psylli**, after the ancient North African people renowned for handling snakes unharmed
-> — that name lives on here in the lore.)*
+It's the Windows counterpart to **[OpenRazer](https://openrazer.github.io/)**. OpenRazer
+reverse-engineered Razer's HID protocol but only runs on Linux, where it ships as kernel
+modules. Snakecharmer takes that protocol to Windows as a plain userspace app, and adds
+the piece OpenRazer leaves to other tools: **button remapping** (otherwise a job for Razer
+Synapse).
 
 ## Why
 
-Razer Synapse runs several processes and a full Chromium instance in the background to
-do what amounts to a handful of HID feature reports. Snakecharmer talks to the mouse directly
-over Win32 HID and then gets out of the way.
+Synapse runs a pile of background processes, one of them a full Chromium instance, to send
+what are ultimately a handful of HID feature reports. Snakecharmer talks to the mouse
+directly over Win32 HID and then gets out of the way.
 
 | | Razer Synapse | Snakecharmer |
 |---|---|---|
-| Footprint | ~5 processes + Chromium | one **436 KB** static exe |
+| Footprint | ~5 processes + Chromium | one **436 KB** exe |
 | Idle CPU | constant | negligible (blocking HID reads, no poll loop) |
-| Idle RAM | hundreds of MB | < 10 MB |
-| Telemetry | yes | none — local-only |
+| Idle RAM | ~558 MB (measured, below) | < 10 MB |
+| Telemetry | yes | none, local-only |
+
+Here's what Synapse was actually costing on a machine that had it installed. Five
+processes, always resident:
+
+| Process | CPU time | RAM |
+|---|---:|---:|
+| Razer Synapse 3 | ~34,840 s | 150 MB |
+| Razer Central | ~3,070 s | 122 MB |
+| Razer Synapse Service Process | ~3,830 s | 55 MB |
+| Razer Synapse Service | ~0 s | 155 MB |
+| RazerCentralService | ~0 s | 76 MB |
+| **Total** | **~41,700 s** | **~558 MB** |
 
 ## Features
 
 - **DPI level** — set and lock sensitivity; re-asserted at login and periodically.
-- **DPI-button remap** — the two buttons behind the wheel emit private Razer vendor
-  codes (`0x20`/`0x21`) the OS can't see; Snakecharmer catches them at the HID layer and turns
+- **DPI-button remap** — the two buttons behind the wheel emit private Razer vendor codes
+  (`0x20`/`0x21`) the OS can't see. Snakecharmer catches them at the HID layer and turns
   them into keystrokes (default: copy / paste).
 - **Thumb-button remap** — the side Back/Forward buttons remapped to keystrokes via a
   low-level `WH_MOUSE_LL` hook that suppresses the original.
-- **RGB lighting** — static / breathing / spectrum / off for both lit zones.
+- **RGB lighting** — static, breathing, spectrum, or off, for both lit zones.
 - **System tray** with quick DPI, lighting, reload, and quit, plus a native settings
   window (no admin, windowless until opened).
 
 ## Scope
 
-Deliberately **one device**: the DeathAdder Elite (`VID 0x1532 / PID 0x005C`). The
-protocol layer is small and well-tested; adding another mouse — Razer or otherwise — is a
-contained job, and a great one to hand an AI coding agent. See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) and the general method in
+One device on purpose: the DeathAdder Elite (`VID 0x1532 / PID 0x005C`). The protocol
+layer is small and well-tested, so adding another mouse (Razer or not) is a contained job,
+and a good one to hand an AI coding agent. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
 [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md).
 
 ## Requirements
 
 - Windows 10/11
 - A Razer DeathAdder Elite
-- [Rust](https://rustup.rs/) 1.97+ to build
+- To build from source: [Rust](https://rustup.rs/) 1.97+ — or just grab a prebuilt
+  `snakecharmer.exe` from the Releases page
+- Optional: Python 3, only if you're using the `reference/` toolkit to crack a new device
 
 ## Build
 
@@ -83,18 +88,22 @@ Produces `target\release\snakecharmer.exe` (the windowless daemon) and
 
 ## Run at login
 
+Snakecharmer doesn't install itself. This drops a hidden shortcut in your Startup folder
+so the daemon launches (windowless) at each login. Skip it if you'd rather start it by
+hand.
+
 ```powershell
-# Installs a hidden Startup-folder launcher for the current user (no admin):
+# add the autostart shortcut (current user, no admin):
 .\scripts\install-autostart.ps1
 
-# To remove it:
+# remove it:
 .\scripts\uninstall-autostart.ps1
 ```
 
 ## Configuration
 
-Config lives at `%LOCALAPPDATA%\Snakecharmer\config.toml`, written with defaults on first run
-and editable from the settings window. Defaults:
+Config lives at `%LOCALAPPDATA%\Snakecharmer\config.toml`, written with defaults on first
+run and editable from the settings window. Defaults:
 
 ```toml
 dpi = 1800
@@ -138,17 +147,20 @@ See [`docs/SPEC.md`](docs/SPEC.md) for the full design and the protocol notes.
 
 ## Relationship to OpenRazer & license
 
-Snakecharmer's protocol knowledge — the report layout, command classes, CRC, transaction IDs,
-and Chroma effect encodings — is derived from **[OpenRazer](https://github.com/openrazer/openrazer)**
-(`driver/razercommon.*`, `razerchromacommon.c`, `razermouse_driver.c`). OpenRazer did the
-hard reverse-engineering; Snakecharmer ports the DeathAdder Elite slice of it to Windows.
+Snakecharmer's protocol knowledge — the report layout, command classes, CRC, transaction
+IDs, and Chroma effect encodings — comes from
+**[OpenRazer](https://github.com/openrazer/openrazer)** (`driver/razercommon.*`,
+`razerchromacommon.c`, `razermouse_driver.c`). OpenRazer did the hard reverse-engineering;
+Snakecharmer ports the DeathAdder Elite slice of it to Windows.
 
-Because that makes Snakecharmer a derivative work of OpenRazer, it is licensed under the
-**GNU General Public License v2.0 or later** — the same copyleft as OpenRazer. See
-[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+That makes Snakecharmer a derivative work of OpenRazer, so it carries the same copyleft:
+the **GNU General Public License v2.0 or later**. See [`LICENSE`](LICENSE) and
+[`NOTICE`](NOTICE).
+
+Thank you very much to the OpenRazer maintainers! <3
 
 ## Safety
 
-Only documented Razer commands (sourced from OpenRazer). No firmware/bootloader/DFU, no
-fuzzing of feature reports — a bad write can wedge your only mouse. The mouse never loses
-left/right click; unplug/replug always restores factory behavior.
+Only documented Razer commands (sourced from OpenRazer). No firmware, bootloader, or DFU,
+and no fuzzing of feature reports — a bad write can wedge your only mouse. The mouse never
+loses left/right click, and unplug/replug always restores factory behavior.

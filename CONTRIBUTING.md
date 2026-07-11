@@ -10,15 +10,13 @@ Two kinds of contributions are welcome:
 
 ## charm your own snake... uh mouse (or keyboard! and probably headset??)
 
-> The **Psylli** — the ancient charmers this project almost got named after — handled
-> serpents they'd never met by knowing how snakes *work*, not by memorizing one.
-> Snakecharmer is the same: it speaks one mouse today, but the protocol layer is small and
-> the method is general. If you have a different mouse, you can probably teach it a new one
-> — and this is a near-perfect task to hand an AI coding agent.
+> Snakecharmer only talks to one mouse today, but the protocol layer is small and the
+> method is general. If you've got a different device, you can probably teach it one, and
+> it's a near-perfect job to hand an AI coding agent.
 
 **The workflow:**
 
-1. **Fork and clone** this repo.
+1. **Fork or clone** this repo.
 2. **Hand your agent [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md)** — the full,
    device-agnostic method: enumerate the mouse's HID collections, find the *reference
    implementation* for your brand (OpenRazer, libratbag, Solaar…), read the protocol out
@@ -75,8 +73,8 @@ cargo test --release       # unit tests (protocol/CRC/config/lighting)
 cargo clippy --release --all-targets   # keep it warning-clean
 ```
 
-Footprint is a feature, not an afterthought — the release exe is ~436 KB and idle RAM is
-under 10 MB. New dependencies are weighed against that (`docs/SPEC.md` has the targets).
+Keep it small: the release exe is ~436 KB and idle RAM is under 10 MB. Weigh new
+dependencies against that (`docs/SPEC.md` has the targets).
 
 ## Licensing
 
