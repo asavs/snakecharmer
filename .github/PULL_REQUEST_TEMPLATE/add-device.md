@@ -3,7 +3,7 @@ Adding support for a new device? This is the template for you.
 Open your PR with:  ?template=add-device.md  appended to the compare URL,
 or pick "add-device" from the template dropdown.
 
-The model to copy: the DeathAdder V3 PR (#2). Adding a device is meant to be
+The model to copy: the DeathAdder V3 PR (#3). Adding a device is meant to be
 a small diff — a DeviceSpec const, a line in SUPPORTED, a test, and a row in
 docs/SUPPORTED-DEVICES.md; one code file total.
 If your PR is bigger than that, something generic is missing from the crates;
