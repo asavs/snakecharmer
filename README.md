@@ -28,18 +28,9 @@ Synapse).
 ## Why
 
 Synapse runs a pile of background processes, one of them a full Chromium instance, to send
-what are ultimately a handful of HID feature reports. Snakecharmer talks to the mouse
-directly over Win32 HID and then gets out of the way.
-
-| | Razer Synapse | Snakecharmer |
-|---|---|---|
-| Footprint | ~5 processes + Chromium | one **436 KB** exe |
-| Idle CPU | constant | negligible (blocking HID reads, no poll loop) |
-| Idle RAM | ~558 MB (measured, below) | < 10 MB |
-| Telemetry | yes | none, local-only |
-
-Here's what Synapse was actually costing on a machine that had it installed. Five
-processes, always resident:
+what are ultimately a handful of HID feature reports. Here's what it was actually costing
+on a machine that had it installed — five processes, always resident — with all of
+Snakecharmer on the last line for comparison:
 
 | Process | CPU time | RAM |
 |---|---:|---:|
@@ -48,7 +39,11 @@ processes, always resident:
 | Razer Synapse Service Process | ~3,830 s | 55 MB |
 | Razer Synapse Service | ~0 s | 155 MB |
 | RazerCentralService | ~0 s | 76 MB |
-| **Total** | **~41,700 s** | **~558 MB** |
+| **Synapse, all in** | **~41,700 s** | **~558 MB** |
+| **Snakecharmer, all in** | negligible | **< 10 MB** |
+
+Snakecharmer talks to the mouse directly over Win32 HID, then gets out of the way: one
+436 KB exe, blocking HID reads instead of a poll loop, no telemetry, everything local.
 
 ## Features
 
