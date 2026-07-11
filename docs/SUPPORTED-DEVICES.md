@@ -9,6 +9,7 @@ from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_dri
 | Model | USB id | txn | RGB zones | DPI buttons | DPI range | Verified on hardware |
 |---|---|---|---|---|---|---|
 | DeathAdder Elite | `1532:005C` | `0x3F` | scroll wheel, logo | yes (`0x20`/`0x21`) | 100–16000 | ✅ |
+| DeathAdder V3 (wired) | `1532:00B2` | `0x1F` | — | — | 100–30000 | ✅ |
 
 **Column notes**
 

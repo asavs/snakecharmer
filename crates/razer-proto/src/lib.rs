@@ -88,8 +88,20 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
     dpi_max: 16000,
 };
 
+/// DeathAdder V3 wired (`PID 0x00B2`): no lighting, no wheel DPI buttons, 30000 DPI.
+/// Protocol per openrazer `razermouse_driver.c` (transaction_id `0x1F`).
+pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
+    product_id: 0x00B2,
+    transaction_id: 0x1F,
+    name: "DeathAdder V3",
+    rgb_zones: &[],
+    dpi_buttons: None,
+    dpi_min: 100,
+    dpi_max: 30000,
+};
+
 /// Every device Snakecharmer knows how to drive.
-pub const SUPPORTED: &[DeviceSpec] = &[DEATHADDER_ELITE];
+pub const SUPPORTED: &[DeviceSpec] = &[DEATHADDER_ELITE, DEATHADDER_V3];
 
 /// Look up the [`DeviceSpec`] for a USB product id, if it's supported.
 pub fn spec_for(product_id: u16) -> Option<DeviceSpec> {
@@ -484,6 +496,22 @@ mod tests {
         assert_eq!(set_dpi_report(T, lo, hi, 20000, 1600), Err(ProtoError::DpiOutOfRange(20000)));
         assert!(set_dpi_report(T, lo, hi, 100, 100).is_ok());
         assert!(set_dpi_report(T, lo, hi, 16000, 16000).is_ok());
+    }
+
+    /// DeathAdder V3: transaction id 0x1F, and the Focus Pro sensor's 30000
+    /// ceiling permits what the Elite's range rejects.
+    #[test]
+    fn deathadder_v3_spec() {
+        let v = DEATHADDER_V3;
+        let r = set_dpi_report(v.transaction_id, v.dpi_min, v.dpi_max, 1600, 1600).unwrap();
+        assert_eq!(r[1], 0x1F, "V3 transaction id");
+        assert!(set_dpi_report(v.transaction_id, v.dpi_min, v.dpi_max, 30000, 30000).is_ok());
+        assert_eq!(
+            set_dpi_report(v.transaction_id, v.dpi_min, v.dpi_max, 30001, 30001),
+            Err(ProtoError::DpiOutOfRange(30001))
+        );
+        assert!(!v.has_rgb(), "V3 has no lighting hardware");
+        assert!(v.dpi_buttons.is_none(), "V3 has no wheel DPI buttons");
     }
 
     #[test]
