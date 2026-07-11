@@ -411,11 +411,21 @@ fn run_session(
         ));
     }
 
-    let interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
+    let reassert_interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
+    // With listeners, an unplug fails a blocking read almost instantly. Without
+    // them (a device with no DPI buttons), nothing notices until we next talk to
+    // the device — so poll liveness on a short tick instead of waiting out the
+    // whole re-assert interval with a dead handle.
+    let tick = if spec.dpi_buttons.is_some() {
+        reassert_interval
+    } else {
+        reassert_interval.min(Duration::from_secs(5))
+    };
+    let mut last_reassert = Instant::now();
     let mut last_fire: Option<(u8, Instant)> = None;
 
     loop {
-        match rx.recv_timeout(interval) {
+        match rx.recv_timeout(tick) {
             Ok(Event::Button(code)) => {
                 handle_code(code, spec.dpi_buttons, bindings, log, &mut last_fire)
             }
@@ -445,7 +455,16 @@ fn run_session(
                     return Err(razer_hid::Error::Verify("device lost".into()));
                 }
             }
-            Err(RecvTimeoutError::Timeout) => reassert(&ctrl, cfg, log)?,
+            Err(RecvTimeoutError::Timeout) => {
+                if last_reassert.elapsed() >= reassert_interval {
+                    reassert(&ctrl, cfg, log)?;
+                    last_reassert = Instant::now();
+                } else {
+                    // Liveness only: a cheap read that errors out (ending the
+                    // session, triggering the 3s reopen loop) if the device is gone.
+                    ctrl.get_dpi()?;
+                }
+            }
             Err(RecvTimeoutError::Disconnected) => {
                 return Err(razer_hid::Error::Verify("event channel closed".into()))
             }
