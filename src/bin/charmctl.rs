@@ -16,7 +16,7 @@
 
 use snakecharmer::config::Config;
 use snakecharmer::lighting::EffectSpec;
-use razer_hid::DeathAdder;
+use razer_hid::Mouse;
 use razer_proto::{DeviceMode, Rgb};
 
 fn mode_name(b: u8) -> String {
@@ -59,7 +59,7 @@ fn main() {
 
 fn print_help() {
     println!(
-        "charmctl — Snakecharmer control CLI (DeathAdder Elite)\n\n\
+        "charmctl — Snakecharmer control CLI (supported Razer mice)\n\n\
          USAGE:\n\
          \x20 charmctl status                          device mode + DPI (read-only)\n\
          \x20 charmctl set-dpi X [Y]                   set DPI\n\
@@ -75,17 +75,23 @@ fn print_help() {
 }
 
 fn status() -> Result<(), Box<dyn std::error::Error>> {
-    let mouse = DeathAdder::open()?;
+    let mouse = Mouse::open()?;
+    let spec = mouse.spec();
     let mode = mouse.get_device_mode()?;
     let (x, y) = mouse.get_dpi()?;
-    println!("mode = {}, dpi = {x} x {y}", mode_name(mode));
+    println!(
+        "device = {} (PID 0x{:04X}), mode = {}, dpi = {x} x {y}",
+        spec.name,
+        spec.product_id,
+        mode_name(mode)
+    );
     Ok(())
 }
 
 fn set_dpi(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let x: u16 = args.first().ok_or("usage: set-dpi X [Y]")?.parse()?;
     let y: u16 = args.get(1).map(|s| s.parse()).transpose()?.unwrap_or(x);
-    let mouse = DeathAdder::open()?;
+    let mouse = Mouse::open()?;
     let (rx, ry) = mouse.set_dpi(x, y)?;
     println!("DPI set to {rx} x {ry}.");
     Ok(())
@@ -97,7 +103,7 @@ fn set_mode(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         Some("hardware") => DeviceMode::Hardware,
         _ => return Err("usage: set-mode driver|hardware".into()),
     };
-    let mouse = DeathAdder::open()?;
+    let mouse = Mouse::open()?;
     let m = mouse.set_device_mode(mode)?;
     println!("mode = {}", mode_name(m));
     Ok(())
@@ -110,9 +116,13 @@ fn parse_color(arg: Option<&String>) -> Result<Rgb, Box<dyn std::error::Error>> 
 
 fn set_color(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let rgb = parse_color(args.first())?;
-    let mouse = DeathAdder::open()?;
+    let mouse = Mouse::open()?;
+    if !mouse.spec().has_rgb() {
+        println!("{} has no lighting hardware; nothing to set.", mouse.spec().name);
+        return Ok(());
+    }
     mouse.set_color(rgb)?;
-    println!("Sent static #{:02x}{:02x}{:02x} to both zones (device ack 0x02).", rgb.r, rgb.g, rgb.b);
+    println!("Sent static #{:02x}{:02x}{:02x} to all zones (device ack 0x02).", rgb.r, rgb.g, rgb.b);
     Ok(())
 }
 
@@ -128,9 +138,13 @@ fn set_effect(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "off" | "none" => EffectSpec::Off,
         other => return Err(format!("unknown effect {other:?}").into()),
     };
-    let mouse = DeathAdder::open()?;
+    let mouse = Mouse::open()?;
+    if !mouse.spec().has_rgb() {
+        println!("{} has no lighting hardware; nothing to set.", mouse.spec().name);
+        return Ok(());
+    }
     spec.apply(&mouse)?;
-    println!("Sent {} to both zones (device ack 0x02).", spec.describe());
+    println!("Sent {} to all zones (device ack 0x02).", spec.describe());
     Ok(())
 }
 
