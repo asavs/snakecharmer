@@ -1,9 +1,9 @@
 //! Lighting effect spec shared by the daemon, tray, and CLI.
 
-use razer_hid::DeathAdder;
+use razer_hid::Mouse;
 use razer_proto::Rgb;
 
-/// A lighting effect to apply to both zones of the DeathAdder Elite.
+/// A lighting effect to apply to all lit zones of the device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectSpec {
     Static(Rgb),
@@ -14,7 +14,7 @@ pub enum EffectSpec {
 
 impl EffectSpec {
     /// Apply this effect to the device.
-    pub fn apply(&self, dev: &DeathAdder) -> Result<(), razer_hid::Error> {
+    pub fn apply(&self, dev: &Mouse) -> Result<(), razer_hid::Error> {
         match self {
             EffectSpec::Static(c) => dev.set_color(*c),
             EffectSpec::Breathing(c) => dev.set_breathing(*c),

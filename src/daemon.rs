@@ -8,17 +8,13 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use razer_hid::{aux_collection_paths, DeathAdder, Listener};
-use razer_proto::{DeviceMode, DeviceSpec, Rgb};
+use razer_hid::{aux_collection_paths, Listener, Mouse};
+use razer_proto::{DeviceMode, DeviceSpec, DpiButtons, Rgb};
 
 use crate::actions::Action;
 use crate::config::Config;
 use crate::lighting::EffectSpec;
 use crate::logger::Logger;
-
-/// Vendor codes emitted by the DPI buttons in driver mode.
-const CODE_DPI_UP: u8 = 0x20; // front button (closer to the wheel)
-const CODE_DPI_DOWN: u8 = 0x21; // rear button
 
 /// Ignore a repeat of the same code within this window (debounce / anti double-fire).
 const DEBOUNCE: Duration = Duration::from_millis(200);
@@ -179,11 +175,10 @@ impl Bindings {
 // --- Tray menu ------------------------------------------------------------
 
 mod menu_id {
-    pub const DPI_800: u32 = 10;
-    pub const DPI_1200: u32 = 11;
-    pub const DPI_1600: u32 = 12;
-    pub const DPI_1800: u32 = 13;
-    pub const DPI_3200: u32 = 14;
+    /// DPI menu items encode their value in the id: `DPI_FLAG | dpi`. DPI fits
+    /// in a u16, so the encoded range (0x1_0000..0x2_0000) can't collide with
+    /// the small fixed ids below (and is checked before `TRAY_DOUBLE_CLICK`).
+    pub const DPI_FLAG: u32 = 0x1_0000;
 
     pub const STATIC_RED: u32 = 30;
     pub const STATIC_GREEN: u32 = 31;
@@ -205,20 +200,36 @@ mod menu_id {
     pub const QUIT: u32 = 91;
 }
 
-fn build_menu_spec() -> Vec<platform::tray::MenuItem> {
+/// Preset ladder offered in the DPI submenu, filtered to the connected
+/// device's range; the device's own maximum is always appended.
+const DPI_LADDER: &[u16] = &[400, 800, 1200, 1600, 1800, 3200, 6400, 12800];
+
+/// DPI presets for a device (or the bare ladder before one is connected).
+fn dpi_presets(spec: Option<&DeviceSpec>) -> Vec<u16> {
+    let mut v: Vec<u16> = match spec {
+        Some(s) => {
+            let mut v: Vec<u16> =
+                DPI_LADDER.iter().copied().filter(|d| (s.dpi_min..=s.dpi_max).contains(d)).collect();
+            if !v.contains(&s.dpi_max) {
+                v.push(s.dpi_max);
+            }
+            v
+        }
+        None => DPI_LADDER.to_vec(),
+    };
+    v.sort_unstable();
+    v
+}
+
+fn build_menu_spec(spec: Option<&DeviceSpec>) -> Vec<platform::tray::MenuItem> {
     use menu_id::*;
     use platform::tray::MenuItem as M;
+    let dpi_items: Vec<M> = dpi_presets(spec)
+        .into_iter()
+        .map(|d| M::action(DPI_FLAG | d as u32, d.to_string()))
+        .collect();
     vec![
-        M::submenu(
-            "DPI",
-            vec![
-                M::action(DPI_800, "800"),
-                M::action(DPI_1200, "1200"),
-                M::action(DPI_1600, "1600"),
-                M::action(DPI_1800, "1800"),
-                M::action(DPI_3200, "3200"),
-            ],
-        ),
+        M::submenu("DPI", dpi_items),
         M::submenu(
             "Lighting",
             vec![
@@ -255,6 +266,11 @@ fn build_menu_spec() -> Vec<platform::tray::MenuItem> {
 
 fn menu_action_for(id: u32) -> Option<MenuAction> {
     use menu_id::*;
+    // Value-encoded DPI ids first (an exact range check, so TRAY_DOUBLE_CLICK
+    // — which also has the flag bit set — falls through to the match below).
+    if (DPI_FLAG..DPI_FLAG + 0x1_0000).contains(&id) {
+        return Some(MenuAction::SetDpi((id - DPI_FLAG) as u16));
+    }
     let red = Rgb::new(0xFF, 0, 0);
     let green = Rgb::new(0, 0xFF, 0);
     let blue = Rgb::new(0, 0, 0xFF);
@@ -262,11 +278,6 @@ fn menu_action_for(id: u32) -> Option<MenuAction> {
     let cyan = Rgb::new(0, 0xFF, 0xFF);
     let yellow = Rgb::new(0xFF, 0xFF, 0);
     Some(match id {
-        DPI_800 => MenuAction::SetDpi(800),
-        DPI_1200 => MenuAction::SetDpi(1200),
-        DPI_1600 => MenuAction::SetDpi(1600),
-        DPI_1800 => MenuAction::SetDpi(1800),
-        DPI_3200 => MenuAction::SetDpi(3200),
         STATIC_RED => MenuAction::Effect(EffectSpec::Static(red)),
         STATIC_GREEN => MenuAction::Effect(EffectSpec::Static(green)),
         STATIC_BLUE => MenuAction::Effect(EffectSpec::Static(blue)),
@@ -308,7 +319,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         thread::spawn(move || {
             platform::tray::run(
                 "Snakecharmer",
-                build_menu_spec(),
+                build_menu_spec(None),
                 move |id| {
                     if let Some(a) = menu_action_for(id) {
                         let _ = tx.send(Event::Menu(a));
@@ -341,12 +352,18 @@ fn run_session(
     settings_open: &mut bool,
 ) -> Result<(), razer_hid::Error> {
     let api = razer_hid::open_api()?;
-    let ctrl = DeathAdder::open_with(&api)?;
+    let ctrl = Mouse::open_with(&api)?;
     let spec = ctrl.spec();
     log.log(&format!(
         "Opened {} (PID 0x{:04X}, txn 0x{:02X}; rgb={}, dpi_buttons={}).",
-        spec.name, spec.product_id, spec.transaction_id, spec.has_rgb, spec.has_dpi_buttons
+        spec.name,
+        spec.product_id,
+        spec.transaction_id,
+        spec.has_rgb(),
+        spec.dpi_buttons.is_some()
     ));
+    // Rebuild the tray menu around this device (DPI presets over its range).
+    platform::tray::set_menu(build_menu_spec(Some(&spec)));
 
     // Lock DPI (non-fatal if it fails). Every supported device has DPI.
     let (dx, dy) = cfg.dpi_xy();
@@ -360,10 +377,10 @@ fn run_session(
     apply_startup_lighting(&ctrl, cfg, log);
 
     // Driver mode and the DPI-button vendor-code listeners only apply to devices
-    // that actually have the wheel DPI buttons. On a device without them (e.g.
-    // the V3) there is nothing to switch into driver mode for and nothing to
-    // listen for, so we skip both and just run the DPI/lighting re-assert loop.
-    if spec.has_dpi_buttons {
+    // that actually have the wheel DPI buttons. On a device without them there
+    // is nothing to switch into driver mode for and nothing to listen for, so we
+    // skip both and just run the DPI/lighting re-assert loop.
+    if spec.dpi_buttons.is_some() {
         // Enable driver mode (fatal if it fails) so the buttons emit 0x20/0x21.
         let mode = ctrl.set_device_mode(DeviceMode::Driver)?;
         log.log(&format!("Driver mode enabled (read back 0x{mode:02x})."));
@@ -411,12 +428,24 @@ fn run_session(
         ));
     }
 
-    let interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
+    let reassert_interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
+    // With listeners, an unplug fails a blocking read almost instantly. Without
+    // them (a device with no DPI buttons), nothing notices until we next talk to
+    // the device — so poll liveness on a short tick instead of waiting out the
+    // whole re-assert interval with a dead handle.
+    let tick = if spec.dpi_buttons.is_some() {
+        reassert_interval
+    } else {
+        reassert_interval.min(Duration::from_secs(5))
+    };
+    let mut last_reassert = Instant::now();
     let mut last_fire: Option<(u8, Instant)> = None;
 
     loop {
-        match rx.recv_timeout(interval) {
-            Ok(Event::Button(code)) => handle_code(code, bindings, log, &mut last_fire),
+        match rx.recv_timeout(tick) {
+            Ok(Event::Button(code)) => {
+                handle_code(code, spec.dpi_buttons, bindings, log, &mut last_fire)
+            }
             Ok(Event::Menu(MenuAction::OpenSettings)) => {
                 if *settings_open {
                     log.log("Settings window already open.");
@@ -443,7 +472,16 @@ fn run_session(
                     return Err(razer_hid::Error::Verify("device lost".into()));
                 }
             }
-            Err(RecvTimeoutError::Timeout) => reassert(&ctrl, cfg, log)?,
+            Err(RecvTimeoutError::Timeout) => {
+                if last_reassert.elapsed() >= reassert_interval {
+                    reassert(&ctrl, cfg, log)?;
+                    last_reassert = Instant::now();
+                } else {
+                    // Liveness only: a cheap read that errors out (ending the
+                    // session, triggering the 3s reopen loop) if the device is gone.
+                    ctrl.get_dpi()?;
+                }
+            }
             Err(RecvTimeoutError::Disconnected) => {
                 return Err(razer_hid::Error::Verify("event channel closed".into()))
             }
@@ -451,8 +489,8 @@ fn run_session(
     }
 }
 
-fn apply_startup_lighting(ctrl: &DeathAdder, cfg: &Config, log: &Logger) {
-    if !ctrl.spec().has_rgb {
+fn apply_startup_lighting(ctrl: &Mouse, cfg: &Config, log: &Logger) {
+    if !ctrl.spec().has_rgb() {
         if !cfg.lighting.eq_ignore_ascii_case("keep") {
             log.log(&format!(
                 "{} has no lighting hardware; ignoring lighting={:?}.",
@@ -475,7 +513,7 @@ fn apply_startup_lighting(ctrl: &DeathAdder, cfg: &Config, log: &Logger) {
 /// Handle a menu command. Returns Ok(true) if Quit was selected.
 fn handle_menu(
     action: MenuAction,
-    ctrl: &DeathAdder,
+    ctrl: &Mouse,
     cfg: &mut Config,
     bindings: &mut Bindings,
     log: &Logger,
@@ -633,17 +671,23 @@ fn reader_thread(listener: Listener, tx: Sender<Event>, log: Logger) {
     }
 }
 
-fn handle_code(code: u8, bindings: &Bindings, log: &Logger, last_fire: &mut Option<(u8, Instant)>) {
+fn handle_code(
+    code: u8,
+    buttons: Option<DpiButtons>,
+    bindings: &Bindings,
+    log: &Logger,
+    last_fire: &mut Option<(u8, Instant)>,
+) {
     if let Some((c, t)) = last_fire {
         if *c == code && t.elapsed() < DEBOUNCE {
             return;
         }
     }
-    let (name, action) = match code {
-        CODE_DPI_UP => ("dpi_up", &bindings.up),
-        CODE_DPI_DOWN => ("dpi_down", &bindings.down),
-        other => {
-            log.log(&format!("Unmapped vendor code 0x{other:02x}"));
+    let (name, action) = match buttons {
+        Some(b) if code == b.up => ("dpi_up", &bindings.up),
+        Some(b) if code == b.down => ("dpi_down", &bindings.down),
+        _ => {
+            log.log(&format!("Unmapped vendor code 0x{code:02x}"));
             return;
         }
     };
@@ -658,11 +702,11 @@ fn handle_code(code: u8, bindings: &Bindings, log: &Logger, last_fire: &mut Opti
 }
 
 /// Re-assert driver mode and DPI; log only when something actually changed.
-fn reassert(ctrl: &DeathAdder, cfg: &Config, log: &Logger) -> Result<(), razer_hid::Error> {
+fn reassert(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::Error> {
     // Driver mode only matters on devices with the DPI buttons; elsewhere the
     // get/set-device-mode round-trip is pointless (and touches a command the
     // hardware has no reason to support), so re-lock DPI only.
-    if ctrl.spec().has_dpi_buttons {
+    if ctrl.spec().dpi_buttons.is_some() {
         let mode = ctrl.get_device_mode()?;
         if mode != DeviceMode::Driver.as_byte() {
             let m = ctrl.set_device_mode(DeviceMode::Driver)?;
@@ -757,5 +801,41 @@ mod tests {
             Some(MenuAction::OpenSettings)
         ));
         assert!(menu_action_for(9999).is_none());
+    }
+
+    #[test]
+    fn dpi_menu_ids_roundtrip_values() {
+        for dpi in [100u16, 800, 16000, 30000] {
+            let id = menu_id::DPI_FLAG | dpi as u32;
+            assert!(matches!(menu_action_for(id), Some(MenuAction::SetDpi(v)) if v == dpi));
+        }
+        // TRAY_DOUBLE_CLICK has the flag bit set but is outside the value range.
+        assert!(!matches!(
+            menu_action_for(platform::tray::TRAY_DOUBLE_CLICK),
+            Some(MenuAction::SetDpi(_))
+        ));
+    }
+
+    #[test]
+    fn dpi_presets_track_device_range() {
+        // Elite: ladder within 100..=16000, max appended.
+        let elite = dpi_presets(Some(&razer_proto::DEATHADDER_ELITE));
+        assert!(elite.contains(&800) && elite.contains(&12800));
+        assert_eq!(*elite.last().unwrap(), 16000);
+        // A narrower device: ladder filtered to its range, ceiling appended.
+        let narrow = razer_proto::DeviceSpec {
+            dpi_min: 800,
+            dpi_max: 6000,
+            ..razer_proto::DEATHADDER_ELITE
+        };
+        let presets = dpi_presets(Some(&narrow));
+        assert!(!presets.contains(&400), "below dpi_min must be filtered");
+        assert_eq!(*presets.last().unwrap(), 6000);
+        // No device yet: the bare ladder.
+        assert_eq!(dpi_presets(None), DPI_LADDER.to_vec());
+        // Sorted, no duplicates (a device whose max is already a ladder step).
+        for w in elite.windows(2) {
+            assert!(w[0] < w[1]);
+        }
     }
 }

@@ -1,4 +1,4 @@
-//! Pure Razer HID protocol for the Razer DeathAdder Elite (`VID 0x1532 / PID 0x005C`).
+//! Pure Razer HID protocol for supported Razer mice (see [`SUPPORTED`]).
 //!
 //! This contains **no I/O**: it only builds the 90-byte feature reports and parses the
 //! 90-byte responses, so it is fully unit-testable. The `razer-hid` crate layers device
@@ -28,34 +28,53 @@
 /// USB vendor id for Razer.
 pub const VENDOR_ID: u16 = 0x1532;
 
+/// The vendor codes a mouse's extra DPI buttons emit in driver mode.
+///
+/// These arrive as input reports on the auxiliary HID collections (first byte
+/// `0x04`, then the active codes) and are invisible to Windows otherwise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DpiButtons {
+    /// Code emitted by the DPI-up button (the one closer to the wheel).
+    pub up: u8,
+    /// Code emitted by the DPI-down button.
+    pub down: u8,
+}
+
 /// Per-device protocol parameters and hardware feature set.
 ///
-/// The Razer control protocol is shared across the mouse family, but two things
-/// vary by model: the `transaction_id` byte stamped into every report, and which
-/// features the hardware actually has. A `DeviceSpec` captures both so the upper
-/// layers can build correct reports and skip features a device lacks.
+/// The Razer control protocol is shared across the mouse family; a `DeviceSpec`
+/// captures everything that varies by model, so the upper layers can build
+/// correct reports and skip features a device lacks. Adding a device means
+/// adding one of these to [`SUPPORTED`] — see `docs/SUPPORTED-DEVICES.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceSpec {
     /// USB product id.
     pub product_id: u16,
-    /// transaction_id byte (offset 1 of every report). Varies by model
-    /// generation — 0x3F on the DeathAdder Elite, 0x1F on the V3.
+    /// transaction_id byte (offset 1 of every report); varies by model
+    /// generation. Find it in the device's cases in OpenRazer's
+    /// `razermouse_driver.c`.
     pub transaction_id: u8,
     /// Human-readable model name (for logs and the tray tooltip).
     pub name: &'static str,
-    /// Whether the device has addressable RGB lighting zones.
-    pub has_rgb: bool,
-    /// Whether the device has the pair of wheel DPI buttons that, in driver
-    /// mode, emit the private `0x20`/`0x21` vendor codes. The V3 has no such
-    /// buttons, so it needs neither driver mode nor the vendor-code listener.
-    pub has_dpi_buttons: bool,
+    /// The device's addressable lighting zones ([`led`] ids), in the order
+    /// effects are applied. Empty for devices with no lighting hardware.
+    pub rgb_zones: &'static [u8],
+    /// The wheel DPI buttons' driver-mode vendor codes, or `None` if the model
+    /// has no such buttons (then driver mode and the vendor-code listeners are
+    /// skipped entirely).
+    pub dpi_buttons: Option<DpiButtons>,
     /// Lowest DPI the sensor accepts.
     pub dpi_min: u16,
-    /// Highest DPI the sensor accepts — the Elite tops out at 16000, the V3's
-    /// Focus Pro sensor at 30000. Drives both report validation and the
-    /// settings-window slider range, so the UI is actionable over the whole
-    /// capable range of whichever device is plugged in.
+    /// Highest DPI the sensor accepts. Drives report validation and the
+    /// settings-window slider range.
     pub dpi_max: u16,
+}
+
+impl DeviceSpec {
+    /// Whether the device has any addressable lighting.
+    pub fn has_rgb(&self) -> bool {
+        !self.rgb_zones.is_empty()
+    }
 }
 
 /// DeathAdder Elite (`PID 0x005C`): two RGB zones, wheel DPI buttons, 16000 DPI.
@@ -63,8 +82,8 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
     product_id: 0x005C,
     transaction_id: 0x3F,
     name: "DeathAdder Elite",
-    has_rgb: true,
-    has_dpi_buttons: true,
+    rgb_zones: &[led::SCROLL_WHEEL, led::LOGO],
+    dpi_buttons: Some(DpiButtons { up: 0x20, down: 0x21 }),
     dpi_min: 100,
     dpi_max: 16000,
 };
@@ -227,10 +246,9 @@ pub fn get_dpi_report(transaction_id: u8) -> [u8; REPORT_LEN] {
 
 // --- Chroma / RGB lighting ------------------------------------------------
 //
-// The DeathAdder Elite (PID 0x005C) uses OpenRazer's *extended matrix effect*
-// family (`razer_chroma_extended_matrix_effect_*` in `razerchromacommon.c`),
-// dispatched with transaction_id 0x3F for this device (see the DEATHADDER_ELITE
-// cases in `razermouse_driver.c`). NOTE: these are command_class 0x0F /
+// Supported mice use OpenRazer's *extended matrix effect* family
+// (`razer_chroma_extended_matrix_effect_*` in `razerchromacommon.c`; see each
+// device's cases in `razermouse_driver.c`). NOTE: these are command_class 0x0F /
 // command_id 0x02 — *not* the class-0x03 "standard" LED commands. The base
 // builder (`razer_chroma_extended_matrix_effect_base`) lays out:
 //   arg[0] = variable_storage (VARSTORE = 0x01)
@@ -243,7 +261,8 @@ pub const VARSTORE: u8 = 0x01;
 /// Non-persistent storage selector.
 pub const NOSTORE: u8 = 0x00;
 
-/// The DeathAdder Elite's two lit zones.
+/// Lighting-zone (`led_id`) values, per OpenRazer. A device's actual zones are
+/// listed in its [`DeviceSpec::rgb_zones`].
 pub mod led {
     pub const SCROLL_WHEEL: u8 = 0x01;
     pub const LOGO: u8 = 0x04;
@@ -393,6 +412,33 @@ mod tests {
         assert_eq!(r[88], 0x86, "get-mode CRC");
     }
 
+    /// A synthetic second device for exercising per-device behavior without
+    /// depending on any real spec beyond the Elite.
+    const TEST_MOUSE: DeviceSpec = DeviceSpec {
+        product_id: 0xFFFE,
+        transaction_id: 0x1F,
+        name: "Test Mouse",
+        rgb_zones: &[],
+        dpi_buttons: None,
+        dpi_min: 100,
+        dpi_max: 30000,
+    };
+
+    /// The transaction id lives at byte 1, which is *outside* the CRC range
+    /// (bytes 2..=87), so the same command on two devices differs in exactly
+    /// one byte and shares a CRC.
+    #[test]
+    fn transaction_id_is_the_only_per_device_difference() {
+        let e = DEATHADDER_ELITE;
+        let t = TEST_MOUSE;
+        let elite = set_dpi_report(e.transaction_id, e.dpi_min, e.dpi_max, 1600, 1600).unwrap();
+        let other = set_dpi_report(t.transaction_id, t.dpi_min, t.dpi_max, 1600, 1600).unwrap();
+        assert_eq!(elite[1], 0x3F);
+        assert_eq!(other[1], 0x1F);
+        assert_eq!(&elite[2..], &other[2..], "only byte 1 (txn) may differ");
+        assert_eq!(elite[88], other[88], "txn is outside the CRC, so CRC is identical");
+    }
+
     #[test]
     #[allow(clippy::needless_range_loop)] // mirror openrazer's `for(i=2;i<88;i++)` verbatim
     fn crc_is_xor_of_bytes_2_to_87() {
@@ -535,6 +581,43 @@ mod tests {
         assert_eq!(Rgb::parse_hex("00ff00"), Ok(Rgb::new(0, 255, 0)));
         assert!(Rgb::parse_hex("#12345").is_err());
         assert!(Rgb::parse_hex("gggggg").is_err());
+    }
+
+    /// docs/SUPPORTED-DEVICES.md is the human-readable twin of [`SUPPORTED`];
+    /// this keeps the two from drifting. If it fails, update the doc table.
+    #[test]
+    fn supported_devices_doc_matches_table() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/SUPPORTED-DEVICES.md");
+        let doc = std::fs::read_to_string(path).expect("docs/SUPPORTED-DEVICES.md must exist");
+
+        for spec in SUPPORTED {
+            let pid = format!("1532:{:04X}", spec.product_id);
+            let row = doc
+                .lines()
+                .find(|l| l.starts_with('|') && l.contains(&pid))
+                .unwrap_or_else(|| {
+                    panic!("docs/SUPPORTED-DEVICES.md has no row for {} (`{pid}`) — add one", spec.name)
+                });
+            for (what, needle) in [
+                ("model name", spec.name.to_string()),
+                ("transaction id", format!("0x{:02X}", spec.transaction_id)),
+                ("DPI range", format!("{}–{}", spec.dpi_min, spec.dpi_max)),
+            ] {
+                assert!(
+                    row.contains(&needle),
+                    "doc row for {pid} is missing the {what} {needle:?}:\n  {row}"
+                );
+            }
+        }
+
+        // No stale rows either: every device row must correspond to a spec.
+        let rows = doc.lines().filter(|l| l.starts_with('|') && l.contains("1532:")).count();
+        assert_eq!(
+            rows,
+            SUPPORTED.len(),
+            "docs/SUPPORTED-DEVICES.md has {rows} device rows but SUPPORTED has {} — remove or add the difference",
+            SUPPORTED.len()
+        );
     }
 
     #[test]

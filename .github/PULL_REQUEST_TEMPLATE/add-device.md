@@ -3,8 +3,9 @@ Adding support for a new device? This is the template for you.
 Open your PR with:  ?template=add-device.md  appended to the compare URL,
 or pick "add-device" from the template dropdown.
 
-The model to copy: the DeathAdder V3 PR (#2). Adding a device is meant to be
-a small, one-file diff — a DeviceSpec const, a line in SUPPORTED, and a test.
+The model to copy: the DeathAdder V3 PR (#3). Adding a device is meant to be
+a small diff — a DeviceSpec const, a line in SUPPORTED, a test, and a row in
+docs/SUPPORTED-DEVICES.md; one code file total.
 If your PR is bigger than that, something generic is missing from the crates;
 flag it in the PR and we'll pull it up into the shared layer.
 -->
@@ -32,13 +33,14 @@ Fill these in — they're the entire "crack", distilled:
 |---|---|---|
 | `product_id` | `0x____` | |
 | `transaction_id` | `0x__` | |
-| `has_rgb` | `true` / `false` | does the hardware have addressable lighting? |
-| `has_dpi_buttons` | `true` / `false` | does it have the wheel DPI buttons that emit `0x20`/`0x21` in driver mode? |
+| `rgb_zones` | e.g. `&[led::SCROLL_WHEEL, led::LOGO]`, or `&[]` for none | which lighting zones does the hardware have? |
+| `dpi_buttons` | `Some(DpiButtons { up: 0x__, down: 0x__ })` / `None` | does it have wheel DPI buttons, and what vendor codes do they emit in driver mode? |
 | `dpi_min` / `dpi_max` | `100` / `____` | the sensor's full range — **the UI must be actionable over all of it** |
 
 ## Checklist
 
 - [ ] Added a `DeviceSpec` const and registered it in `SUPPORTED` (`crates/razer-proto/src/lib.rs`).
+- [ ] Added the device's row to `docs/SUPPORTED-DEVICES.md`.
 - [ ] Added a per-device test (assert the transaction id and, if the range differs, the DPI bounds).
 - [ ] `cargo test --workspace` is green.
 - [ ] **No changes were needed** to `razer-hid` or the daemon. *(If you did have to touch them, say why here — it usually means a generic gap to lift into the shared layer, not device-specific code.)*
