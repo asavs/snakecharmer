@@ -1,44 +1,62 @@
 # Snakecharmer
 
+> The Windows counterpart to **[OpenRazer](https://openrazer.github.io/)**. A lightweight replacement for [Razer Synapse](https://www.razer.com/synapse), featuring the essential settings and additionally button remapping!
+
 ```
-                       ___
-                      /   \       ♪
-                     | o o |    ♫
-                     |  >  |   ♪
-                      \_-_/  ♫
-                       ) (
-                      /   \
-                  .--'     '--.
-                 /  )))   (((  \
-                |   )))   (((   |
-                 \  )))   (((  /
-                  '-----------'
+=====================================================================
+                 T H E   S N A K E   C H A R M E R
+                        ~ of the Nile Delta ~
+=====================================================================
+
+           \  |  /
+         `.  \|/  .'                                    *
+       --- (  O  ) ---            .
+         .'  /|\  `.                        __
+           /  |  \               __        /  \
+                                /  \      /    \        __
+                     __        /    \    /      \      /  \
+                    /  \      /      \  /        \    /    \
+         __________/____\____/________\/__________\__/______\____
+          . : ' .  ' : . ' . :  : ' . : ' .  : ' . : ' .  ' :
+
+
+                  _.-==-._                          ♪
+                 ((_.--._))                       o  ♫
+                 ( ~o  o~ )                    ~  ♪         ___
+                  \  __  /                  ~  ♫          .'   `.
+                .-.\    /.-.                             ( (o o) )
+               /   |;  ;|   \                             \ \_/ /
+              |    |;  ;|    |                          ___;   ;
+              |   /;    ;\   |                         (__     ;
+               \ | ========<>=== ~ o ~                    \    ;
+                \|  ;    ;  |/                           .'   ;
+                 |  ;    ;  |                           ;   .'
+                /   `-..-'   \                          ;   ;
+               |   _|    |_   |                     ____;   ;____
+              _|__(_)____(_)__|_                   (_____________)
+             (__________________)                   \___________/
+                                          
+
+=====================================================================
+   He plays, the cobra sways -- an old agreement between them,
+   older than the pyramids on the horizon.
+=====================================================================
 ```
-
-A small, open tool for configuring the **Razer DeathAdder Elite** on **Windows**: DPI,
-RGB lighting, and button remapping in one **436 KB** exe. No background browser, no
-telemetry, barely any idle CPU.
-
-It's the Windows counterpart to **[OpenRazer](https://openrazer.github.io/)**. OpenRazer
-reverse-engineered Razer's HID protocol but only runs on Linux, where it ships as kernel
-modules. Snakecharmer takes that protocol to Windows as a plain userspace app, and adds
-the piece OpenRazer leaves to other tools: **button remapping** (otherwise a job for Razer
-Synapse).
-
 ## Why
 
 Synapse runs a pile of background processes, one of them a full Chromium instance, to send
 what are ultimately a handful of HID feature reports. Snakecharmer talks to the mouse
 directly over Win32 HID and then gets out of the way.
 
-| | Razer Synapse | Snakecharmer |
-|---|---|---|
-| Processes | Razer Synapse 3<br>Razer Central<br>Razer Synapse Service Process<br>Razer Synapse Service<br>RazerCentralService<br>…and a Chromium instance | `snakecharmer.exe` |
-| Idle RAM | ~558 MB (measured) | < 10 MB |
-| Idle CPU | ~3–4% of a core, 24/7 | negligible (blocking HID reads, no poll loop) |
-| Telemetry | yes | none, local-only |
+| | Razer Synapse | Snakecharmer | Δ |
+|---|---|---|---:|
+| Processes | Razer Synapse 3<br>Razer Central<br>Razer Synapse Service Process<br>Razer Synapse Service<br>RazerCentralService<br>embedded Chromium browser (CefSharp) | `snakecharmer.exe`<br><sub>`crt-static`, no runtime deps</sub> | **6 → 1** |
+| On-disk size | 500 MB<br><sub>Razer's published minimum</sub> | 0.43 MB (measured)<br><sub>single static exe</sub> | **~1,160×** |
+| Idle RAM | ~558 MB (measured) | 17 MB (measured)<br><sub>2.5 MB private working set</sub> | **~32×** |
+| Idle CPU | ≈ 1 CPU·h/day  | ≈ 0.06 CPU·h/day (measured)<br><sub>blocking HID reads, no poll loop</sub> | **~17×** |
+| Telemetry | yes | none, local-only | — |
 
-Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI setting.
+Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI setting. Yikes man
 
 ## Features
 
