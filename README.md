@@ -77,6 +77,11 @@ layer is small and well-tested, so adding another mouse (Razer or not) is a cont
 and a good one to hand an AI coding agent. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
 [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md).
 
+Snakecharmer also isn't trying to be everything — if you want cross-brand RGB game sync,
+per-app button profiles, or you're on Linux, other tools serve you better. See
+[`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md) for an honest map of the landscape and
+which tool fits which need.
+
 ## Requirements
 
 - Windows 10/11
@@ -153,6 +158,31 @@ snakecharmer/
 
 See [`docs/SPEC.md`](docs/SPEC.md) for the full design and the protocol notes.
 
+## Upcoming
+
+Candidate features, filtered for compatibility with the zero-overhead ethos (see
+[`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md) for where these came from). Roughly in
+order of plausibility; none are promises:
+
+- **Polling rate control** — a known DeathAdder Elite command in OpenRazer; small and
+  static, fits perfectly.
+- **DPI stages** — cycle presets from the DPI buttons instead of remapping them; pure
+  software, no new protocol work.
+- **More devices** — the protocol crate is built for it; crack your own mouse with
+  [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md) and send a PR.
+- **Lift-off distance / surface calibration** — protocol exists in OpenRazer; needs
+  careful verification since it touches sensor behavior.
+- **Per-application profiles** — possible, but adds a foreground-window watcher; only
+  lands if it provably keeps idle cost at ~0.
+- **Firmware-level protocol research on owned hardware** — the natural extension of the
+  cracking guide (see [`docs/how-deep-could-you-go.md`](docs/how-deep-could-you-go.md)):
+  documenting a device's protocol at the source to speed up support for the next mouse.
+  Research track, not a shipping feature.
+
+Non-goals, so you don't wait for them: game-synced RGB, audio visualizers, cloud
+profiles, accounts, telemetry. If you need those, see the
+[alternatives](docs/ALTERNATIVES.md) — some are genuinely good.
+
 ## Relationship to OpenRazer & license
 
 Snakecharmer's protocol knowledge — the report layout, command classes, CRC, transaction
@@ -172,3 +202,45 @@ Thank you very much to the OpenRazer maintainers! <3
 Only documented Razer commands (sourced from OpenRazer). No firmware, bootloader, or DFU,
 and no fuzzing of feature reports — a bad write can wedge your only mouse. The mouse never
 loses left/right click, and unplug/replug always restores factory behavior.
+
+Staying in userland with documented commands is a design choice, not a limitation — for
+the full argument (and the ladder of what "going deeper" would actually mean), see
+[`docs/how-deep-could-you-go.md`](docs/how-deep-could-you-go.md).
+
+### What happens if…
+
+<details>
+<summary><b>…I unplug the mouse while Snakecharmer is running?</b></summary>
+
+The session ends and the daemon retries every 3 seconds. When the mouse comes back
+(same one or another DeathAdder Elite), it reconnects and re-applies your DPI, driver
+mode, and lighting automatically. Nothing to restart.
+</details>
+
+<details>
+<summary><b>…I run it with a Naga, a keyboard, or any other Razer device?</b></summary>
+
+Nothing is ever written to it. Snakecharmer only opens a device matching
+`VID 0x1532 / PID 0x005C` — the DeathAdder Elite exactly. Any other device, Razer or
+not, is never touched; the daemon just waits in its 3-second retry loop for an Elite
+to appear. A "different version" DeathAdder (V2, V3, …) has a different product ID and
+counts as unsupported too.
+</details>
+
+<details>
+<summary><b>…I configure a thumb-button remap? (the one global setting)</b></summary>
+
+The thumb remap uses a system-wide `WH_MOUSE_LL` hook, so a configured Back/Forward
+remap applies to **every pointing device on the PC** — including non-Razer mice —
+even while no DeathAdder Elite is plugged in. The default is `none` (native
+Back/Forward untouched), and quitting Snakecharmer removes the hook. Everything else
+(DPI, lighting, DPI-button remap) is strictly per-device.
+</details>
+
+<details>
+<summary><b>…I plug in two DeathAdder Elites at once?</b></summary>
+
+Not really supported: DPI/lighting commands go to whichever unit Windows enumerates
+first, while DPI-button presses from *either* mouse trigger actions. Harmless, but
+arbitrary — plug in one at a time.
+</details>
