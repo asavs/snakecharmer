@@ -175,11 +175,10 @@ impl Bindings {
 // --- Tray menu ------------------------------------------------------------
 
 mod menu_id {
-    pub const DPI_800: u32 = 10;
-    pub const DPI_1200: u32 = 11;
-    pub const DPI_1600: u32 = 12;
-    pub const DPI_1800: u32 = 13;
-    pub const DPI_3200: u32 = 14;
+    /// DPI menu items encode their value in the id: `DPI_FLAG | dpi`. DPI fits
+    /// in a u16, so the encoded range (0x1_0000..0x2_0000) can't collide with
+    /// the small fixed ids below (and is checked before `TRAY_DOUBLE_CLICK`).
+    pub const DPI_FLAG: u32 = 0x1_0000;
 
     pub const STATIC_RED: u32 = 30;
     pub const STATIC_GREEN: u32 = 31;
@@ -201,20 +200,36 @@ mod menu_id {
     pub const QUIT: u32 = 91;
 }
 
-fn build_menu_spec() -> Vec<platform::tray::MenuItem> {
+/// Preset ladder offered in the DPI submenu, filtered to the connected
+/// device's range; the device's own maximum is always appended.
+const DPI_LADDER: &[u16] = &[400, 800, 1200, 1600, 1800, 3200, 6400, 12800];
+
+/// DPI presets for a device (or the bare ladder before one is connected).
+fn dpi_presets(spec: Option<&DeviceSpec>) -> Vec<u16> {
+    let mut v: Vec<u16> = match spec {
+        Some(s) => {
+            let mut v: Vec<u16> =
+                DPI_LADDER.iter().copied().filter(|d| (s.dpi_min..=s.dpi_max).contains(d)).collect();
+            if !v.contains(&s.dpi_max) {
+                v.push(s.dpi_max);
+            }
+            v
+        }
+        None => DPI_LADDER.to_vec(),
+    };
+    v.sort_unstable();
+    v
+}
+
+fn build_menu_spec(spec: Option<&DeviceSpec>) -> Vec<platform::tray::MenuItem> {
     use menu_id::*;
     use platform::tray::MenuItem as M;
+    let dpi_items: Vec<M> = dpi_presets(spec)
+        .into_iter()
+        .map(|d| M::action(DPI_FLAG | d as u32, d.to_string()))
+        .collect();
     vec![
-        M::submenu(
-            "DPI",
-            vec![
-                M::action(DPI_800, "800"),
-                M::action(DPI_1200, "1200"),
-                M::action(DPI_1600, "1600"),
-                M::action(DPI_1800, "1800"),
-                M::action(DPI_3200, "3200"),
-            ],
-        ),
+        M::submenu("DPI", dpi_items),
         M::submenu(
             "Lighting",
             vec![
@@ -251,6 +266,11 @@ fn build_menu_spec() -> Vec<platform::tray::MenuItem> {
 
 fn menu_action_for(id: u32) -> Option<MenuAction> {
     use menu_id::*;
+    // Value-encoded DPI ids first (an exact range check, so TRAY_DOUBLE_CLICK
+    // — which also has the flag bit set — falls through to the match below).
+    if (DPI_FLAG..DPI_FLAG + 0x1_0000).contains(&id) {
+        return Some(MenuAction::SetDpi((id - DPI_FLAG) as u16));
+    }
     let red = Rgb::new(0xFF, 0, 0);
     let green = Rgb::new(0, 0xFF, 0);
     let blue = Rgb::new(0, 0, 0xFF);
@@ -258,11 +278,6 @@ fn menu_action_for(id: u32) -> Option<MenuAction> {
     let cyan = Rgb::new(0, 0xFF, 0xFF);
     let yellow = Rgb::new(0xFF, 0xFF, 0);
     Some(match id {
-        DPI_800 => MenuAction::SetDpi(800),
-        DPI_1200 => MenuAction::SetDpi(1200),
-        DPI_1600 => MenuAction::SetDpi(1600),
-        DPI_1800 => MenuAction::SetDpi(1800),
-        DPI_3200 => MenuAction::SetDpi(3200),
         STATIC_RED => MenuAction::Effect(EffectSpec::Static(red)),
         STATIC_GREEN => MenuAction::Effect(EffectSpec::Static(green)),
         STATIC_BLUE => MenuAction::Effect(EffectSpec::Static(blue)),
@@ -304,7 +319,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         thread::spawn(move || {
             platform::tray::run(
                 "Snakecharmer",
-                build_menu_spec(),
+                build_menu_spec(None),
                 move |id| {
                     if let Some(a) = menu_action_for(id) {
                         let _ = tx.send(Event::Menu(a));
@@ -347,6 +362,8 @@ fn run_session(
         spec.has_rgb(),
         spec.dpi_buttons.is_some()
     ));
+    // Rebuild the tray menu around this device (DPI presets over its range).
+    platform::tray::set_menu(build_menu_spec(Some(&spec)));
 
     // Lock DPI (non-fatal if it fails). Every supported device has DPI.
     let (dx, dy) = cfg.dpi_xy();
@@ -784,5 +801,41 @@ mod tests {
             Some(MenuAction::OpenSettings)
         ));
         assert!(menu_action_for(9999).is_none());
+    }
+
+    #[test]
+    fn dpi_menu_ids_roundtrip_values() {
+        for dpi in [100u16, 800, 16000, 30000] {
+            let id = menu_id::DPI_FLAG | dpi as u32;
+            assert!(matches!(menu_action_for(id), Some(MenuAction::SetDpi(v)) if v == dpi));
+        }
+        // TRAY_DOUBLE_CLICK has the flag bit set but is outside the value range.
+        assert!(!matches!(
+            menu_action_for(platform::tray::TRAY_DOUBLE_CLICK),
+            Some(MenuAction::SetDpi(_))
+        ));
+    }
+
+    #[test]
+    fn dpi_presets_track_device_range() {
+        // Elite: ladder within 100..=16000, max appended.
+        let elite = dpi_presets(Some(&razer_proto::DEATHADDER_ELITE));
+        assert!(elite.contains(&800) && elite.contains(&12800));
+        assert_eq!(*elite.last().unwrap(), 16000);
+        // A narrower device: ladder filtered to its range, ceiling appended.
+        let narrow = razer_proto::DeviceSpec {
+            dpi_min: 800,
+            dpi_max: 6000,
+            ..razer_proto::DEATHADDER_ELITE
+        };
+        let presets = dpi_presets(Some(&narrow));
+        assert!(!presets.contains(&400), "below dpi_min must be filtered");
+        assert_eq!(*presets.last().unwrap(), 6000);
+        // No device yet: the bare ladder.
+        assert_eq!(dpi_presets(None), DPI_LADDER.to_vec());
+        // Sorted, no duplicates (a device whose max is already a ladder step).
+        for w in elite.windows(2) {
+            assert!(w[0] < w[1]);
+        }
     }
 }
