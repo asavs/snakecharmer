@@ -7,6 +7,7 @@
 //! is alive.
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use windows_sys::core::PCWSTR;
@@ -25,9 +26,28 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 const TRAY_CALLBACK_MSG: u32 = WM_APP + 1;
+/// Posted (from any thread) to make the tray thread run `mouse_hook::sync()` —
+/// the hook can only be (un)installed on this message-pumping thread.
+const HOOK_SYNC_MSG: u32 = WM_APP + 2;
 
 /// Command id the callback receives when the tray icon is double-clicked.
 pub const TRAY_DOUBLE_CLICK: u32 = 0xFFFF_FFFF;
+
+/// The tray window handle (0 = tray not running), for cross-thread posts.
+static TRAY_HWND: AtomicIsize = AtomicIsize::new(0);
+
+/// Ask the tray thread to reconcile the mouse hook with the desired state
+/// (see [`crate::mouse_hook::sync`]). Safe from any thread; a no-op if the
+/// tray isn't up yet — [`run`] syncs once at startup to cover that window.
+pub fn request_hook_sync() {
+    let hwnd = TRAY_HWND.load(Ordering::SeqCst);
+    if hwnd != 0 {
+        // SAFETY: PostMessageW is thread-safe; a stale/invalid HWND fails harmlessly.
+        unsafe {
+            PostMessageW(hwnd as HWND, HOOK_SYNC_MSG, 0, 0);
+        }
+    }
+}
 
 /// One entry in the tray's right-click menu.
 #[derive(Clone)]
@@ -121,6 +141,7 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
         );
         // Hand ownership of the state to the window (freed in WM_DESTROY).
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(state) as isize);
+        TRAY_HWND.store(hwnd as isize, Ordering::SeqCst);
 
         // Add the notification-area icon.
         let hicon = LoadIconW(std::ptr::null_mut(), IDI_APPLICATION);
@@ -136,10 +157,11 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
         nid.szTip[..n].copy_from_slice(&tip[..n]);
         Shell_NotifyIconW(NIM_ADD, &nid);
 
-        // Install the low-level mouse hook on THIS message-pumping thread (a
-        // WH_MOUSE_LL hook requires its owning thread to pump messages). It is
-        // pass-through until thumb-button remaps are configured.
-        crate::mouse_hook::install();
+        // Reconcile the low-level mouse hook on THIS message-pumping thread (a
+        // WH_MOUSE_LL hook requires its owning thread to pump messages). With
+        // no thumb remaps configured this installs nothing; later changes
+        // arrive as HOOK_SYNC_MSG posts from set_thumb_actions.
+        crate::mouse_hook::sync();
 
         // Message loop.
         let mut msg: MSG = std::mem::zeroed();
@@ -148,6 +170,7 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
             DispatchMessageW(&msg);
         }
 
+        TRAY_HWND.store(0, Ordering::SeqCst);
         crate::mouse_hook::uninstall();
     }
 }
@@ -202,6 +225,10 @@ unsafe extern "system" fn wnd_proc(
         WM_COMMAND => {
             // Menu selection via TrackPopupMenu(TPM_RETURNCMD) is handled inline
             // in show_context_menu; this path covers accelerator/child cases.
+            0
+        }
+        HOOK_SYNC_MSG => {
+            crate::mouse_hook::sync();
             0
         }
         WM_DESTROY => {

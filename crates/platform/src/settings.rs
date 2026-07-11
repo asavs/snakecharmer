@@ -146,7 +146,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             390,
-            524,
+            542,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             hinstance,
@@ -221,10 +221,20 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         let _cb_tb = make_action_combo(ID_CB_THUMB_BACK, 256, init.thumb_back_index);
         let _ = mk("STATIC", "Forward thumb button (XBUTTON2):", 0, 0, 20, 290, 330, 18);
         let _cb_tf = make_action_combo(ID_CB_THUMB_FWD, 310, init.thumb_forward_index);
+        let _ = mk(
+            "STATIC",
+            "Remaps use a global mouse hook; \"none\" = no hook, zero cost.",
+            0,
+            0,
+            20,
+            338,
+            330,
+            16,
+        );
 
         // Lighting effect combo.
-        let _ = mk("STATIC", "Lighting effect:", 0, 0, 20, 344, 330, 18);
-        let cb_effect = mk("COMBOBOX", "", combo_style, ID_CB_EFFECT, 20, 364, 330, 200);
+        let _ = mk("STATIC", "Lighting effect:", 0, 0, 20, 362, 330, 18);
+        let cb_effect = mk("COMBOBOX", "", combo_style, ID_CB_EFFECT, 20, 382, 330, 200);
         for label in &init.effect_labels {
             let w = to_wide(label);
             SendMessageW(cb_effect, CB_ADDSTRING, 0, w.as_ptr() as LPARAM);
@@ -232,14 +242,14 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         SendMessageW(cb_effect, CB_SETCURSEL, init.effect_index, 0);
 
         // Color swatch + picker button.
-        let _ = mk("STATIC", "Color:", 0, 0, 20, 406, 40, 20);
-        let swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH, 66, 404, 80, 22);
-        let _ = mk("BUTTON", "Choose...", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_COLOR, 156, 402, 90, 26);
+        let _ = mk("STATIC", "Color:", 0, 0, 20, 424, 40, 20);
+        let swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH, 66, 422, 80, 22);
+        let _ = mk("BUTTON", "Choose...", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_COLOR, 156, 420, 90, 26);
 
         // Action buttons.
-        let _ = mk("BUTTON", "Apply", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_APPLY, 20, 448, 90, 28);
-        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, 130, 448, 90, 28);
-        let _ = mk("BUTTON", "Close", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_CLOSE, 260, 448, 90, 28);
+        let _ = mk("BUTTON", "Apply", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_APPLY, 20, 466, 90, 28);
+        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, 130, 466, 90, 28);
+        let _ = mk("BUTTON", "Close", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_CLOSE, 260, 466, 90, 28);
 
         let state = Box::new(WindowState {
             on_event: Box::new(on_event),

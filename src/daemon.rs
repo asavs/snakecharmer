@@ -79,10 +79,12 @@ fn apply_thumb_hook(cfg: &Config, log: &Logger) {
     let back = chord_of(&cfg.thumb_back);
     let forward = chord_of(&cfg.thumb_forward);
     let desc = |on: bool, s: &str| if on { s.to_string() } else { "passthrough".to_string() };
+    let any = back.is_some() || forward.is_some();
     log.log(&format!(
-        "Thumb remap: back={}, forward={}.",
+        "Thumb remap: back={}, forward={} (global mouse hook: {}).",
         desc(back.is_some(), &cfg.thumb_back),
-        desc(forward.is_some(), &cfg.thumb_forward)
+        desc(forward.is_some(), &cfg.thumb_forward),
+        if any { "active" } else { "off - zero overhead" }
     ));
     platform::mouse_hook::set_thumb_actions(back, forward);
 }

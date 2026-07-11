@@ -67,8 +67,11 @@ Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI
 - **DPI-button remap** — the two buttons behind the wheel emit private Razer vendor codes
   (`0x20`/`0x21`) the OS can't see. Snakecharmer catches them at the HID layer and turns
   them into keystrokes (default: copy / paste).
-- **Thumb-button remap** — the side Back/Forward buttons remapped to keystrokes via a
-  low-level `WH_MOUSE_LL` hook that suppresses the original.
+- **Thumb-button remap** (opt-in) — the side Back/Forward buttons remapped to keystrokes
+  via a low-level `WH_MOUSE_LL` hook that suppresses the original. The hook exists only
+  while a remap is configured; at the default (`none`/`none`) no hook is installed at
+  all, so the pointer's motion path is untouched. Note: games accept MB4/MB5 natively,
+  so most people don't need this.
 - **RGB lighting** — static, breathing, spectrum, or off, for both lit zones.
 - **System tray** with quick DPI, lighting, reload, and quit, plus a native settings
   window (no admin, windowless until opened).
@@ -236,9 +239,12 @@ just waits in its 3-second retry loop for a supported mouse to appear.
 
 The thumb remap uses a system-wide `WH_MOUSE_LL` hook, so a configured Back/Forward
 remap applies to **every pointing device on the PC** — including non-Razer mice —
-even while no DeathAdder Elite is plugged in. The default is `none` (native
-Back/Forward untouched), and quitting Snakecharmer removes the hook. Everything else
-(DPI, lighting, DPI-button remap) is strictly per-device.
+even while no supported mouse is plugged in. A low-level hook also routes every mouse
+event through an extra check, which is why it's opt-in: **the hook only exists while a
+remap is configured**. At the default (`none`) there is no hook and zero overhead, and
+setting both back to `none` (or quitting) removes it immediately. Everything else
+(DPI, polling, lighting, DPI-button remap) is strictly per-device and never touches
+the pointer's motion path.
 </details>
 
 <details>

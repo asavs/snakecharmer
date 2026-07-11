@@ -3,9 +3,15 @@
 //! Back/Forward action.
 //!
 //! # Contract & safety (see docs/P5-HANDOFF.md)
-//! * The hook is installed by [`install`], which MUST be called on a thread
-//!   that pumps messages (the tray GUI thread) — Windows silently drops a
-//!   `WH_MOUSE_LL` hook whose thread doesn't pump. [`uninstall`] removes it.
+//! * **The hook exists only while a remap is configured.** A `WH_MOUSE_LL`
+//!   hook makes Windows route *every* mouse event (including moves, at the
+//!   full polling rate) through a cross-thread round-trip, so with both thumb
+//!   actions at `none` the hook is not installed at all — zero overhead.
+//!   [`set_thumb_actions`] records the desired state and asks the tray thread
+//!   (via [`crate::tray::request_hook_sync`]) to reconcile with [`sync`].
+//! * [`install`]/[`sync`] MUST be called on a thread that pumps messages (the
+//!   tray GUI thread) — Windows silently drops a `WH_MOUSE_LL` hook whose
+//!   thread doesn't pump. [`uninstall`] removes it.
 //! * The hook proc must be fast (Windows enforces `LowLevelHooksTimeout`, ~300 ms)
 //!   and must never block: it uses `try_lock` and falls back to **pass-through**
 //!   on the (near-impossible) contended case, so it can never freeze input.
@@ -17,7 +23,7 @@
 //! * UIPI limitation: a non-elevated hook cannot intercept input over an
 //!   elevated (higher-integrity) foreground window. Documented, not fought.
 
-use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
@@ -43,6 +49,8 @@ struct HookState {
 static STATE: OnceLock<Mutex<HookState>> = OnceLock::new();
 /// The installed HHOOK, as an isize (0 = not installed).
 static HOOK: AtomicIsize = AtomicIsize::new(0);
+/// Whether any remap is configured, i.e. whether the hook *should* exist.
+static WANTED: AtomicBool = AtomicBool::new(false);
 /// Which thumb buttons had a suppressed DOWN and thus need a suppressed UP.
 /// bit0 = XBUTTON1, bit1 = XBUTTON2.
 static SUPPRESSED: AtomicU8 = AtomicU8::new(0);
@@ -57,11 +65,33 @@ fn state() -> &'static Mutex<HookState> {
 }
 
 /// Set (or clear) the thumb-button remaps. Safe to call from any thread at any
-/// time; the hook proc picks up the change on the next event.
+/// time; the hook proc picks up the change on the next event, and the tray
+/// thread is asked to install/remove the hook to match (no remaps = no hook).
 pub fn set_thumb_actions(back: Option<Vec<u16>>, forward: Option<Vec<u16>>) {
+    WANTED.store(back.is_some() || forward.is_some(), Ordering::SeqCst);
     if let Ok(mut s) = state().lock() {
         s.back = back;
         s.forward = forward;
+    }
+    crate::tray::request_hook_sync();
+}
+
+/// Whether a remap is configured (the hook is wanted).
+pub fn is_wanted() -> bool {
+    WANTED.load(Ordering::SeqCst)
+}
+
+/// Reconcile the hook with the desired state: install if wanted and missing,
+/// remove if unwanted and present. MUST run on the message-pumping tray
+/// thread (same contract as [`install`]). Returns whether the hook now exists.
+pub fn sync() -> bool {
+    match (is_wanted(), is_installed()) {
+        (true, false) => install(),
+        (false, true) => {
+            uninstall();
+            false
+        }
+        (_, now) => now,
     }
 }
 

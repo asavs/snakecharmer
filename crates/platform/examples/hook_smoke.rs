@@ -41,5 +41,15 @@ fn main() {
     mouse_hook::uninstall();
     println!("after uninstall(), is_installed() -> {}", mouse_hook::is_installed());
     assert!(!mouse_hook::is_installed(), "hook must uninstall");
+
+    // sync() reconciles the hook with the desired state: a configured remap
+    // installs it, clearing both remaps removes it (no remaps = no hook).
+    mouse_hook::set_thumb_actions(Some(vec![0x11, 0x43]), None);
+    assert!(mouse_hook::is_wanted() && mouse_hook::sync(), "sync must install when wanted");
+    mouse_hook::set_thumb_actions(None, None);
+    assert!(!mouse_hook::is_wanted(), "no remaps must mean not wanted");
+    assert!(!mouse_hook::sync(), "sync must remove the hook when unwanted");
+    assert!(!mouse_hook::is_installed());
+    println!("sync() reconcile OK.");
     println!("Hook smoke test OK.");
 }
