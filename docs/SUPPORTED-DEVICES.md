@@ -2,7 +2,8 @@
 
 Every device Snakecharmer can drive, mirroring the `SUPPORTED` table in
 [`crates/razer-proto/src/lib.rs`](../crates/razer-proto/src/lib.rs) — that table is the
-source of truth; this page is its human-readable twin. All protocol knowledge is sourced
+source of truth; this page is its human-readable twin, and a test
+(`supported_devices_doc_matches_table`) fails CI if the two drift. All protocol knowledge is sourced
 from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_driver.c`).
 
 | Model | USB id | txn | RGB zones | DPI buttons | DPI range | Verified on hardware |
