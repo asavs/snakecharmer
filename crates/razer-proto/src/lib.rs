@@ -583,6 +583,43 @@ mod tests {
         assert!(Rgb::parse_hex("gggggg").is_err());
     }
 
+    /// docs/SUPPORTED-DEVICES.md is the human-readable twin of [`SUPPORTED`];
+    /// this keeps the two from drifting. If it fails, update the doc table.
+    #[test]
+    fn supported_devices_doc_matches_table() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/SUPPORTED-DEVICES.md");
+        let doc = std::fs::read_to_string(path).expect("docs/SUPPORTED-DEVICES.md must exist");
+
+        for spec in SUPPORTED {
+            let pid = format!("1532:{:04X}", spec.product_id);
+            let row = doc
+                .lines()
+                .find(|l| l.starts_with('|') && l.contains(&pid))
+                .unwrap_or_else(|| {
+                    panic!("docs/SUPPORTED-DEVICES.md has no row for {} (`{pid}`) — add one", spec.name)
+                });
+            for (what, needle) in [
+                ("model name", spec.name.to_string()),
+                ("transaction id", format!("0x{:02X}", spec.transaction_id)),
+                ("DPI range", format!("{}–{}", spec.dpi_min, spec.dpi_max)),
+            ] {
+                assert!(
+                    row.contains(&needle),
+                    "doc row for {pid} is missing the {what} {needle:?}:\n  {row}"
+                );
+            }
+        }
+
+        // No stale rows either: every device row must correspond to a spec.
+        let rows = doc.lines().filter(|l| l.starts_with('|') && l.contains("1532:")).count();
+        assert_eq!(
+            rows,
+            SUPPORTED.len(),
+            "docs/SUPPORTED-DEVICES.md has {rows} device rows but SUPPORTED has {} — remove or add the difference",
+            SUPPORTED.len()
+        );
+    }
+
     #[test]
     fn validate_rejects_bad_status_and_echo() {
         let req = get_device_mode_report(T);
