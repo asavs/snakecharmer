@@ -7,6 +7,7 @@
 //! is alive.
 
 use std::ffi::c_void;
+use std::sync::{Mutex, OnceLock};
 
 use windows_sys::core::PCWSTR;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
@@ -29,6 +30,7 @@ const TRAY_CALLBACK_MSG: u32 = WM_APP + 1;
 pub const TRAY_DOUBLE_CLICK: u32 = 0xFFFF_FFFF;
 
 /// One entry in the tray's right-click menu.
+#[derive(Clone)]
 pub enum MenuItem {
     /// A clickable item that reports `id` to the callback.
     Action { id: u32, label: String },
@@ -49,8 +51,24 @@ impl MenuItem {
 
 /// Boxed state stashed in the window's user-data pointer.
 struct TrayState {
-    menu: Vec<MenuItem>,
     on_command: Box<dyn Fn(u32)>,
+}
+
+/// The live menu spec. The popup HMENU is rebuilt from this on every
+/// right-click, so replacing it via [`set_menu`] takes effect immediately —
+/// same pattern as `mouse_hook::set_thumb_actions`.
+static MENU: OnceLock<Mutex<Vec<MenuItem>>> = OnceLock::new();
+
+fn menu_cell() -> &'static Mutex<Vec<MenuItem>> {
+    MENU.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// Replace the tray menu. Safe to call from any thread at any time; the next
+/// right-click shows the new menu.
+pub fn set_menu(items: Vec<MenuItem>) {
+    if let Ok(mut m) = menu_cell().lock() {
+        *m = items;
+    }
 }
 
 fn to_wide(s: &str) -> Vec<u16> {
@@ -60,8 +78,8 @@ fn to_wide(s: &str) -> Vec<u16> {
 /// Run the tray icon and its message loop on the current thread. Does not
 /// return while the tray lives (call it on a dedicated thread).
 pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'static) {
+    set_menu(menu);
     let state = Box::new(TrayState {
-        menu,
         on_command: Box::new(on_command),
     });
 
@@ -206,7 +224,13 @@ unsafe extern "system" fn wnd_proc(
 
 unsafe fn show_context_menu(hwnd: HWND) {
     let Some(state) = state_ref(hwnd) else { return };
-    let hmenu = build_menu(&state.menu);
+    // Clone the spec out so the lock is not held across TrackPopupMenu (which
+    // blocks until the user dismisses the menu).
+    let items: Vec<MenuItem> = match menu_cell().lock() {
+        Ok(m) => m.clone(),
+        Err(_) => return,
+    };
+    let hmenu = build_menu(&items);
 
     let mut pt = POINT { x: 0, y: 0 };
     GetCursorPos(&mut pt);
