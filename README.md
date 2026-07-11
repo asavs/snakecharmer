@@ -35,8 +35,10 @@ directly over Win32 HID and then gets out of the way.
 |---|---|---|
 | Processes | Razer Synapse 3<br>Razer Central<br>Razer Synapse Service Process<br>Razer Synapse Service<br>RazerCentralService<br>…and a Chromium instance | `snakecharmer.exe` |
 | Idle RAM | ~558 MB (measured) | < 10 MB |
-| Idle CPU | constant | negligible (blocking HID reads, no poll loop) |
+| Idle CPU | ~3–4% of a core, 24/7 | negligible (blocking HID reads, no poll loop) |
 | Telemetry | yes | none, local-only |
+
+Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI setting.
 
 ## Features
 
