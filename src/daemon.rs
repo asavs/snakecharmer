@@ -8,17 +8,13 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use razer_hid::{aux_collection_paths, DeathAdder, Listener};
-use razer_proto::{DeviceMode, DeviceSpec, Rgb};
+use razer_hid::{aux_collection_paths, Listener, Mouse};
+use razer_proto::{DeviceMode, DeviceSpec, DpiButtons, Rgb};
 
 use crate::actions::Action;
 use crate::config::Config;
 use crate::lighting::EffectSpec;
 use crate::logger::Logger;
-
-/// Vendor codes emitted by the DPI buttons in driver mode.
-const CODE_DPI_UP: u8 = 0x20; // front button (closer to the wheel)
-const CODE_DPI_DOWN: u8 = 0x21; // rear button
 
 /// Ignore a repeat of the same code within this window (debounce / anti double-fire).
 const DEBOUNCE: Duration = Duration::from_millis(200);
@@ -341,11 +337,15 @@ fn run_session(
     settings_open: &mut bool,
 ) -> Result<(), razer_hid::Error> {
     let api = razer_hid::open_api()?;
-    let ctrl = DeathAdder::open_with(&api)?;
+    let ctrl = Mouse::open_with(&api)?;
     let spec = ctrl.spec();
     log.log(&format!(
         "Opened {} (PID 0x{:04X}, txn 0x{:02X}; rgb={}, dpi_buttons={}).",
-        spec.name, spec.product_id, spec.transaction_id, spec.has_rgb, spec.has_dpi_buttons
+        spec.name,
+        spec.product_id,
+        spec.transaction_id,
+        spec.has_rgb(),
+        spec.dpi_buttons.is_some()
     ));
 
     // Lock DPI (non-fatal if it fails). Every supported device has DPI.
@@ -360,10 +360,10 @@ fn run_session(
     apply_startup_lighting(&ctrl, cfg, log);
 
     // Driver mode and the DPI-button vendor-code listeners only apply to devices
-    // that actually have the wheel DPI buttons. On a device without them (e.g.
-    // the V3) there is nothing to switch into driver mode for and nothing to
-    // listen for, so we skip both and just run the DPI/lighting re-assert loop.
-    if spec.has_dpi_buttons {
+    // that actually have the wheel DPI buttons. On a device without them there
+    // is nothing to switch into driver mode for and nothing to listen for, so we
+    // skip both and just run the DPI/lighting re-assert loop.
+    if spec.dpi_buttons.is_some() {
         // Enable driver mode (fatal if it fails) so the buttons emit 0x20/0x21.
         let mode = ctrl.set_device_mode(DeviceMode::Driver)?;
         log.log(&format!("Driver mode enabled (read back 0x{mode:02x})."));
@@ -416,7 +416,9 @@ fn run_session(
 
     loop {
         match rx.recv_timeout(interval) {
-            Ok(Event::Button(code)) => handle_code(code, bindings, log, &mut last_fire),
+            Ok(Event::Button(code)) => {
+                handle_code(code, spec.dpi_buttons, bindings, log, &mut last_fire)
+            }
             Ok(Event::Menu(MenuAction::OpenSettings)) => {
                 if *settings_open {
                     log.log("Settings window already open.");
@@ -451,8 +453,8 @@ fn run_session(
     }
 }
 
-fn apply_startup_lighting(ctrl: &DeathAdder, cfg: &Config, log: &Logger) {
-    if !ctrl.spec().has_rgb {
+fn apply_startup_lighting(ctrl: &Mouse, cfg: &Config, log: &Logger) {
+    if !ctrl.spec().has_rgb() {
         if !cfg.lighting.eq_ignore_ascii_case("keep") {
             log.log(&format!(
                 "{} has no lighting hardware; ignoring lighting={:?}.",
@@ -475,7 +477,7 @@ fn apply_startup_lighting(ctrl: &DeathAdder, cfg: &Config, log: &Logger) {
 /// Handle a menu command. Returns Ok(true) if Quit was selected.
 fn handle_menu(
     action: MenuAction,
-    ctrl: &DeathAdder,
+    ctrl: &Mouse,
     cfg: &mut Config,
     bindings: &mut Bindings,
     log: &Logger,
@@ -633,17 +635,23 @@ fn reader_thread(listener: Listener, tx: Sender<Event>, log: Logger) {
     }
 }
 
-fn handle_code(code: u8, bindings: &Bindings, log: &Logger, last_fire: &mut Option<(u8, Instant)>) {
+fn handle_code(
+    code: u8,
+    buttons: Option<DpiButtons>,
+    bindings: &Bindings,
+    log: &Logger,
+    last_fire: &mut Option<(u8, Instant)>,
+) {
     if let Some((c, t)) = last_fire {
         if *c == code && t.elapsed() < DEBOUNCE {
             return;
         }
     }
-    let (name, action) = match code {
-        CODE_DPI_UP => ("dpi_up", &bindings.up),
-        CODE_DPI_DOWN => ("dpi_down", &bindings.down),
-        other => {
-            log.log(&format!("Unmapped vendor code 0x{other:02x}"));
+    let (name, action) = match buttons {
+        Some(b) if code == b.up => ("dpi_up", &bindings.up),
+        Some(b) if code == b.down => ("dpi_down", &bindings.down),
+        _ => {
+            log.log(&format!("Unmapped vendor code 0x{code:02x}"));
             return;
         }
     };
@@ -658,11 +666,11 @@ fn handle_code(code: u8, bindings: &Bindings, log: &Logger, last_fire: &mut Opti
 }
 
 /// Re-assert driver mode and DPI; log only when something actually changed.
-fn reassert(ctrl: &DeathAdder, cfg: &Config, log: &Logger) -> Result<(), razer_hid::Error> {
+fn reassert(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::Error> {
     // Driver mode only matters on devices with the DPI buttons; elsewhere the
     // get/set-device-mode round-trip is pointless (and touches a command the
     // hardware has no reason to support), so re-lock DPI only.
-    if ctrl.spec().has_dpi_buttons {
+    if ctrl.spec().dpi_buttons.is_some() {
         let mode = ctrl.get_device_mode()?;
         if mode != DeviceMode::Driver.as_byte() {
             let m = ctrl.set_device_mode(DeviceMode::Driver)?;

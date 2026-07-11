@@ -1,4 +1,4 @@
-//! Device access for the Razer DeathAdder Elite control interface.
+//! Device access for supported Razer mice (see [`razer_proto::SUPPORTED`]).
 //!
 //! This layers real HID I/O (via the `hidapi` crate) on top of the pure
 //! [`razer_proto`] protocol: opening the control endpoint, sending feature
@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use hidapi::{HidApi, HidDevice};
 use razer_proto as proto;
-use razer_proto::{led, DeviceMode, Rgb, REPORT_LEN};
+use razer_proto::{DeviceMode, Rgb, REPORT_LEN};
 
 /// Create a fresh [`HidApi`] instance (the library is safe to instantiate more
 /// than once). Exposed so callers can share one instance across opens.
@@ -28,7 +28,7 @@ pub fn open_api() -> Result<HidApi> {
 pub enum Error {
     /// The `hidapi` library returned an error.
     Hid(hidapi::HidError),
-    /// The DeathAdder Elite control interface was not found (mouse unplugged?).
+    /// No supported mouse's control interface was found (mouse unplugged?).
     DeviceNotFound,
     /// A protocol-level error (bad response, device status, etc.).
     Proto(proto::ProtoError),
@@ -42,10 +42,14 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Hid(e) => write!(f, "hid error: {e}"),
-            Error::DeviceNotFound => write!(
-                f,
-                "No supported Razer DeathAdder control interface found - is the mouse plugged in?"
-            ),
+            Error::DeviceNotFound => {
+                let names: Vec<&str> = proto::SUPPORTED.iter().map(|s| s.name).collect();
+                write!(
+                    f,
+                    "no supported Razer mouse found (supported: {}) - is it plugged in?",
+                    names.join(", ")
+                )
+            }
             Error::Proto(e) => write!(f, "protocol error: {e}"),
             Error::Busy(s) => write!(f, "device stayed busy (status 0x{s:02x})"),
             Error::Verify(m) => write!(f, "verification failed: {m}"),
@@ -68,18 +72,18 @@ impl From<proto::ProtoError> for Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-/// An open handle to a supported DeathAdder's control collection.
-pub struct DeathAdder {
+/// An open handle to a supported mouse's control collection.
+pub struct Mouse {
     dev: HidDevice,
     spec: proto::DeviceSpec,
 }
 
-impl DeathAdder {
+impl Mouse {
     /// Open the interface-0 mouse control collection.
     ///
     /// Creates its own [`HidApi`] instance; for repeated opens, prefer
-    /// [`DeathAdder::open_with`] and reuse one `HidApi`.
-    pub fn open() -> Result<DeathAdder> {
+    /// [`Mouse::open_with`] and reuse one `HidApi`.
+    pub fn open() -> Result<Mouse> {
         let api = HidApi::new()?;
         Self::open_with(&api)
     }
@@ -90,7 +94,7 @@ impl DeathAdder {
     /// device (see [`proto::SUPPORTED`]); the matched [`DeviceSpec`] is remembered
     /// so every command is built with that model's transaction id and its
     /// features are gated correctly.
-    pub fn open_with(api: &HidApi) -> Result<DeathAdder> {
+    pub fn open_with(api: &HidApi) -> Result<Mouse> {
         let info = api
             .device_list()
             .find(|d| {
@@ -103,7 +107,7 @@ impl DeathAdder {
             .ok_or(Error::DeviceNotFound)?;
         let spec = proto::spec_for(info.product_id()).expect("filtered on a supported product id");
         let dev = info.open_device(api)?;
-        Ok(DeathAdder { dev, spec })
+        Ok(Mouse { dev, spec })
     }
 
     /// The matched device's [`DeviceSpec`] — name, transaction id, and which
@@ -198,51 +202,50 @@ impl DeathAdder {
         Ok(read)
     }
 
-    // --- Chroma / RGB lighting (both zones: scroll wheel + logo) ----------
+    // --- Chroma / RGB lighting ---------------------------------------------
     //
-    // Each effect is applied to both lit zones. The device acknowledges each
-    // command with status 0x02 (verified by `send_command`); there is no color
-    // read-back in this protocol, so success == the device accepted the report.
+    // Each effect is applied to every zone in the spec's `rgb_zones`, in order.
+    // The device acknowledges each command with status 0x02 (verified by
+    // `send_command`); there is no color read-back in this protocol, so
+    // success == the device accepted the report.
     //
-    // On a device with no lighting hardware (`has_rgb == false`, e.g. the wired
-    // V3) these are no-ops that return `Ok(())` — so callers don't have to guard
-    // every lighting path, and a lighting command never turns into a spurious
+    // On a device with no lighting hardware (`rgb_zones` empty) these are
+    // no-ops that return `Ok(())` — so callers don't have to guard every
+    // lighting path, and a lighting command never turns into a spurious
     // "not supported" error that would restart the session.
 
-    fn apply_both<F>(&self, mut make: F) -> Result<()>
+    fn apply_zones<F>(&self, mut make: F) -> Result<()>
     where
         F: FnMut(u8) -> [u8; REPORT_LEN],
     {
-        if !self.spec.has_rgb {
-            return Ok(());
+        for &zone in self.spec.rgb_zones {
+            self.send_command(&make(zone))?;
         }
-        self.send_command(&make(led::SCROLL_WHEEL))?;
-        self.send_command(&make(led::LOGO))?;
         Ok(())
     }
 
-    /// Static single color on both zones.
+    /// Static single color on all lit zones.
     pub fn set_color(&self, rgb: Rgb) -> Result<()> {
         let txn = self.spec.transaction_id;
-        self.apply_both(|zone| proto::effect_static_report(txn, zone, rgb))
+        self.apply_zones(|zone| proto::effect_static_report(txn, zone, rgb))
     }
 
-    /// Breathing (single color) on both zones.
+    /// Breathing (single color) on all lit zones.
     pub fn set_breathing(&self, rgb: Rgb) -> Result<()> {
         let txn = self.spec.transaction_id;
-        self.apply_both(|zone| proto::effect_breathing_report(txn, zone, rgb))
+        self.apply_zones(|zone| proto::effect_breathing_report(txn, zone, rgb))
     }
 
-    /// Spectrum cycling on both zones.
+    /// Spectrum cycling on all lit zones.
     pub fn set_spectrum(&self) -> Result<()> {
         let txn = self.spec.transaction_id;
-        self.apply_both(|zone| proto::effect_spectrum_report(txn, zone))
+        self.apply_zones(|zone| proto::effect_spectrum_report(txn, zone))
     }
 
-    /// Lighting off (none) on both zones.
+    /// Lighting off (none) on all lit zones.
     pub fn set_lighting_off(&self) -> Result<()> {
         let txn = self.spec.transaction_id;
-        self.apply_both(|zone| proto::effect_none_report(txn, zone))
+        self.apply_zones(|zone| proto::effect_none_report(txn, zone))
     }
 }
 
@@ -250,7 +253,7 @@ impl DeathAdder {
 /// (by `product_id`) — i.e. every interface other than interface-0 mouse
 /// control. These are the candidate collections for the DPI-button vendor input
 /// reports; the caller probes which ones are actually readable. Pass the
-/// `product_id` from the opened [`DeathAdder`]'s [`DeathAdder::spec`].
+/// `product_id` from the opened [`Mouse`]'s [`Mouse::spec`].
 pub fn aux_collection_paths(api: &HidApi, product_id: u16) -> Vec<CString> {
     api.device_list()
         .filter(|d| {
