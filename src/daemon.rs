@@ -358,14 +358,39 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
     let mut bindings = Bindings::from_config(&cfg, &log);
     apply_thumb_hook(&cfg, &log);
     let mut settings_open = false;
+    let mut prev_delay = Duration::ZERO; // no retry slept yet
     loop {
-        match run_session(&mut cfg, &mut bindings, &log, &tx, &rx, &mut settings_open) {
+        let started = Instant::now();
+        let result = run_session(&mut cfg, &mut bindings, &log, &tx, &rx, &mut settings_open);
+        let delay = next_retry_delay(prev_delay, started.elapsed());
+        match result {
             Ok(()) => log.log("Session ended cleanly; restarting."),
             Err(e) => log.log(&format!(
-                "Session ended: {e}. Retrying in 3s (mouse unplugged/asleep?)."
+                "Session ended: {e}. Retrying in {}s (mouse unplugged/asleep?).",
+                delay.as_secs()
             )),
         }
-        thread::sleep(Duration::from_secs(3));
+        thread::sleep(delay);
+        prev_delay = delay;
+    }
+}
+
+/// Shortest / longest session-retry delays. Each retry re-enumerates HID, so a
+/// device that keeps flapping gets exponentially fewer pokes (3s -> 6s -> 12s
+/// -> 24s -> 30s cap); a session that held for a while resets the ladder.
+const RETRY_MIN: Duration = Duration::from_secs(3);
+const RETRY_MAX: Duration = Duration::from_secs(30);
+/// A session that survived this long counts as a healthy device.
+const RETRY_HEALTHY: Duration = Duration::from_secs(60);
+
+/// The delay to sleep before the next session attempt, given the previously
+/// slept delay (`Duration::ZERO` = none yet) and how long the session that
+/// just ended had lasted.
+fn next_retry_delay(prev: Duration, session_lasted: Duration) -> Duration {
+    if session_lasted >= RETRY_HEALTHY || prev.is_zero() {
+        RETRY_MIN
+    } else {
+        (prev * 2).min(RETRY_MAX)
     }
 }
 
@@ -813,6 +838,21 @@ mod tests {
         let (labels, up, _) = action_options(&cfg);
         assert_eq!(labels[up], "ctrl+shift+v");
         assert!(labels.iter().filter(|l| *l == "ctrl+shift+v").count() == 1);
+    }
+
+    #[test]
+    fn retry_delay_backs_off_and_resets() {
+        let s = Duration::from_secs;
+        // First-ever retry, and any retry after a healthy session: minimum.
+        assert_eq!(next_retry_delay(Duration::ZERO, s(0)), RETRY_MIN);
+        assert_eq!(next_retry_delay(s(30), s(3600)), RETRY_MIN);
+        assert_eq!(next_retry_delay(s(24), RETRY_HEALTHY), RETRY_MIN);
+        // Fast failures escalate: 3 -> 6 -> 12 -> 24 -> 30 (capped).
+        assert_eq!(next_retry_delay(s(3), s(1)), s(6));
+        assert_eq!(next_retry_delay(s(6), s(1)), s(12));
+        assert_eq!(next_retry_delay(s(12), s(1)), s(24));
+        assert_eq!(next_retry_delay(s(24), s(1)), s(30));
+        assert_eq!(next_retry_delay(s(30), s(1)), s(30));
     }
 
     #[test]
