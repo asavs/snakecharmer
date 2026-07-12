@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Application manifest opting into comctl32 v6 (themed/visual-styles common
+  controls). Without it, Windows loads the Windows-95-era comctl32 v5 and
+  every button/combo/trackbar renders in the classic flat style.
+
+  Embedded at link time by the build scripts (crates/platform/build.rs for
+  the examples, the workspace root build.rs for the bins) via the MSVC
+  linker's /MANIFEST:EMBED — no build-time dependency, no .manifest file to
+  ship next to the exe.
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"/>
+    </dependentAssembly>
+  </dependency>
+</assembly>

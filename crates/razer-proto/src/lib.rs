@@ -25,6 +25,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod diagram;
+
+use diagram::{Anchor, CalloutSlot, Diagram, Role, Shape};
+
 /// USB vendor id for Razer.
 pub const VENDOR_ID: u16 = 0x1532;
 
@@ -91,6 +95,11 @@ pub struct DeviceSpec {
     pub dpi_max: u16,
     /// Polling-rate command family and the rates the hardware accepts.
     pub polling: PollingSpec,
+    /// Top-down schematic of the physical controls, as shape data (see
+    /// [`diagram`]). One definition drives both the settings-window rendering
+    /// (GDI+) and the generated `docs/assets/<device>.svg`; a drift-check test
+    /// regenerates the SVG and fails if the committed asset differs.
+    pub diagram: Diagram,
 }
 
 impl DeviceSpec {
@@ -110,6 +119,134 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
     dpi_min: 100,
     dpi_max: 16000,
     polling: PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] },
+    // Positions per Razer's official schematic (dl.razerzone.com/src/aag/2043-2-en-v2.png,
+    // reference only): right-handed ergo shell — left side flares out for the thumb
+    // rest, right side tucks toward a leaning tail; long wheel slot; two-button DPI
+    // strip behind the wheel; side buttons on the thumb flare. Original line work.
+    diagram: Diagram {
+        width: 780,
+        height: 440,
+        shapes: &[
+            // body silhouette (top-down, cable at top) - featuring exact center slot cutout
+            Shape::Path { role: Role::Body, start: (214, 66), closed: true, curves: &[
+                ((214, 45), (162, 45), (144, 58)),     // left front shoulder
+                ((135, 64), (129, 70), (126, 73)),     // left top edge
+                ((130, 90), (134, 108), (137, 129)),   // left upper wall
+                ((141, 152), (143, 178), (140, 205)),  // left waist scoop
+                ((137, 225), (133, 249), (133, 274)),  // left hip
+                ((133, 312), (144, 342), (164, 361)),  // left rear flare
+                ((181, 377), (202, 386), (225, 389)),  // left tail half
+                ((256, 389), (283, 379), (302, 361)),  // right tail half
+                ((332, 341), (332, 310), (332, 273)),  // right rear flare
+                ((326, 248), (332, 224), (323, 204)),  // right hip
+                ((317, 179), (316, 154), (318, 130)),  // right waist scoop
+                ((319, 111), (323, 91), (326, 73)),    // right upper wall
+                ((324, 70), (321, 64), (312, 58)),     // right top edge
+                ((294, 45), (242, 45), (242, 66)),     // right front shoulder & cutout vertical
+            ]},
+            // cable and strain relief boot (sits inside the cutout)
+            Shape::Path { role: Role::Detail, start: (217, -10), closed: false, curves: &[
+                ((220, -15), (224, -14), (228, -11)),
+                ((232, -7), (236, -7), (240, -11)),
+            ]},
+            Shape::Path { role: Role::Detail, start: (217, -4), closed: false, curves: &[
+                ((220, -9), (224, -8), (228, -5)),
+                ((232, -1), (236, -1), (240, -5)),
+            ]},
+            Shape::Polyline { role: Role::Detail, points: &[(228, -4), (228, 12)] },
+            Shape::RoundRect { role: Role::Detail, x: 220, y: 12, w: 16, h: 18, r: 1 },
+            Shape::Polyline { role: Role::Detail, points: &[(222, 16), (234, 16)] },
+            Shape::Polyline { role: Role::Detail, points: &[(222, 20), (234, 20)] },
+            Shape::Polyline { role: Role::Detail, points: &[(222, 24), (234, 24)] },
+            Shape::Polyline { role: Role::Detail, points: &[(222, 28), (234, 28)] },
+            Shape::Polyline { role: Role::Detail, points: &[(220, 30), (220, 66)] },
+            Shape::Polyline { role: Role::Detail, points: &[(236, 30), (236, 66)] },
+            // button split (broken around the wheel slot) + button plate seams
+            Shape::Path { role: Role::Detail, start: (126, 73), closed: false, curves: &[
+                ((141, 58), (174, 39), (214, 30)),
+                ((214, 30), (214, 67), (214, 67)),
+                ((202, 78), (198, 92), (198, 110)),
+            ]},
+            Shape::Path { role: Role::Detail, start: (326, 73), closed: false, curves: &[
+                ((311, 58), (278, 39), (242, 30)),
+                ((242, 30), (242, 67), (242, 67)),
+                ((253, 77), (258, 91), (258, 109)),
+            ]},
+            Shape::Polyline { role: Role::Detail, points: &[(228, 131), (228, 140)] },
+            Shape::Polyline { role: Role::Detail, points: &[(228, 201), (228, 223)] },
+            // interior side grips & channel detail
+            Shape::Path { role: Role::Detail, start: (129, 76), closed: false, curves: &[
+                ((134, 94), (138, 107), (142, 121)),
+                ((147, 135), (151, 152), (153, 170)),
+                ((155, 189), (155, 209), (151, 225)),
+                ((148, 236), (145, 245), (142, 253)),
+            ]},
+            Shape::Path { role: Role::Detail, start: (326, 73), closed: true, curves: &[
+                ((323, 97), (321, 118), (319, 141)),
+                ((318, 167), (321, 192), (325, 215)),
+                ((328, 233), (331, 251), (331, 273)),
+                ((327, 264), (324, 251), (322, 237)),
+                ((319, 213), (317, 189), (317, 165)),
+                ((317, 132), (320, 99), (326, 73)),
+            ]},
+            Shape::Text { role: Role::Note, at: (186, 74), anchor: Anchor::Middle, text: "left" },
+            Shape::Text { role: Role::Note, at: (270, 74), anchor: Anchor::Middle, text: "right" },
+            // scroll wheel (long slot) — RGB zone 0x01
+            Shape::RoundRect { role: Role::RgbZone, x: 214, y: 65, w: 27, h: 66, r: 10 },
+            Shape::RoundRect { role: Role::Detail, x: 218, y: 67, w: 20, h: 63, r: 8 },
+            Shape::Polyline { role: Role::Detail, points: &[(219, 75), (237, 75)] },
+            Shape::Polyline { role: Role::Detail, points: &[(219, 85), (237, 85)] },
+            Shape::Polyline { role: Role::Detail, points: &[(219, 95), (237, 95)] },
+            Shape::Polyline { role: Role::Detail, points: &[(219, 105), (237, 105)] },
+            Shape::Polyline { role: Role::Detail, points: &[(219, 115), (237, 115)] },
+            Shape::Polyline { role: Role::Detail, points: &[(219, 125), (237, 125)] },
+            Shape::Polyline { role: Role::Lead, points: &[(241, 98), (396, 98)] },
+            Shape::Text { role: Role::Label, at: (402, 95), anchor: Anchor::Start, text: "scroll wheel — middle click" },
+            Shape::Text { role: Role::RgbZone, at: (402, 111), anchor: Anchor::Start, text: "RGB zone 0x01" },
+            // dpi_up (front, nearer the wheel) and dpi_down (rear) — center strip
+            Shape::RoundRect { role: Role::Button, x: 222, y: 140, w: 13, h: 30, r: 4 },
+            Shape::Polyline { role: Role::Lead, points: &[(235, 155), (396, 155)] },
+            Shape::Callout { slot: CalloutSlot::DpiUp, at: (402, 151), anchor: Anchor::Start,
+                label: "dpi_up", note: "code 0x20 · front, nearer the wheel", note_role: Role::Button },
+            Shape::RoundRect { role: Role::Button, x: 222, y: 170, w: 13, h: 31, r: 4 },
+            Shape::Polyline { role: Role::Lead, points: &[(235, 185), (340, 185), (372, 218), (396, 218)] },
+            Shape::Callout { slot: CalloutSlot::DpiDown, at: (402, 218), anchor: Anchor::Start,
+                label: "dpi_down", note: "code 0x21 · rear button", note_role: Role::Button },
+            // thumb buttons (drawn as clean crescents following the waist)
+            Shape::Path { role: Role::Button, start: (132, 155), closed: true, curves: &[
+                ((130, 165), (128, 175), (127, 185)),
+                ((127, 185), (137, 185), (137, 185)),
+                ((137, 175), (135, 165), (132, 155)),
+            ]},
+            Shape::Path { role: Role::Button, start: (137, 187), closed: true, curves: &[
+                ((137, 187), (127, 187), (127, 187)),
+                ((128, 199), (130, 211), (131, 222)),
+                ((135, 211), (136, 199), (137, 187)),
+            ]},
+            Shape::Polyline { role: Role::Lead, points: &[(123, 170), (104, 170)] },
+            Shape::Polyline { role: Role::Lead, points: &[(124, 204), (104, 204)] },
+            Shape::Callout { slot: CalloutSlot::ThumbForward, at: (100, 165), anchor: Anchor::End,
+                label: "\"forward\"", note: "XBUTTON2", note_role: Role::Note },
+            Shape::Callout { slot: CalloutSlot::ThumbBack, at: (100, 222), anchor: Anchor::End,
+                label: "\"back\"", note: "XBUTTON1", note_role: Role::Note },
+            // hook cost, right at the point of decision (under the thumb callouts)
+            Shape::Text { role: Role::Note, at: (100, 252), anchor: Anchor::End, text: "remaps use a global mouse hook" },
+            Shape::Text { role: Role::Note, at: (100, 268), anchor: Anchor::End, text: "(~µs per mouse event);" },
+            Shape::Text { role: Role::Note, at: (100, 284), anchor: Anchor::End, text: "default = no hook, zero cost" },
+            // logo LED on the palm — RGB zone 0x04 (abstract marker; never Razer's logo)
+            Shape::Circle { role: Role::RgbZone, cx: 228, cy: 300, r: 24 },
+            Shape::Path { role: Role::RgbZone, start: (228, 284), closed: false, curves: &[
+                ((212, 292), (244, 308), (228, 316)),
+            ]},
+            Shape::Polyline { role: Role::Lead, points: &[(252, 300), (396, 300)] },
+            Shape::Text { role: Role::Label, at: (402, 297), anchor: Anchor::Start, text: "logo" },
+            Shape::Text { role: Role::RgbZone, at: (402, 313), anchor: Anchor::Start, text: "RGB zone 0x04" },
+            // footnote, wrapped so it never widens the canvas (the thumb-hook
+            // disclaimer lives beside the thumb callouts)
+            Shape::Text { role: Role::Note, at: (330, 420), anchor: Anchor::Middle, text: "DPI-button remaps are hook-free:" },
+            Shape::Text { role: Role::Note, at: (330, 436), anchor: Anchor::Middle, text: "vendor codes in driver mode, pointer motion untouched" },
+        ],
+    },
 };
 
 /// DeathAdder V3 wired (`PID 0x00B2`): no lighting, no wheel DPI buttons, 30000 DPI.
@@ -125,6 +262,125 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
     polling: PollingSpec {
         protocol: PollingProtocol::Extended,
         rates: &[125, 500, 1000, 2000, 4000, 8000],
+    },
+    // Positions per Razer's official schematic (dl.razerzone.com/src2/6128/6128-2-en-v1.png,
+    // reference only): lighter modern shell — concave thumb scoop mid-left, deep
+    // sculpted button plates, larger wheel set further back, side buttons above the
+    // scoop. No lighting, no logo LED. Original line work.
+    diagram: Diagram {
+        width: 780,
+        height: 430,
+        shapes: &[
+            // body silhouette (top-down, cable at top)
+            Shape::Path { role: Role::Body, start: (213, 31), closed: true, curves: &[
+                ((189, 34), (167, 41), (148, 50)),    // left front shoulder
+                ((143, 55), (139, 60), (138, 69)),    // left upper wall
+                ((140, 95), (142, 120), (145, 140)),  // left waist scoop upper
+                ((147, 156), (147, 176), (143, 200)), // left waist scoop lower
+                ((138, 227), (132, 260), (133, 294)), // left hip flare
+                ((134, 331), (149, 359), (175, 377)), // lower left toward tail
+                ((191, 388), (209, 393), (230, 393)), // rounded tail left half
+                ((253, 393), (272, 387), (288, 373)), // rounded tail right half
+                ((311, 353), (323, 324), (325, 291)), // lower right hip
+                ((325, 262), (320, 234), (316, 209)), // right side pinky scoop lower
+                ((312, 185), (312, 164), (314, 141)), // right side pinky scoop upper
+                ((317, 113), (318, 89), (318, 68)),   // right upper wall
+                ((318, 59), (314, 54), (309, 50)),    // right shoulder upper
+                ((289, 40), (267, 34), (243, 30)),    // right front shoulder to cutout corner
+                ((237, 31), (232, 33), (228, 36)),    // cutout inside left wall curve
+                ((224, 33), (219, 31), (213, 31)),    // cutout inside right wall curve
+            ]},
+            // cable and strain relief boot
+            Shape::Path { role: Role::Detail, start: (216, -24), closed: false, curves: &[
+                ((221, -30), (225, -28), (229, -25)),
+                ((233, -22), (237, -22), (241, -25)),
+            ]},
+            Shape::Path { role: Role::Detail, start: (216, -18), closed: false, curves: &[
+                ((221, -23), (225, -22), (229, -19)),
+                ((233, -15), (237, -15), (241, -19)),
+            ]},
+            Shape::Polyline { role: Role::Detail, points: &[(228, -18), (228, -8)] },
+            Shape::Polyline { role: Role::Detail, points: &[(220, -8), (237, -8), (237, -2), (234, -2), (234, 3), (238, 3), (238, 8), (234, 8), (234, 13), (238, 13), (238, 19), (219, 19), (219, 13), (222, 13), (222, 8), (219, 8), (219, 3), (222, 3), (222, -2), (220, -2), (220, -8)] },
+            Shape::Polyline { role: Role::Detail, points: &[(222, -1), (234, -1)] },
+            Shape::Polyline { role: Role::Detail, points: &[(222, 4), (234, 4)] },
+            Shape::Polyline { role: Role::Detail, points: &[(222, 10), (234, 10)] },
+            Shape::Polyline { role: Role::Detail, points: &[(222, 15), (234, 15)] },
+            // button split (broken around the wheel slot)
+            Shape::Polyline { role: Role::Detail, points: &[(228, 132), (228, 209)] },
+            // button plate seams
+            Shape::Path { role: Role::Detail, start: (138, 69), closed: false, curves: &[
+                ((140, 94), (143, 116), (145, 139)),
+                ((148, 159), (147, 178), (143, 200)),
+                ((140, 218), (137, 237), (135, 257)),
+            ]},
+            Shape::Path { role: Role::Detail, start: (318, 68), closed: false, curves: &[
+                ((316, 94), (315, 118), (313, 141)),
+                ((311, 164), (312, 186), (316, 209)),
+                ((318, 228), (321, 246), (323, 265)),
+            ]},
+            // button splits inside
+            Shape::Polyline { role: Role::Detail, points: &[(213, 63), (213, 132)] },
+            Shape::Polyline { role: Role::Detail, points: &[(243, 63), (243, 132)] },
+            Shape::Polyline { role: Role::Detail, points: &[(220, 59), (237, 59)] },
+            Shape::Polyline { role: Role::Detail, points: &[(220, 133), (237, 133)] },
+            // tail highlighting seams
+            Shape::Path { role: Role::Detail, start: (133, 295), closed: false, curves: &[
+                ((136, 326), (148, 351), (171, 369)),
+                ((187, 381), (207, 388), (229, 388)),
+            ]},
+            Shape::Path { role: Role::Detail, start: (229, 388), closed: false, curves: &[
+                ((253, 388), (272, 381), (288, 368)),
+                ((309, 350), (320, 323), (323, 293)),
+            ]},
+            Shape::Text { role: Role::Note, at: (180, 78), anchor: Anchor::Middle, text: "left" },
+            Shape::Text { role: Role::Note, at: (275, 78), anchor: Anchor::Middle, text: "right" },
+            // scroll wheel
+            Shape::RoundRect { role: Role::Detail, x: 213, y: 63, w: 30, h: 70, r: 10 },
+            Shape::RoundRect { role: Role::Detail, x: 217, y: 68, w: 22, h: 62, r: 8 },
+            Shape::Polyline { role: Role::Detail, points: &[(219, 72), (236, 72)] },
+            Shape::Polyline { role: Role::Detail, points: &[(218, 80), (237, 80)] },
+            Shape::Polyline { role: Role::Detail, points: &[(218, 89), (237, 89)] },
+            Shape::Polyline { role: Role::Detail, points: &[(218, 97), (237, 97)] },
+            Shape::Polyline { role: Role::Detail, points: &[(218, 106), (237, 106)] },
+            Shape::Polyline { role: Role::Detail, points: &[(218, 114), (237, 114)] },
+            Shape::Polyline { role: Role::Detail, points: &[(219, 122), (236, 122)] },
+            Shape::Polyline { role: Role::Lead, points: &[(243, 98), (396, 98)] },
+            Shape::Text { role: Role::Label, at: (402, 95), anchor: Anchor::Start, text: "scroll wheel — middle click" },
+            Shape::Text { role: Role::Note, at: (402, 111), anchor: Anchor::Start, text: "no RGB zones on this model" },
+            Shape::Text { role: Role::Note, at: (402, 130), anchor: Anchor::Start, text: "no wheel DPI buttons — the DPI" },
+            Shape::Text { role: Role::Note, at: (402, 146), anchor: Anchor::Start, text: "button is on the underside; it cycles" },
+            Shape::Text { role: Role::Note, at: (402, 162), anchor: Anchor::Start, text: "onboard stages in firmware and" },
+            Shape::Text { role: Role::Note, at: (402, 178), anchor: Anchor::Start, text: "can't be remapped or listened to" },
+            // thumb buttons (drawn as bumps sticking out of the left outline)
+            Shape::Path { role: Role::Button, start: (141, 139), closed: true, curves: &[
+                ((144, 138), (147, 140), (148, 144)),
+                ((150, 183), (150, 183), (150, 183)),
+                ((150, 189), (147, 192), (143, 193)),
+                ((141, 193), (138, 191), (138, 187)),
+                ((138, 146), (138, 146), (138, 146)),
+                ((138, 142), (139, 139), (141, 139)),
+            ]},
+            Shape::Path { role: Role::Button, start: (143, 197), closed: true, curves: &[
+                ((146, 197), (148, 199), (148, 204)),
+                ((148, 244), (148, 244), (148, 244)),
+                ((148, 249), (145, 253), (141, 253)),
+                ((138, 252), (136, 249), (136, 245)),
+                ((137, 204), (137, 204), (137, 204)),
+                ((137, 200), (139, 197), (143, 197)),
+            ]},
+            Shape::Polyline { role: Role::Detail, points: &[(140, 146), (147, 145)] },
+            Shape::Polyline { role: Role::Detail, points: &[(138, 204), (147, 202)] },
+            Shape::Polyline { role: Role::Lead, points: &[(138, 166), (116, 166)] },
+            Shape::Polyline { role: Role::Lead, points: &[(136, 225), (116, 225)] },
+            Shape::Callout { slot: CalloutSlot::ThumbForward, at: (112, 162), anchor: Anchor::End,
+                label: "\"forward\"", note: "XBUTTON2", note_role: Role::Note },
+            Shape::Callout { slot: CalloutSlot::ThumbBack, at: (112, 221), anchor: Anchor::End,
+                label: "\"back\"", note: "XBUTTON1", note_role: Role::Note },
+            // hook cost, right at the point of decision (under the thumb callouts)
+            Shape::Text { role: Role::Note, at: (112, 255), anchor: Anchor::End, text: "remaps use a global mouse hook" },
+            Shape::Text { role: Role::Note, at: (112, 271), anchor: Anchor::End, text: "(~µs per mouse event);" },
+            Shape::Text { role: Role::Note, at: (112, 287), anchor: Anchor::End, text: "default = no hook, zero cost" },
+        ],
     },
 };
 
@@ -546,6 +802,7 @@ mod tests {
         dpi_min: 100,
         dpi_max: 30000,
         polling: PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] },
+        diagram: Diagram { width: 0, height: 0, shapes: &[] },
     };
 
     /// The transaction id lives at byte 1, which is *outside* the CRC range
@@ -832,12 +1089,29 @@ mod tests {
         assert!(Rgb::parse_hex("gggggg").is_err());
     }
 
+    /// Not a test: regenerates `docs/assets/<device>.svg` from each spec's
+    /// diagram data. Run it after changing a diagram:
+    ///   cargo test -p razer-proto -- --ignored regenerate_diagram_svgs
+    #[test]
+    #[ignore = "writes docs/assets; run explicitly after editing a diagram"]
+    fn regenerate_diagram_svgs() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/assets");
+        std::fs::create_dir_all(dir).expect("create docs/assets");
+        for spec in SUPPORTED {
+            let path = format!("{dir}/{}.svg", diagram::asset_slug(spec.name));
+            std::fs::write(&path, spec.diagram.to_svg()).expect("write SVG asset");
+            println!("wrote {path}");
+        }
+    }
+
     /// docs/SUPPORTED-DEVICES.md is the human-readable twin of [`SUPPORTED`];
     /// this keeps the two from drifting. If it fails, update the doc table.
     #[test]
     fn supported_devices_doc_matches_table() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/SUPPORTED-DEVICES.md");
-        let doc = std::fs::read_to_string(path).expect("docs/SUPPORTED-DEVICES.md must exist");
+        let doc = std::fs::read_to_string(path)
+            .expect("docs/SUPPORTED-DEVICES.md must exist")
+            .replace("\r\n", "\n"); // normalize CRLF checkouts before verbatim matching
 
         for spec in SUPPORTED {
             let pid = format!("1532:{:04X}", spec.product_id);
@@ -866,6 +1140,33 @@ mod tests {
                     "doc row for {pid} is missing the {what} {needle:?}:\n  {row}"
                 );
             }
+
+            // The button-map diagram is spec data (rendered in the settings
+            // window). The doc embeds its generated SVG; the file must match
+            // the emitter's output byte for byte so doc and UI can't drift.
+            assert!(
+                !spec.diagram.shapes.is_empty(),
+                "{} has no diagram — every supported device ships one",
+                spec.name
+            );
+            let slug = diagram::asset_slug(spec.name);
+            assert!(
+                doc.contains(&format!("assets/{slug}.svg")),
+                "docs/SUPPORTED-DEVICES.md 'Button maps' section must embed assets/{slug}.svg for {}",
+                spec.name
+            );
+            let asset_path = format!(
+                "{}/../../docs/assets/{slug}.svg",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let on_disk = std::fs::read_to_string(&asset_path)
+                .unwrap_or_default()
+                .replace("\r\n", "\n");
+            assert!(
+                on_disk == spec.diagram.to_svg(),
+                "docs/assets/{slug}.svg is stale or missing — regenerate it with:\n  \
+                 cargo test -p razer-proto -- --ignored regenerate_diagram_svgs"
+            );
         }
 
         // No stale rows either: every device row must correspond to a spec.

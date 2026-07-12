@@ -26,6 +26,39 @@ from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_dri
   DPI set/read round-trips and correct feature gating, not just a table entry copied from
   OpenRazer.
 
+## Button maps
+
+Which physical control is which config key. Each diagram is **data**, not artwork: it
+lives in the device's `DeviceSpec::diagram` as a small list of shapes, the settings
+window renders the connected device's copy natively (GDI+), and the SVGs below are
+generated from the same data (`cargo test -p razer-proto -- --ignored
+regenerate_diagram_svgs`). The drift-check test regenerates each SVG and fails if the
+committed asset differs, so the doc and the UI can't diverge. Drawing one for a new
+device — finding the official schematic, the legal rules, the shape DSL, the
+verification loop — is covered in [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md).
+
+Razer's official schematics (linked per device below) are used as a positional reference for button placement and body proportions. The outline and shape of the mouse are drawn as accurately as possible to the physical hardware, while avoiding any trademarked logos (the logo LED is drawn as an abstract circle with an 'S' curve). All diagram line work is original coordinate data.
+
+### DeathAdder Elite
+
+![DeathAdder Elite button map](assets/deathadder-elite.svg)
+
+Razer's official diagram: [DeathAdder Elite schematic](https://dl.razerzone.com/src/aag/2043-2-en-v2.png)
+(reference only, not bundled).
+
+The two thumb buttons (`XBUTTON1`/`XBUTTON2`) are standard Windows buttons — remapping
+them is opt-in and uses the global hook (see the README's safety FAQ). The two DPI
+buttons emit private vendor codes (`0x20`/`0x21`) in driver mode; rebinding them is
+free — nothing touches the pointer's motion path.
+
+### DeathAdder V3 (wired)
+
+![DeathAdder V3 button map](assets/deathadder-v3.svg)
+
+Razer's official diagram: [DeathAdder V3 schematic](https://dl.razerzone.com/src2/6128/6128-2-en-v1.png)
+(reference only, not bundled; found via the model's
+[support page](https://mysupport.razer.com/app/answers/detail/a_id/6124/)).
+
 ## Not on the list?
 
 Your mouse is ignored, never written to — the daemon simply waits for a supported device

@@ -53,18 +53,28 @@ const ACTION_PRESETS: &[&str] =
 /// Lighting options offered in the settings-window effect dropdown.
 const EFFECT_PRESETS: &[&str] = &["keep", "static", "breathing", "spectrum", "off"];
 
-/// Build the action dropdown labels (including the current values) and the
-/// selected indices for dpi_up / dpi_down.
-fn action_options(cfg: &Config) -> (Vec<String>, usize, usize) {
-    let mut labels: Vec<String> = ACTION_PRESETS.iter().map(|s| s.to_string()).collect();
-    for v in [&cfg.dpi_up, &cfg.dpi_down, &cfg.thumb_back, &cfg.thumb_forward] {
-        if !labels.iter().any(|l| l == v) {
-            labels.push(v.clone());
-        }
+/// Build one remappable-button dropdown for the settings window: display
+/// labels, the parallel config values, and the selected index for `current`.
+///
+/// Index 0 is the button's *identity* entry — the dropdown names its own
+/// button (there is no separate caption in the window) — and maps to the
+/// config value `"none"`. The wording carries the none-semantics: a thumb
+/// button's identity reads "(default)" because config `none` means no hook
+/// and the native Back/Forward behavior, while a DPI button's reads
+/// "unbound" because in driver mode a none'd DPI button does nothing.
+fn combo_options(current: &str, identity: &str) -> (Vec<String>, Vec<String>, usize) {
+    let mut labels = vec![identity.to_string()];
+    let mut values = vec!["none".to_string()];
+    for p in ACTION_PRESETS.iter().filter(|p| **p != "none") {
+        labels.push(p.to_string());
+        values.push(p.to_string());
     }
-    let up = labels.iter().position(|l| l == &cfg.dpi_up).unwrap_or(0);
-    let down = labels.iter().position(|l| l == &cfg.dpi_down).unwrap_or(0);
-    (labels, up, down)
+    if !values.iter().any(|v| v == current) {
+        labels.push(current.to_string());
+        values.push(current.to_string());
+    }
+    let index = values.iter().position(|v| v == current).unwrap_or(0);
+    (labels, values, index)
 }
 
 /// Parse a config action into a keystroke chord (`None` = passthrough/disabled).
@@ -89,12 +99,6 @@ fn apply_thumb_hook(cfg: &Config, log: &Logger) {
     platform::mouse_hook::set_thumb_actions(back, forward);
 }
 
-/// Build the thumb-button dropdown indices (reusing the action label list).
-fn thumb_indices(cfg: &Config, labels: &[String]) -> (usize, usize) {
-    let find = |v: &str| labels.iter().position(|l| l == v).unwrap_or(0);
-    (find(&cfg.thumb_back), find(&cfg.thumb_forward))
-}
-
 /// Polling dropdown labels ("keep" + the device's supported rates) and the
 /// selected index matching the config (`None` -> "keep").
 fn polling_options(cfg: &Config, spec: &DeviceSpec) -> (Vec<String>, usize) {
@@ -116,29 +120,110 @@ fn effect_options(cfg: &Config) -> (Vec<String>, usize) {
     (labels, idx)
 }
 
+/// Map the spec's diagram data (razer-proto's DSL) into the platform
+/// renderer's generic shape types. Purely mechanical: the platform layer
+/// stays Razer-agnostic (RgbZone/Button become its two accent slots).
+fn to_platform_diagram(d: &razer_proto::diagram::Diagram) -> platform::diagram::Diagram {
+    use platform::diagram as pd;
+    use razer_proto::diagram as rd;
+    let role = |r: rd::Role| match r {
+        rd::Role::Body => pd::Role::Body,
+        rd::Role::Detail => pd::Role::Detail,
+        rd::Role::Lead => pd::Role::Lead,
+        rd::Role::Label => pd::Role::Label,
+        rd::Role::Note => pd::Role::Note,
+        rd::Role::RgbZone => pd::Role::AccentA,
+        rd::Role::Button => pd::Role::AccentB,
+    };
+    let anchor = |a: rd::Anchor| match a {
+        rd::Anchor::Start => pd::Anchor::Start,
+        rd::Anchor::Middle => pd::Anchor::Middle,
+        rd::Anchor::End => pd::Anchor::End,
+    };
+    let shapes = d
+        .shapes
+        .iter()
+        .map(|s| match *s {
+            rd::Shape::Path { role: r, start, curves, closed } => {
+                pd::Shape::Path { role: role(r), start, curves: curves.to_vec(), closed }
+            }
+            rd::Shape::RoundRect { role: r, x, y, w, h, r: radius } => {
+                pd::Shape::RoundRect { role: role(r), x, y, w, h, r: radius }
+            }
+            rd::Shape::Circle { role: r, cx, cy, r: radius } => {
+                pd::Shape::Circle { role: role(r), cx, cy, r: radius }
+            }
+            rd::Shape::Polyline { role: r, points } => {
+                pd::Shape::Polyline { role: role(r), points: points.to_vec() }
+            }
+            rd::Shape::Text { role: r, at, anchor: a, text } => {
+                pd::Shape::Text { role: role(r), at, anchor: anchor(a), text: text.to_string() }
+            }
+            rd::Shape::Callout { slot, at, anchor: a, note_role, .. } => {
+                let slot = match slot {
+                    rd::CalloutSlot::DpiUp => pd::CalloutSlot::DpiUp,
+                    rd::CalloutSlot::DpiDown => pd::CalloutSlot::DpiDown,
+                    rd::CalloutSlot::ThumbBack => pd::CalloutSlot::ThumbBack,
+                    rd::CalloutSlot::ThumbForward => pd::CalloutSlot::ThumbForward,
+                };
+                // The window's dropdowns are self-identifying (index 0 names
+                // the button — see combo_options), so the callout captions
+                // don't travel to the window: empty caption = the platform
+                // mounts the dropdown itself at the callout anchor. The
+                // generated docs SVG, which has no dropdowns, keeps them.
+                pd::Shape::Callout {
+                    slot,
+                    at,
+                    anchor: anchor(a),
+                    label: String::new(),
+                    note: String::new(),
+                    note_role: role(note_role),
+                }
+            }
+        })
+        .collect();
+    pd::Diagram { shapes }
+}
+
 /// Spawn the settings window on its own thread (message loop lives there).
-/// `spec` supplies the plugged-in device's DPI range so the slider covers the
-/// whole capable range of *that* mouse (16000 on the Elite, 30000 on the V3).
+/// `spec` supplies the plugged-in device's identity and capabilities: the
+/// slider covers the whole DPI range of *that* mouse (16000 on the Elite,
+/// 30000 on the V3), its schematic fills the side pane, and the DPI-button
+/// / lighting control groups only exist when the hardware does.
 fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
-    let (action_labels, up_index, down_index) = action_options(cfg);
-    let (thumb_back_index, thumb_forward_index) = thumb_indices(cfg, &action_labels);
+    use platform::settings::ActionCombo;
+    // Each dropdown's index-0 entry is its button's identity (mapping to
+    // config "none"); the thumb entries say "(default)" — no hook, native
+    // Back/Forward — while the DPI entries say "unbound" — in driver mode a
+    // none'd DPI button does nothing. Human names only; no XBUTTON jargon.
+    let (up_labels, up_values, up_index) = combo_options(&cfg.dpi_up, "Front DPI — unbound");
+    let (down_labels, down_values, down_index) = combo_options(&cfg.dpi_down, "Rear DPI — unbound");
+    let (back_labels, back_values, back_index) =
+        combo_options(&cfg.thumb_back, "\u{2190} Back (default)");
+    let (fwd_labels, fwd_values, fwd_index) =
+        combo_options(&cfg.thumb_forward, "\u{2192} Forward (default)");
     let (effect_labels, effect_index) = effect_options(cfg);
     let (polling_labels, polling_index) = polling_options(cfg, &spec);
     let color = Rgb::parse_hex(&cfg.color).unwrap_or(Rgb::new(0, 0xFF, 0));
     let init = platform::settings::SettingsInit {
+        device_name: spec.name.to_string(),
+        diagram: Some(to_platform_diagram(&spec.diagram)),
         dpi: cfg.dpi,
         dpi_min: spec.dpi_min,
         dpi_max: spec.dpi_max,
         polling_labels,
         polling_index,
-        action_labels: action_labels.clone(),
-        up_index,
-        down_index,
-        thumb_back_index,
-        thumb_forward_index,
-        effect_labels: effect_labels.clone(),
-        effect_index,
-        color: (color.r, color.g, color.b),
+        dpi_buttons: spec.dpi_buttons.map(|_| platform::settings::DpiButtonsInit {
+            up: ActionCombo { labels: up_labels, index: up_index },
+            down: ActionCombo { labels: down_labels, index: down_index },
+        }),
+        thumb_back: ActionCombo { labels: back_labels, index: back_index },
+        thumb_forward: ActionCombo { labels: fwd_labels, index: fwd_index },
+        lighting: spec.has_rgb().then(|| platform::settings::LightingInit {
+            effect_labels: effect_labels.clone(),
+            effect_index,
+            color: (color.r, color.g, color.b),
+        }),
     };
     let tx = tx.clone();
     thread::spawn(move || {
@@ -154,15 +239,17 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
                     .rates
                     .get(i - 1)
                     .map(|&hz| MenuAction::SetPollingRate(Some(hz))),
-                SE::UpAction(i) => action_labels.get(i).map(|s| MenuAction::SetUpAction(s.clone())),
+                // Dropdown indices map through the parallel *values* lists
+                // (index 0 = the identity entry = config "none").
+                SE::UpAction(i) => up_values.get(i).map(|s| MenuAction::SetUpAction(s.clone())),
                 SE::DownAction(i) => {
-                    action_labels.get(i).map(|s| MenuAction::SetDownAction(s.clone()))
+                    down_values.get(i).map(|s| MenuAction::SetDownAction(s.clone()))
                 }
                 SE::ThumbBack(i) => {
-                    action_labels.get(i).map(|s| MenuAction::SetThumbBack(s.clone()))
+                    back_values.get(i).map(|s| MenuAction::SetThumbBack(s.clone()))
                 }
                 SE::ThumbForward(i) => {
-                    action_labels.get(i).map(|s| MenuAction::SetThumbForward(s.clone()))
+                    fwd_values.get(i).map(|s| MenuAction::SetThumbForward(s.clone()))
                 }
                 SE::Effect(i) => effect_labels.get(i).map(|s| MenuAction::SetEffectKind(s.clone())),
                 SE::Color(r, g, b) => Some(MenuAction::SetColor(Rgb::new(r, g, b))),
@@ -827,17 +914,27 @@ mod tests {
     }
 
     #[test]
-    fn action_options_indices_track_config() {
-        let mut cfg = Config::default(); // dpi_up=copy, dpi_down=paste
-        let (labels, up, down) = action_options(&cfg);
+    fn combo_options_identity_maps_to_none() {
+        // Index 0 is always the identity entry, and it maps to config "none";
+        // "none" itself never appears as a visible entry.
+        let (labels, values, idx) = combo_options("none", "\u{2190} Back (default)");
+        assert_eq!(labels[0], "\u{2190} Back (default)");
+        assert_eq!(values[0], "none");
+        assert_eq!(idx, 0, "config none selects the identity entry");
+        assert!(!labels.iter().any(|l| l == "none"), "no raw none entry on screen");
+        assert_eq!(labels.len(), values.len(), "labels and values stay parallel");
+
+        // A preset value selects its own (label == value) row.
+        let cfg = Config::default(); // dpi_up=copy, dpi_down=paste
+        let (labels, values, up) = combo_options(&cfg.dpi_up, "Front DPI — unbound");
+        assert_eq!(values[up], "copy");
         assert_eq!(labels[up], "copy");
-        assert_eq!(labels[down], "paste");
 
         // A custom value not in the presets must be appended and selected.
-        cfg.dpi_up = "ctrl+shift+v".to_string();
-        let (labels, up, _) = action_options(&cfg);
-        assert_eq!(labels[up], "ctrl+shift+v");
-        assert!(labels.iter().filter(|l| *l == "ctrl+shift+v").count() == 1);
+        let (labels, values, idx) = combo_options("ctrl+shift+v", "Rear DPI — unbound");
+        assert_eq!(values[idx], "ctrl+shift+v");
+        assert_eq!(labels[idx], "ctrl+shift+v");
+        assert!(values.iter().filter(|v| *v == "ctrl+shift+v").count() == 1);
     }
 
     #[test]
@@ -894,21 +991,23 @@ mod tests {
     }
 
     #[test]
-    fn thumb_indices_track_config() {
+    fn thumb_combo_options_track_config() {
         let mut cfg = Config {
             thumb_back: "cut".into(),
             ..Config::default()
         };
-        let (labels, _, _) = action_options(&cfg);
-        let (back, fwd) = thumb_indices(&cfg, &labels);
+        let (labels, values, back) = combo_options(&cfg.thumb_back, "\u{2190} Back (default)");
+        assert_eq!(values[back], "cut");
         assert_eq!(labels[back], "cut");
-        assert_eq!(labels[fwd], "none"); // forward defaulted to none, which is a preset
+        // forward defaulted to none -> the identity entry is selected.
+        let (labels, _, fwd) = combo_options(&cfg.thumb_forward, "\u{2192} Forward (default)");
+        assert_eq!(fwd, 0);
+        assert_eq!(labels[fwd], "\u{2192} Forward (default)");
 
-        // A custom thumb chord must be present in the labels (via action_options).
+        // A custom thumb chord must be present and selected.
         cfg.thumb_forward = "ctrl+shift+t".into();
-        let (labels, _, _) = action_options(&cfg);
-        let (_, fwd) = thumb_indices(&cfg, &labels);
-        assert_eq!(labels[fwd], "ctrl+shift+t");
+        let (_, values, fwd) = combo_options(&cfg.thumb_forward, "\u{2192} Forward (default)");
+        assert_eq!(values[fwd], "ctrl+shift+t");
     }
 
     #[test]

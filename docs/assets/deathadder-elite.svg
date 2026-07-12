@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-116 -27 768 478" width="768" height="478" font-family="ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace" font-size="13">
+  <style>
+    svg { --fg: #6e7781; --rgb: #2da44e; --btn: #4a7fd4; }
+    @media (prefers-color-scheme: dark) {
+      svg { --fg: #9da7b3; --rgb: #3fb950; --btn: #6ca0f0; }
+    }
+    .body { stroke: var(--fg); fill: none; stroke-width: 1.6; }
+    .det  { stroke: var(--fg); fill: none; stroke-width: 1.1; }
+    .lead { stroke: var(--fg); fill: none; stroke-width: 1; opacity: .55; }
+    .txt  { fill: var(--fg); }
+    .sub  { fill: var(--fg); opacity: .72; font-size: 11px; }
+    .rgb  { stroke: var(--rgb); fill: none; stroke-width: 1.6; }
+    .rgbt { fill: var(--rgb); font-size: 11px; }
+    .btn  { stroke: var(--btn); fill: none; stroke-width: 1.6; }
+    .btnt { fill: var(--btn); font-size: 11px; }
+  </style>
+  <path class="body" d="M214 66 C214 45 162 45 144 58 C135 64 129 70 126 73 C130 90 134 108 137 129 C141 152 143 178 140 205 C137 225 133 249 133 274 C133 312 144 342 164 361 C181 377 202 386 225 389 C256 389 283 379 302 361 C332 341 332 310 332 273 C326 248 332 224 323 204 C317 179 316 154 318 130 C319 111 323 91 326 73 C324 70 321 64 312 58 C294 45 242 45 242 66 Z"/>
+  <path class="det" d="M217 -10 C220 -15 224 -14 228 -11 C232 -7 236 -7 240 -11"/>
+  <path class="det" d="M217 -4 C220 -9 224 -8 228 -5 C232 -1 236 -1 240 -5"/>
+  <polyline class="det" points="228,-4 228,12"/>
+  <rect class="det" x="220" y="12" width="16" height="18" rx="1"/>
+  <polyline class="det" points="222,16 234,16"/>
+  <polyline class="det" points="222,20 234,20"/>
+  <polyline class="det" points="222,24 234,24"/>
+  <polyline class="det" points="222,28 234,28"/>
+  <polyline class="det" points="220,30 220,66"/>
+  <polyline class="det" points="236,30 236,66"/>
+  <path class="det" d="M126 73 C141 58 174 39 214 30 C214 30 214 67 214 67 C202 78 198 92 198 110"/>
+  <path class="det" d="M326 73 C311 58 278 39 242 30 C242 30 242 67 242 67 C253 77 258 91 258 109"/>
+  <polyline class="det" points="228,131 228,140"/>
+  <polyline class="det" points="228,201 228,223"/>
+  <path class="det" d="M129 76 C134 94 138 107 142 121 C147 135 151 152 153 170 C155 189 155 209 151 225 C148 236 145 245 142 253"/>
+  <path class="det" d="M326 73 C323 97 321 118 319 141 C318 167 321 192 325 215 C328 233 331 251 331 273 C327 264 324 251 322 237 C319 213 317 189 317 165 C317 132 320 99 326 73 Z"/>
+  <text class="sub" x="186" y="74" text-anchor="middle">left</text>
+  <text class="sub" x="270" y="74" text-anchor="middle">right</text>
+  <rect class="rgb" x="214" y="65" width="27" height="66" rx="10"/>
+  <rect class="det" x="218" y="67" width="20" height="63" rx="8"/>
+  <polyline class="det" points="219,75 237,75"/>
+  <polyline class="det" points="219,85 237,85"/>
+  <polyline class="det" points="219,95 237,95"/>
+  <polyline class="det" points="219,105 237,105"/>
+  <polyline class="det" points="219,115 237,115"/>
+  <polyline class="det" points="219,125 237,125"/>
+  <polyline class="lead" points="241,98 396,98"/>
+  <text class="txt" x="402" y="95">scroll wheel — middle click</text>
+  <text class="rgbt" x="402" y="111">RGB zone 0x01</text>
+  <rect class="btn" x="222" y="140" width="13" height="30" rx="4"/>
+  <polyline class="lead" points="235,155 396,155"/>
+  <text class="txt" x="402" y="151">dpi_up</text>
+  <text class="btnt" x="402" y="167">code 0x20 · front, nearer the wheel</text>
+  <rect class="btn" x="222" y="170" width="13" height="31" rx="4"/>
+  <polyline class="lead" points="235,185 340,185 372,218 396,218"/>
+  <text class="txt" x="402" y="218">dpi_down</text>
+  <text class="btnt" x="402" y="234">code 0x21 · rear button</text>
+  <path class="btn" d="M132 155 C130 165 128 175 127 185 C127 185 137 185 137 185 C137 175 135 165 132 155 Z"/>
+  <path class="btn" d="M137 187 C137 187 127 187 127 187 C128 199 130 211 131 222 C135 211 136 199 137 187 Z"/>
+  <polyline class="lead" points="123,170 104,170"/>
+  <polyline class="lead" points="124,204 104,204"/>
+  <text class="txt" x="100" y="165" text-anchor="end">"forward"</text>
+  <text class="sub" x="100" y="181" text-anchor="end">XBUTTON2</text>
+  <text class="txt" x="100" y="222" text-anchor="end">"back"</text>
+  <text class="sub" x="100" y="238" text-anchor="end">XBUTTON1</text>
+  <text class="sub" x="100" y="252" text-anchor="end">remaps use a global mouse hook</text>
+  <text class="sub" x="100" y="268" text-anchor="end">(~µs per mouse event);</text>
+  <text class="sub" x="100" y="284" text-anchor="end">default = no hook, zero cost</text>
+  <circle class="rgb" cx="228" cy="300" r="24"/>
+  <path class="rgb" d="M228 284 C212 292 244 308 228 316"/>
+  <polyline class="lead" points="252,300 396,300"/>
+  <text class="txt" x="402" y="297">logo</text>
+  <text class="rgbt" x="402" y="313">RGB zone 0x04</text>
+  <text class="sub" x="330" y="420" text-anchor="middle">DPI-button remaps are hook-free:</text>
+  <text class="sub" x="330" y="436" text-anchor="middle">vendor codes in driver mode, pointer motion untouched</text>
+</svg>

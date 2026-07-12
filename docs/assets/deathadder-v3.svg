@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-104 -42 770 447" width="770" height="447" font-family="ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace" font-size="13">
+  <style>
+    svg { --fg: #6e7781; --rgb: #2da44e; --btn: #4a7fd4; }
+    @media (prefers-color-scheme: dark) {
+      svg { --fg: #9da7b3; --rgb: #3fb950; --btn: #6ca0f0; }
+    }
+    .body { stroke: var(--fg); fill: none; stroke-width: 1.6; }
+    .det  { stroke: var(--fg); fill: none; stroke-width: 1.1; }
+    .lead { stroke: var(--fg); fill: none; stroke-width: 1; opacity: .55; }
+    .txt  { fill: var(--fg); }
+    .sub  { fill: var(--fg); opacity: .72; font-size: 11px; }
+    .rgb  { stroke: var(--rgb); fill: none; stroke-width: 1.6; }
+    .rgbt { fill: var(--rgb); font-size: 11px; }
+    .btn  { stroke: var(--btn); fill: none; stroke-width: 1.6; }
+    .btnt { fill: var(--btn); font-size: 11px; }
+  </style>
+  <path class="body" d="M213 31 C189 34 167 41 148 50 C143 55 139 60 138 69 C140 95 142 120 145 140 C147 156 147 176 143 200 C138 227 132 260 133 294 C134 331 149 359 175 377 C191 388 209 393 230 393 C253 393 272 387 288 373 C311 353 323 324 325 291 C325 262 320 234 316 209 C312 185 312 164 314 141 C317 113 318 89 318 68 C318 59 314 54 309 50 C289 40 267 34 243 30 C237 31 232 33 228 36 C224 33 219 31 213 31 Z"/>
+  <path class="det" d="M216 -24 C221 -30 225 -28 229 -25 C233 -22 237 -22 241 -25"/>
+  <path class="det" d="M216 -18 C221 -23 225 -22 229 -19 C233 -15 237 -15 241 -19"/>
+  <polyline class="det" points="228,-18 228,-8"/>
+  <polyline class="det" points="220,-8 237,-8 237,-2 234,-2 234,3 238,3 238,8 234,8 234,13 238,13 238,19 219,19 219,13 222,13 222,8 219,8 219,3 222,3 222,-2 220,-2 220,-8"/>
+  <polyline class="det" points="222,-1 234,-1"/>
+  <polyline class="det" points="222,4 234,4"/>
+  <polyline class="det" points="222,10 234,10"/>
+  <polyline class="det" points="222,15 234,15"/>
+  <polyline class="det" points="228,132 228,209"/>
+  <path class="det" d="M138 69 C140 94 143 116 145 139 C148 159 147 178 143 200 C140 218 137 237 135 257"/>
+  <path class="det" d="M318 68 C316 94 315 118 313 141 C311 164 312 186 316 209 C318 228 321 246 323 265"/>
+  <polyline class="det" points="213,63 213,132"/>
+  <polyline class="det" points="243,63 243,132"/>
+  <polyline class="det" points="220,59 237,59"/>
+  <polyline class="det" points="220,133 237,133"/>
+  <path class="det" d="M133 295 C136 326 148 351 171 369 C187 381 207 388 229 388"/>
+  <path class="det" d="M229 388 C253 388 272 381 288 368 C309 350 320 323 323 293"/>
+  <text class="sub" x="180" y="78" text-anchor="middle">left</text>
+  <text class="sub" x="275" y="78" text-anchor="middle">right</text>
+  <rect class="det" x="213" y="63" width="30" height="70" rx="10"/>
+  <rect class="det" x="217" y="68" width="22" height="62" rx="8"/>
+  <polyline class="det" points="219,72 236,72"/>
+  <polyline class="det" points="218,80 237,80"/>
+  <polyline class="det" points="218,89 237,89"/>
+  <polyline class="det" points="218,97 237,97"/>
+  <polyline class="det" points="218,106 237,106"/>
+  <polyline class="det" points="218,114 237,114"/>
+  <polyline class="det" points="219,122 236,122"/>
+  <polyline class="lead" points="243,98 396,98"/>
+  <text class="txt" x="402" y="95">scroll wheel — middle click</text>
+  <text class="sub" x="402" y="111">no RGB zones on this model</text>
+  <text class="sub" x="402" y="130">no wheel DPI buttons — the DPI</text>
+  <text class="sub" x="402" y="146">button is on the underside; it cycles</text>
+  <text class="sub" x="402" y="162">onboard stages in firmware and</text>
+  <text class="sub" x="402" y="178">can't be remapped or listened to</text>
+  <path class="btn" d="M141 139 C144 138 147 140 148 144 C150 183 150 183 150 183 C150 189 147 192 143 193 C141 193 138 191 138 187 C138 146 138 146 138 146 C138 142 139 139 141 139 Z"/>
+  <path class="btn" d="M143 197 C146 197 148 199 148 204 C148 244 148 244 148 244 C148 249 145 253 141 253 C138 252 136 249 136 245 C137 204 137 204 137 204 C137 200 139 197 143 197 Z"/>
+  <polyline class="det" points="140,146 147,145"/>
+  <polyline class="det" points="138,204 147,202"/>
+  <polyline class="lead" points="138,166 116,166"/>
+  <polyline class="lead" points="136,225 116,225"/>
+  <text class="txt" x="112" y="162" text-anchor="end">"forward"</text>
+  <text class="sub" x="112" y="178" text-anchor="end">XBUTTON2</text>
+  <text class="txt" x="112" y="221" text-anchor="end">"back"</text>
+  <text class="sub" x="112" y="237" text-anchor="end">XBUTTON1</text>
+  <text class="sub" x="112" y="255" text-anchor="end">remaps use a global mouse hook</text>
+  <text class="sub" x="112" y="271" text-anchor="end">(~µs per mouse event);</text>
+  <text class="sub" x="112" y="287" text-anchor="end">default = no hook, zero cost</text>
+</svg>

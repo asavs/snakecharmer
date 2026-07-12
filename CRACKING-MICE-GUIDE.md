@@ -227,6 +227,9 @@ Run this exact sequence for any new mouse:
 7. If a feature's events are "invisible," **find which collection they surface on** and
    write a **self-logging listener** (step 5).
 8. **Persist** at login (step 6).
+9. **Button-map diagram:** draw the `DeviceSpec::diagram` shape data from the model's
+   official schematic — see [`docs/DRAWING-MICE-GUIDE.md`](docs/DRAWING-MICE-GUIDE.md)
+   for the full workflow (finding the schematic, drawing guidelines, the DSL, verification).
 
 ### Brand reality-check
 - **Razer:** 90-byte Feature report, XOR CRC, per-model transaction_id. As above.

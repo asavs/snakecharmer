@@ -37,11 +37,13 @@ Fill these in — they're the entire "crack", distilled:
 | `dpi_buttons` | `Some(DpiButtons { up: 0x__, down: 0x__ })` / `None` | does it have wheel DPI buttons, and what vendor codes do they emit in driver mode? |
 | `dpi_min` / `dpi_max` | `100` / `____` | the sensor's full range — **the UI must be actionable over all of it** |
 | `polling` | `PollingSpec { protocol: Classic\|Extended, rates: &[...] }` | which command family (OpenRazer `razer_chroma_misc_set_polling_rate` vs `..._rate2`) and which Hz values the hardware accepts |
+| `diagram` | `Diagram { width, height, shapes: &[...] }` | top-down button-map schematic as shape data, drawn using the model's official schematic or physical measurements. Copy the closest existing device's diagram and adjust — no artwork tools needed; the full workflow (drafting tips, the DSL, drawing recipe, verification) is [`docs/DRAWING-MICE-GUIDE.md`](../../docs/DRAWING-MICE-GUIDE.md). Shown in the settings window and rendered to `docs/assets/<device>.svg`. |
 
 ## Checklist
 
 - [ ] Added a `DeviceSpec` const and registered it in `SUPPORTED` (`crates/razer-proto/src/lib.rs`).
 - [ ] Added the device's row to `docs/SUPPORTED-DEVICES.md`.
+- [ ] Regenerated the diagram SVG (`cargo test -p razer-proto -- --ignored regenerate_diagram_svgs`) and committed `docs/assets/<device>.svg`; the Button maps section embeds it and links the model's official schematic (no bundled PNGs, no trademarked logo).
 - [ ] Added a per-device test (assert the transaction id and, if the range differs, the DPI bounds).
 - [ ] `cargo test --workspace` is green.
 - [ ] **No changes were needed** to `razer-hid` or the daemon. *(If you did have to touch them, say why here — it usually means a generic gap to lift into the shared layer, not device-specific code.)*
