@@ -26,6 +26,8 @@ razer-proto = { path = "crates/razer-proto" }
 razer-hid = { path = "crates/razer-hid" }
 platform = { path = "crates/platform" }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
 toml = "0.8"
 
 # Footprint-focused release profile (SPEC target: static exe <= 2 MB).

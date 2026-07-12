@@ -59,6 +59,17 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+impl Error {
+    /// Preserve a native OS error when hidapi exposes one; other variants remain typed
+    /// but deliberately do not invent a platform code.
+    pub fn native_error_code(&self) -> Option<i64> {
+        match self {
+            Self::Hid(hidapi::HidError::IoError { error }) => error.raw_os_error().map(i64::from),
+            _ => None,
+        }
+    }
+}
+
 impl From<hidapi::HidError> for Error {
     fn from(e: hidapi::HidError) -> Self {
         Error::Hid(e)

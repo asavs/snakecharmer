@@ -21,6 +21,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Graphics_GdiPlus",
     "Win32_Graphics_Dwm",
     "Win32_System_Registry",
+    "Win32_Storage_FileSystem",
     "Win32_UI_Controls",
     "Win32_UI_Controls_Dialogs",
 ] }

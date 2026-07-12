@@ -415,6 +415,8 @@ fn menu_action_for(id: u32) -> Option<MenuAction> {
 
 /// Run the daemon forever, restarting the device session on unplug/sleep errors.
 pub fn run(mut cfg: Config, log: Logger) -> ! {
+    let mut health = crate::health::HealthReporter::new();
+    health.starting(cfg.polling_rate);
     log.log(&format!(
         "Daemon starting. dpi={:?} up={:?} down={:?} lighting={:?} reassert={}s",
         cfg.dpi_xy(),
@@ -448,14 +450,19 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
     let mut prev_delay = Duration::ZERO; // no retry slept yet
     loop {
         let started = Instant::now();
-        let result = run_session(&mut cfg, &mut bindings, &log, &tx, &rx, &mut settings_open);
+        let result = run_session(
+            &mut cfg, &mut bindings, &log, &tx, &rx, &mut settings_open, &mut health,
+        );
         let delay = next_retry_delay(prev_delay, started.elapsed());
         match result {
             Ok(()) => log.log("Session ended cleanly; restarting."),
-            Err(e) => log.log(&format!(
-                "Session ended: {e}. Retrying in {}s (mouse unplugged/asleep?).",
-                delay.as_secs()
-            )),
+            Err(e) => {
+                log.log(&format!(
+                    "Session ended: {e}. Retrying in {}s (mouse unplugged/asleep?).",
+                    delay.as_secs()
+                ));
+                health.session_failed(&e, delay.as_secs() as u32);
+            }
         }
         thread::sleep(delay);
         prev_delay = delay;
@@ -488,10 +495,12 @@ fn run_session(
     tx: &Sender<Event>,
     rx: &Receiver<Event>,
     settings_open: &mut bool,
+    health: &mut crate::health::HealthReporter,
 ) -> Result<(), razer_hid::Error> {
     let api = razer_hid::open_api()?;
     let ctrl = Mouse::open_with(&api)?;
     let spec = ctrl.spec();
+    health.connected(spec.name, 0x1532, spec.product_id);
     log.log(&format!(
         "Opened {} (PID 0x{:04X}, txn 0x{:02X}; rgb={}, dpi_buttons={}).",
         spec.name,
@@ -606,8 +615,9 @@ fn run_session(
                 log.log("Settings window closed.");
             }
             Ok(Event::Menu(action)) => {
-                if handle_menu(action, &ctrl, cfg, bindings, log)? {
+                if handle_menu(action, &ctrl, cfg, bindings, log, health)? {
                     log.log("Quit selected; removing mouse hook and exiting.");
+                    health.stopped();
                     platform::mouse_hook::uninstall();
                     std::process::exit(0);
                 }
@@ -663,6 +673,7 @@ fn handle_menu(
     cfg: &mut Config,
     bindings: &mut Bindings,
     log: &Logger,
+    health: &mut crate::health::HealthReporter,
 ) -> Result<bool, razer_hid::Error> {
     match action {
         MenuAction::SetDpi(v) => {
@@ -676,12 +687,14 @@ fn handle_menu(
             let r = ctrl.set_polling_rate(hz)?;
             cfg.polling_rate = Some(hz);
             save_config(cfg, log);
+            health.polling_rate_changed(Some(hz));
             log.log(&format!("Settings: polling rate set to {r} Hz."));
         }
         MenuAction::SetPollingRate(None) => {
             // "keep": stop managing; leave whatever the hardware is set to.
             cfg.polling_rate = None;
             save_config(cfg, log);
+            health.polling_rate_changed(None);
             log.log("Settings: polling rate -> keep (unmanaged).");
         }
         MenuAction::Effect(spec) => {
