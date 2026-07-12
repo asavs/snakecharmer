@@ -46,6 +46,8 @@ Razer's official schematics (linked per device below) are used as a positional r
 Razer's official diagram: [DeathAdder Elite schematic](https://dl.razerzone.com/src/aag/2043-2-en-v2.png)
 (reference only, not bundled).
 
+*Provenance:* protocol ported from OpenRazer by a Claude Fable 5 agent.
+
 The two thumb buttons (`XBUTTON1`/`XBUTTON2`) are standard Windows buttons — remapping
 them is opt-in and uses the global hook (see the README's safety FAQ). The two DPI
 buttons emit private vendor codes (`0x20`/`0x21`) in driver mode; rebinding them is
@@ -58,6 +60,8 @@ free — nothing touches the pointer's motion path.
 Razer's official diagram: [DeathAdder V3 schematic](https://dl.razerzone.com/src2/6128/6128-2-en-v1.png)
 (reference only, not bundled; found via the model's
 [support page](https://mysupport.razer.com/app/answers/detail/a_id/6124/)).
+
+*Provenance:* protocol ported from OpenRazer by Claude Opus 4.8 (high).
 
 ## Not on the list?
 

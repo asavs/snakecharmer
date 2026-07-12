@@ -167,6 +167,16 @@ The platform layer never sees Razer vocabulary: the daemon maps `RgbZone`/`Butto
 generic `AccentA`/`AccentB` slots, and the window picks actual colors from the system
 palette. You never specify a color anywhere.
 
+### An alternative authoring path: SVG first
+
+You don't have to author DSL coordinates directly. A maintainer-validated alternative:
+draft the schematic as a plain SVG first — any capable model can do this (GPT-5.5-instant
+worked well) — following §2's construction order and keeping the line work original, then
+convert the SVG's paths into the DSL's shapes (`C` cubic beziers map 1-to-1 to `Path`
+curves, `<rect>`/`<polyline>` to `RoundRect`/`Polyline`). Iterating on a shape in an SVG
+viewer is often much easier than reasoning about raw coordinates; §5.0 has the scaling
+formulas for translating the finished SVG onto the standard canvas.
+
 ---
 
 ## 5. How to actually draw

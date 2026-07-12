@@ -15,6 +15,7 @@ flag it in the PR and we'll pull it up into the shared layer.
 - **Model:** <!-- e.g. Razer DeathAdder V2 -->
 - **USB id:** `VID 0x1532 / PID 0x____`
 - **How I read the PID:** <!-- Device Manager / `Get-PnpDevice` / lsusb -->
+- **Agent/model used (for the track record):** <!-- optional — e.g. Claude Opus 4.8 (high); helps future contributors gauge what capability level suffices -->
 
 ## Protocol source
 

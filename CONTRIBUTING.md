@@ -25,6 +25,9 @@ Two kinds of contributions are welcome:
    The [`reference/`](reference/) Python toolkit is the runnable version of exactly this
    method — the fastest way to poke an unknown device and confirm its protocol before you
    write any Rust.
+   The guide's track record so far — models known to have completed a crack end-to-end:
+   Claude Fable 5 (DeathAdder Elite), Claude Opus 4.8 high (DeathAdder V3) — so you know
+   what capability level suffices.
 3. **Have it produce a protocol module + byte-exact tests** — mirroring `crates/razer-proto`:
    pure, no-I/O report building with unit tests that assert the exact bytes/CRC against the
    FOSS reference (see the `*_matches_openrazer` tests for the pattern).
