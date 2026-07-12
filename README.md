@@ -51,6 +51,7 @@ directly over Win32 HID and then gets out of the way.
 | | Razer Synapse | Snakecharmer | Δ |
 |---|---|---|---:|
 | Processes | Razer Synapse 3<br>Razer Central<br>Razer Synapse Service Process<br>Razer Synapse Service<br>RazerCentralService<br>embedded Chromium browser (CefSharp) | `snakecharmer.exe`<br><sub>`crt-static`, no runtime deps</sub> | **6 → 1** |
+| Kernel drivers | `RZCONTROL` + `RZVIRTUAL` virtual device drivers<br><sub>observed still registered after uninstalling Synapse</sub> | none — userland HID only | **2 → 0** |
 | On-disk size | 500 MB<br><sub>Razer's published minimum</sub> | 0.43 MB (measured)<br><sub>single static exe</sub> | **~1,160×** |
 | Idle RAM | ~558 MB (measured) | 17 MB (measured)<br><sub>2.5 MB private working set</sub> | **~32×** |
 | Idle CPU | ≈ 1 CPU·h/day  | ≈ 0.06 CPU·h/day (measured)<br><sub>blocking HID reads, no poll loop</sub> | **~17×** |
