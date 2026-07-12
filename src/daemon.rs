@@ -416,7 +416,9 @@ fn menu_action_for(id: u32) -> Option<MenuAction> {
 /// Run the daemon forever, restarting the device session on unplug/sleep errors.
 pub fn run(mut cfg: Config, log: Logger) -> ! {
     let mut health = crate::health::HealthReporter::new();
-    health.starting(cfg.polling_rate);
+    if let Err(error) = health.starting(cfg.polling_rate) {
+        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+    }
     log.log(&format!(
         "Daemon starting. dpi={:?} up={:?} down={:?} lighting={:?} reassert={}s",
         cfg.dpi_xy(),
@@ -461,7 +463,9 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
                     "Session ended: {e}. Retrying in {}s (mouse unplugged/asleep?).",
                     delay.as_secs()
                 ));
-                health.session_failed(&e, delay.as_secs() as u32);
+                if let Err(error) = health.session_failed(&e, delay.as_secs() as u32) {
+                    log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+                }
             }
         }
         thread::sleep(delay);
@@ -500,7 +504,9 @@ fn run_session(
     let api = razer_hid::open_api()?;
     let ctrl = Mouse::open_with(&api)?;
     let spec = ctrl.spec();
-    health.connected(spec.name, 0x1532, spec.product_id);
+    if let Err(error) = health.connected(spec.name, 0x1532, spec.product_id) {
+        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+    }
     log.log(&format!(
         "Opened {} (PID 0x{:04X}, txn 0x{:02X}; rgb={}, dpi_buttons={}).",
         spec.name,
@@ -597,7 +603,10 @@ fn run_session(
     let mut last_fire: Option<(u8, Instant)> = None;
 
     loop {
-        match rx.recv_timeout(tick) {
+        let refresh_due_in = health.refresh_due_in();
+        let wait = tick.min(refresh_due_in);
+        let woke_for_refresh = refresh_due_in <= tick;
+        match rx.recv_timeout(wait) {
             Ok(Event::Button(code)) => {
                 handle_code(code, spec.dpi_buttons, bindings, log, &mut last_fire)
             }
@@ -617,7 +626,9 @@ fn run_session(
             Ok(Event::Menu(action)) => {
                 if handle_menu(action, &ctrl, cfg, bindings, log, health)? {
                     log.log("Quit selected; removing mouse hook and exiting.");
-                    health.stopped();
+                    if let Err(error) = health.stopped() {
+                        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+                    }
                     platform::mouse_hook::uninstall();
                     std::process::exit(0);
                 }
@@ -629,6 +640,12 @@ fn run_session(
                 }
             }
             Err(RecvTimeoutError::Timeout) => {
+                if woke_for_refresh {
+                    if let Err(error) = health.refresh_if_due() {
+                        log.log(&format!("WARN could not refresh PC Vitals capsule: {error}"));
+                    }
+                    continue;
+                }
                 if last_reassert.elapsed() >= reassert_interval {
                     reassert(&ctrl, cfg, log)?;
                     last_reassert = Instant::now();
@@ -641,6 +658,9 @@ fn run_session(
             Err(RecvTimeoutError::Disconnected) => {
                 return Err(razer_hid::Error::Verify("event channel closed".into()))
             }
+        }
+        if let Err(error) = health.refresh_if_due() {
+            log.log(&format!("WARN could not refresh PC Vitals capsule: {error}"));
         }
     }
 }
@@ -687,14 +707,18 @@ fn handle_menu(
             let r = ctrl.set_polling_rate(hz)?;
             cfg.polling_rate = Some(hz);
             save_config(cfg, log);
-            health.polling_rate_changed(Some(hz));
+            if let Err(error) = health.polling_rate_changed(Some(hz)) {
+                log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+            }
             log.log(&format!("Settings: polling rate set to {r} Hz."));
         }
         MenuAction::SetPollingRate(None) => {
             // "keep": stop managing; leave whatever the hardware is set to.
             cfg.polling_rate = None;
             save_config(cfg, log);
-            health.polling_rate_changed(None);
+            if let Err(error) = health.polling_rate_changed(None) {
+                log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+            }
             log.log("Settings: polling rate -> keep (unmanaged).");
         }
         MenuAction::Effect(spec) => {

@@ -143,13 +143,16 @@ reassert_interval_secs = 60
 ### PC Vitals health capsule
 
 Snakecharmer publishes a small event-driven operational capsule at
-`%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`. It updates only when the daemon
+`%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`. It updates when the daemon
 starts, connects, loses or recovers a device session, changes polling configuration, or
-quits; it adds no polling thread. The capsule contains bounded counters, typed incident
+quits. A 45-minute lease refresh piggybacks on the existing session wait loop, so it adds
+no polling thread and performs no extra device I/O. The capsule contains bounded counters, typed incident
 codes, retry delay, configured polling rate, and a machine-salted opaque device ID. It
 contains no paths, usernames, commands, window titles, raw logs, hardware serials, or
 user input, and it cannot grant PC Vitals authority to change health severity, recommend
-a restart, or execute an action.
+a restart, or execute an action. Recovered incident episodes are retained for at most 24
+hours and keep immutable IDs and start times; the public capsule is output, not trusted
+producer memory.
 
 ## `charmctl` — command-line control
 
