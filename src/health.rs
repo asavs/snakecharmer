@@ -13,6 +13,7 @@ const SCHEMA_VERSION: &str = "1.0";
 const PROVIDER_ID: &str = "snakecharmer";
 const PROVIDER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const MAX_CAPSULE_BYTES: usize = 32 * 1024;
+const MAX_SUBJECTS: usize = 8;
 const MAX_INCIDENTS: usize = 8;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(45 * 60);
 const INCIDENT_RETENTION_MS: u64 = 24 * 60 * 60 * 1000;
@@ -105,6 +106,7 @@ pub struct HealthReporter {
     sequence: u64,
     status: ProviderStatus,
     subject: Option<Subject>,
+    historical_subjects: Vec<Subject>,
     polling_rate_hz: Option<u16>,
     session_restarts_total: u64,
     consecutive_failures: u32,
@@ -139,6 +141,7 @@ impl HealthReporter {
             sequence: 0,
             status: ProviderStatus::Unknown,
             subject: None,
+            historical_subjects: Vec::new(),
             polling_rate_hz: None,
             session_restarts_total: 0,
             consecutive_failures: 0,
@@ -164,6 +167,22 @@ impl HealthReporter {
     ) -> std::io::Result<()> {
         let now = unix_time_ms();
         let subject_id = subject_id(&self.salt, vendor_id, product_id, product_name);
+        if let Some(previous) = self.subject.take() {
+            if previous.subject_id != subject_id
+                && self
+                    .incidents
+                    .iter()
+                    .any(|incident| incident.subject_id == previous.subject_id)
+                && !self
+                    .historical_subjects
+                    .iter()
+                    .any(|subject| subject.subject_id == previous.subject_id)
+            {
+                self.historical_subjects.push(previous);
+            }
+        }
+        self.historical_subjects
+            .retain(|subject| subject.subject_id != subject_id);
         self.subject = Some(Subject {
             subject_id: subject_id.clone(),
             kind: "hid_device".to_string(),
@@ -290,6 +309,22 @@ impl HealthReporter {
                     generated_at_unix_ms.saturating_sub(recovered) <= INCIDENT_RETENTION_MS
                 })
         });
+        let current_subject_id = self
+            .subject
+            .as_ref()
+            .map(|subject| subject.subject_id.as_str());
+        self.historical_subjects.retain(|subject| {
+            Some(subject.subject_id.as_str()) != current_subject_id
+                && self
+                    .incidents
+                    .iter()
+                    .any(|incident| incident.subject_id == subject.subject_id)
+        });
+        while self.historical_subjects.len() + usize::from(self.subject.is_some()) > MAX_SUBJECTS {
+            let removed_subject_id = self.historical_subjects.remove(0).subject_id;
+            self.incidents
+                .retain(|incident| incident.subject_id != removed_subject_id);
+        }
         let subject_id = self
             .subject
             .as_ref()
@@ -330,6 +365,8 @@ impl HealthReporter {
                 window_seconds: None,
             });
         }
+        let mut subjects = self.historical_subjects.clone();
+        subjects.extend(self.subject.clone());
         let capsule = Capsule {
             schema_version: SCHEMA_VERSION.to_string(),
             provider_id: PROVIDER_ID.to_string(),
@@ -350,7 +387,7 @@ impl HealthReporter {
                 may_recommend_restart: false,
                 may_execute_actions: false,
             },
-            subjects: self.subject.clone().into_iter().collect(),
+            subjects,
             metrics,
             recent_incidents: self.incidents.clone(),
         };
@@ -596,6 +633,32 @@ mod tests {
             .unwrap();
         assert_eq!(reporter.incidents.len(), 2);
         assert_ne!(reporter.incidents[1].incident_id, first_id);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn switching_devices_retains_the_subject_cited_by_prior_incidents() {
+        let root = temp_root("subject-citations");
+        let path = root.join("providers").join("snakecharmer.json");
+        let mut reporter = HealthReporter::with_paths(path.clone(), root.join("salt"));
+        reporter
+            .connected("Razer Viper V3", 0x1532, 0x00b2)
+            .unwrap();
+        reporter
+            .session_failed(&razer_hid::Error::DeviceNotFound, 3)
+            .unwrap();
+        reporter
+            .connected("DeathAdder Elite", 0x1532, 0x005c)
+            .unwrap();
+
+        let capsule: Capsule = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(capsule.subjects.len(), 2);
+        assert!(capsule.recent_incidents.iter().all(|incident| {
+            capsule
+                .subjects
+                .iter()
+                .any(|subject| subject.subject_id == incident.subject_id)
+        }));
         let _ = fs::remove_dir_all(root);
     }
 }
