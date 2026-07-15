@@ -61,6 +61,11 @@ Razer's official diagram: [DeathAdder V3 schematic](https://dl.razerzone.com/src
 (reference only, not bundled; found via the model's
 [support page](https://mysupport.razer.com/app/answers/detail/a_id/6124/)).
 
+The V3 has no lighting and no wheel DPI buttons. Its single DPI button is on the
+underside: it cycles onboard DPI stages in firmware and can't be remapped or
+listened to, so Snakecharmer never touches it (driver mode and the vendor-code
+listeners are skipped entirely on this model).
+
 *Provenance:* protocol ported from OpenRazer by Claude Opus 4.8 (high).
 
 ## Not on the list?

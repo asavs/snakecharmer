@@ -12,7 +12,9 @@
 //! themselves via their index-0 entries — so screenshots are representative).
 
 use platform::diagram::{Anchor, CalloutSlot, Diagram, Role, Shape};
-use platform::settings::{self, ActionCombo, DpiButtonsInit, LightingInit, SettingsEvent, SettingsInit};
+use platform::settings::{
+    self, ActionCombo, DpiButtonsInit, LightingZoneInit, SettingsEvent, SettingsInit,
+};
 
 /// A caption-less callout, as the daemon emits them for the window (the
 /// dropdown mounts at the anchor; its index-0 entry names the button).
@@ -64,8 +66,8 @@ fn diagram_full() -> Diagram {
             Shape::Polyline { role: Role::Detail, points: vec![(220, 108), (236, 108)] },
             Shape::Polyline { role: Role::Detail, points: vec![(220, 118), (236, 118)] },
             Shape::Polyline { role: Role::Lead, points: vec![(241, 96), (396, 96)] },
-            Shape::Text { role: Role::Label, at: (402, 93), anchor: Anchor::Start, text: "scroll wheel — middle click".into() },
-            Shape::Text { role: Role::AccentA, at: (402, 109), anchor: Anchor::Start, text: "RGB zone 0x01".into() },
+            callout(CalloutSlot::Wheel, (402, 93), Anchor::Start),
+            Shape::Text { role: Role::AccentA, at: (402, 128), anchor: Anchor::Start, text: "RGB zone 0x01".into() },
             // dpi_up (front, nearer the wheel) and dpi_down (rear) — center strip
             Shape::RoundRect { role: Role::AccentB, x: 218, y: 134, w: 20, h: 15, r: 5 },
             Shape::Polyline { role: Role::Lead, points: vec![(242, 142), (396, 142)] },
@@ -80,10 +82,11 @@ fn diagram_full() -> Diagram {
             Shape::Polyline { role: Role::Lead, points: vec![(116, 238), (104, 238)] },
             callout(CalloutSlot::ThumbForward, (100, 168), Anchor::End),
             callout(CalloutSlot::ThumbBack, (100, 240), Anchor::End),
-            // hook cost, right at the point of decision (under the thumb dropdowns)
-            Shape::Text { role: Role::Note, at: (100, 274), anchor: Anchor::End, text: "remaps use a global mouse hook".into() },
-            Shape::Text { role: Role::Note, at: (100, 290), anchor: Anchor::End, text: "(~µs per mouse event);".into() },
-            Shape::Text { role: Role::Note, at: (100, 306), anchor: Anchor::End, text: "default = no hook, zero cost".into() },
+            // hook cost, right at the point of decision (under the thumb
+            // dropdowns) — benefit first, then the cost detail
+            Shape::Text { role: Role::Note, at: (100, 274), anchor: Anchor::End, text: "default = no hook, zero cost".into() },
+            Shape::Text { role: Role::Note, at: (100, 290), anchor: Anchor::End, text: "remaps use a global mouse hook".into() },
+            Shape::Text { role: Role::Note, at: (100, 306), anchor: Anchor::End, text: "(~µs per mouse event)".into() },
             // logo LED on the palm (abstract marker)
             Shape::Circle { role: Role::AccentA, cx: 228, cy: 300, r: 16 },
             Shape::Path {
@@ -222,13 +225,8 @@ fn diagram_minimal() -> Diagram {
             Shape::Polyline { role: Role::Detail, points: vec![(218, 106), (237, 106)] },
             Shape::Polyline { role: Role::Detail, points: vec![(218, 114), (237, 114)] },
             Shape::Polyline { role: Role::Detail, points: vec![(219, 122), (236, 122)] },
-            Shape::Polyline { role: Role::Lead, points: vec![(243, 98), (396, 98)] },
-            Shape::Text { role: Role::Label, at: (402, 95), anchor: Anchor::Start, text: "scroll wheel — middle click".into() },
-            Shape::Text { role: Role::Note, at: (402, 111), anchor: Anchor::Start, text: "no RGB zones on this model".into() },
-            Shape::Text { role: Role::Note, at: (402, 130), anchor: Anchor::Start, text: "no wheel DPI buttons — the DPI".into() },
-            Shape::Text { role: Role::Note, at: (402, 146), anchor: Anchor::Start, text: "button is on the underside; it cycles".into() },
-            Shape::Text { role: Role::Note, at: (402, 162), anchor: Anchor::Start, text: "onboard stages in firmware and".into() },
-            Shape::Text { role: Role::Note, at: (402, 178), anchor: Anchor::Start, text: "can't be remapped or listened to".into() },
+            Shape::Polyline { role: Role::Lead, points: vec![(243, 98), (332, 98)] },
+            callout(CalloutSlot::Wheel, (348, 95), Anchor::Start),
             // thumb buttons (drawn as bumps sticking out of the left outline)
             Shape::Path {
                 role: Role::AccentB,
@@ -258,14 +256,15 @@ fn diagram_minimal() -> Diagram {
             },
             Shape::Polyline { role: Role::Detail, points: vec![(140, 146), (147, 145)] },
             Shape::Polyline { role: Role::Detail, points: vec![(138, 204), (147, 202)] },
-            Shape::Polyline { role: Role::Lead, points: vec![(138, 166), (116, 166)] },
-            Shape::Polyline { role: Role::Lead, points: vec![(136, 225), (116, 225)] },
-            callout(CalloutSlot::ThumbForward, (112, 162), Anchor::End),
-            callout(CalloutSlot::ThumbBack, (112, 221), Anchor::End),
-            // hook cost, right at the point of decision (under the thumb dropdowns)
-            Shape::Text { role: Role::Note, at: (112, 255), anchor: Anchor::End, text: "remaps use a global mouse hook".into() },
-            Shape::Text { role: Role::Note, at: (112, 271), anchor: Anchor::End, text: "(~µs per mouse event);".into() },
-            Shape::Text { role: Role::Note, at: (112, 287), anchor: Anchor::End, text: "default = no hook, zero cost".into() },
+            Shape::Polyline { role: Role::Lead, points: vec![(138, 166), (126, 166)] },
+            Shape::Polyline { role: Role::Lead, points: vec![(136, 225), (126, 225)] },
+            callout(CalloutSlot::ThumbForward, (122, 162), Anchor::End),
+            callout(CalloutSlot::ThumbBack, (122, 221), Anchor::End),
+            // hook cost, right at the point of decision (under the thumb
+            // dropdowns) — benefit first, then the cost detail
+            Shape::Text { role: Role::Note, at: (122, 255), anchor: Anchor::End, text: "default = no hook, zero cost".into() },
+            Shape::Text { role: Role::Note, at: (122, 271), anchor: Anchor::End, text: "remaps use a global mouse hook".into() },
+            Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(~µs per mouse event)".into() },
         ],
     }
 }
@@ -315,13 +314,15 @@ fn main() {
             dpi_min: 100,
             dpi_max: 30000,
             polling_labels: strings(&[
-                "keep", "125 Hz", "500 Hz", "1000 Hz", "2000 Hz", "4000 Hz", "8000 Hz",
+                "keep — leave as set", "125 Hz", "500 Hz", "1000 Hz", "2000 Hz", "4000 Hz",
+                "8000 Hz",
             ]),
             polling_index: 3,
             dpi_buttons: None,
             thumb_back: combo("\u{2190} Back (default)", 3),
             thumb_forward: combo("\u{2192} Forward (default)", 0),
-            lighting: None,
+            wheel: ActionCombo { labels: strings(&["Middle click (default)"]), index: 0 },
+            lighting: vec![],
         }
     } else {
         // An Elite-like device: everything on.
@@ -331,7 +332,7 @@ fn main() {
             dpi: 1800,
             dpi_min: 100,
             dpi_max: 16000,
-            polling_labels: strings(&["keep", "125 Hz", "500 Hz", "1000 Hz"]),
+            polling_labels: strings(&["keep — leave as set", "125 Hz", "500 Hz", "1000 Hz"]),
             polling_index: 3,
             dpi_buttons: Some(DpiButtonsInit {
                 up: combo("Front DPI — unbound", 1),
@@ -339,11 +340,22 @@ fn main() {
             }),
             thumb_back: combo("\u{2190} Back (default)", 3),
             thumb_forward: combo("\u{2192} Forward (default)", 0),
-            lighting: Some(LightingInit {
-                effect_labels: strings(&["keep", "static", "breathing", "spectrum", "off"]),
-                effect_index: 1,
-                color: (0x00, 0xC8, 0x40),
-            }),
+            wheel: ActionCombo { labels: strings(&["Middle click (default)"]), index: 0 },
+            // Two zones (wheel + logo), independently colored like the Elite.
+            lighting: vec![
+                LightingZoneInit {
+                    label: "Wheel".to_string(),
+                    effect_labels: strings(&["keep", "static", "breathing", "spectrum", "off"]),
+                    effect_index: 1,
+                    color: (0x00, 0xC8, 0x40),
+                },
+                LightingZoneInit {
+                    label: "Logo".to_string(),
+                    effect_labels: strings(&["keep", "static", "breathing", "spectrum", "off"]),
+                    effect_index: 2,
+                    color: (0x40, 0x60, 0xE0),
+                },
+            ],
         }
     };
 

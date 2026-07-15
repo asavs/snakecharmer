@@ -9,6 +9,7 @@
 //! safe Rust and never touches Win32 directly.
 
 pub mod diagram;
+pub mod icon;
 pub mod mouse_hook;
 pub mod settings;
 pub mod tray;

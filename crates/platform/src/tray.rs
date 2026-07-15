@@ -17,12 +17,12 @@ use windows_sys::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
-    GetCursorPos, GetMessageW, GetWindowLongPtrW, LoadIconW, PostMessageW, PostQuitMessage,
-    RegisterClassW, SetForegroundWindow, SetWindowLongPtrW, TrackPopupMenu, TranslateMessage,
-    CW_USEDEFAULT, GWLP_USERDATA, HMENU, IDI_APPLICATION, MF_POPUP, MF_SEPARATOR, MF_STRING, MSG,
-    TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_COMMAND, WM_DESTROY,
-    WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyMenu,
+    DispatchMessageW, GetCursorPos, GetMessageW, GetWindowLongPtrW, LoadIconW, PostMessageW,
+    PostQuitMessage, RegisterClassW, SetForegroundWindow, SetWindowLongPtrW, TrackPopupMenu,
+    TranslateMessage, CW_USEDEFAULT, GWLP_USERDATA, HICON, HMENU, IDI_APPLICATION, MF_POPUP,
+    MF_SEPARATOR, MF_STRING, MSG, TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_COMMAND,
+    WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 const TRAY_CALLBACK_MSG: u32 = WM_APP + 1;
@@ -30,8 +30,10 @@ const TRAY_CALLBACK_MSG: u32 = WM_APP + 1;
 /// the hook can only be (un)installed on this message-pumping thread.
 const HOOK_SYNC_MSG: u32 = WM_APP + 2;
 
-/// Command id the callback receives when the tray icon is double-clicked.
-pub const TRAY_DOUBLE_CLICK: u32 = 0xFFFF_FFFF;
+/// Command id the callback receives when the tray icon is activated by a plain
+/// left-click or a double-click (both open settings; right-click still shows
+/// the menu).
+pub const TRAY_CLICK: u32 = 0xFFFF_FFFF;
 
 /// The tray window handle (0 = tray not running), for cross-thread posts.
 static TRAY_HWND: AtomicIsize = AtomicIsize::new(0);
@@ -72,6 +74,9 @@ impl MenuItem {
 /// Boxed state stashed in the window's user-data pointer.
 struct TrayState {
     on_command: Box<dyn Fn(u32)>,
+    /// The runtime-drawn app icon (freed with `DestroyIcon` on `WM_DESTROY`);
+    /// null if creation fell back to the stock icon.
+    hicon: HICON,
 }
 
 /// The live menu spec. The popup HMENU is rebuilt from this on every
@@ -99,8 +104,19 @@ fn to_wide(s: &str) -> Vec<u16> {
 /// return while the tray lives (call it on a dedicated thread).
 pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'static) {
     set_menu(menu);
+
+    // Draw the app icon with GDI+ (kept up for the tray's lifetime; the HICON
+    // is independent of GDI+ once created, but starting/stopping around it is
+    // simplest here). Falls back to the stock application icon on failure.
+    // SAFETY: matched startup/shutdown; the icon is drawn into an owned bitmap.
+    let (gdiplus, hicon) = unsafe {
+        let token = crate::diagram::startup();
+        (token, crate::icon::create_app_icon())
+    };
+
     let state = Box::new(TrayState {
         on_command: Box::new(on_command),
+        hicon,
     });
 
     // SAFETY: standard Win32 window-class registration + hidden window creation.
@@ -143,15 +159,17 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(state) as isize);
         TRAY_HWND.store(hwnd as isize, Ordering::SeqCst);
 
-        // Add the notification-area icon.
-        let hicon = LoadIconW(std::ptr::null_mut(), IDI_APPLICATION);
+        // Add the notification-area icon (our drawn mark, or the stock icon if
+        // drawing failed).
+        let tray_icon =
+            if hicon.is_null() { LoadIconW(std::ptr::null_mut(), IDI_APPLICATION) } else { hicon };
         let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
         nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
         nid.hWnd = hwnd;
         nid.uID = 1;
         nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         nid.uCallbackMessage = TRAY_CALLBACK_MSG;
-        nid.hIcon = hicon;
+        nid.hIcon = tray_icon;
         let tip = to_wide(tooltip);
         let n = tip.len().min(nid.szTip.len());
         nid.szTip[..n].copy_from_slice(&tip[..n]);
@@ -172,6 +190,7 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
 
         TRAY_HWND.store(0, Ordering::SeqCst);
         crate::mouse_hook::uninstall();
+        crate::diagram::shutdown(gdiplus);
     }
 }
 
@@ -213,9 +232,10 @@ unsafe extern "system" fn wnd_proc(
             // Low word of lParam is the mouse event on the icon.
             match lparam as u32 {
                 WM_RBUTTONUP => show_context_menu(hwnd),
-                WM_LBUTTONDBLCLK => {
+                // A single left-click or a double-click opens settings.
+                WM_LBUTTONUP | WM_LBUTTONDBLCLK => {
                     if let Some(state) = state_ref(hwnd) {
-                        (state.on_command)(TRAY_DOUBLE_CLICK);
+                        (state.on_command)(TRAY_CLICK);
                     }
                 }
                 _ => {}
@@ -237,10 +257,14 @@ unsafe extern "system" fn wnd_proc(
             nid.hWnd = hwnd;
             nid.uID = 1;
             Shell_NotifyIconW(NIM_DELETE, &nid);
-            // Reclaim and drop the state box.
+            // Reclaim and drop the state box, freeing the drawn icon.
             let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut TrayState;
             if !ptr.is_null() {
-                drop(Box::from_raw(ptr));
+                let state = Box::from_raw(ptr);
+                if !state.hicon.is_null() {
+                    DestroyIcon(state.hicon);
+                }
+                drop(state);
             }
             PostQuitMessage(0);
             0

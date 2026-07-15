@@ -30,9 +30,10 @@ pub enum MenuAction {
     SetDownAction(String),
     SetThumbBack(String),
     SetThumbForward(String),
-    SetEffectKind(String),
-    SetColor(Rgb),
-    Apply,
+    /// Set one lighting zone's effect kind (zone = a `razer_proto::led` id).
+    SetZoneEffectKind(u8, String),
+    /// Set one lighting zone's color (zone = a `razer_proto::led` id).
+    SetZoneColor(u8, Rgb),
     Save,
     OpenSettings,
     SettingsClosed,
@@ -102,7 +103,7 @@ fn apply_thumb_hook(cfg: &Config, log: &Logger) {
 /// Polling dropdown labels ("keep" + the device's supported rates) and the
 /// selected index matching the config (`None` -> "keep").
 fn polling_options(cfg: &Config, spec: &DeviceSpec) -> (Vec<String>, usize) {
-    let mut labels = vec!["keep".to_string()];
+    let mut labels = vec!["keep — leave as set".to_string()];
     labels.extend(spec.polling.rates.iter().map(|hz| format!("{hz} Hz")));
     let idx = cfg
         .polling_rate
@@ -111,12 +112,11 @@ fn polling_options(cfg: &Config, spec: &DeviceSpec) -> (Vec<String>, usize) {
     (labels, idx)
 }
 
-fn effect_options(cfg: &Config) -> (Vec<String>, usize) {
+/// Effect dropdown labels and the selected index for one zone's effective
+/// lighting kind (its config override, else the device-wide setting).
+fn effect_options(kind: &str) -> (Vec<String>, usize) {
     let labels: Vec<String> = EFFECT_PRESETS.iter().map(|s| s.to_string()).collect();
-    let idx = labels
-        .iter()
-        .position(|l| l.eq_ignore_ascii_case(&cfg.lighting))
-        .unwrap_or(0);
+    let idx = labels.iter().position(|l| l.eq_ignore_ascii_case(kind)).unwrap_or(0);
     (labels, idx)
 }
 
@@ -165,6 +165,7 @@ fn to_platform_diagram(d: &razer_proto::diagram::Diagram) -> platform::diagram::
                     rd::CalloutSlot::DpiDown => pd::CalloutSlot::DpiDown,
                     rd::CalloutSlot::ThumbBack => pd::CalloutSlot::ThumbBack,
                     rd::CalloutSlot::ThumbForward => pd::CalloutSlot::ThumbForward,
+                    rd::CalloutSlot::Wheel => pd::CalloutSlot::Wheel,
                 };
                 // The window's dropdowns are self-identifying (index 0 names
                 // the button — see combo_options), so the callout captions
@@ -202,9 +203,24 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
         combo_options(&cfg.thumb_back, "\u{2190} Back (default)");
     let (fwd_labels, fwd_values, fwd_index) =
         combo_options(&cfg.thumb_forward, "\u{2192} Forward (default)");
-    let (effect_labels, effect_index) = effect_options(cfg);
     let (polling_labels, polling_index) = polling_options(cfg, &spec);
-    let color = Rgb::parse_hex(&cfg.color).unwrap_or(Rgb::new(0, 0xFF, 0));
+    // One lighting row per zone (wheel, logo, ...), each seeded with that
+    // zone's effective effect + color (override, else the device-wide value).
+    let lighting: Vec<platform::settings::LightingZoneInit> = spec
+        .rgb_zones
+        .iter()
+        .map(|&zone| {
+            let name = razer_proto::led::name(zone);
+            let (effect_labels, effect_index) = effect_options(cfg.zone_lighting(name));
+            let color = Rgb::parse_hex(cfg.zone_color(name)).unwrap_or(Rgb::new(0, 0xFF, 0));
+            platform::settings::LightingZoneInit {
+                label: razer_proto::led::label(zone).to_string(),
+                effect_labels,
+                effect_index,
+                color: (color.r, color.g, color.b),
+            }
+        })
+        .collect();
     let init = platform::settings::SettingsInit {
         device_name: spec.name.to_string(),
         diagram: Some(to_platform_diagram(&spec.diagram)),
@@ -219,15 +235,25 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
         }),
         thumb_back: ActionCombo { labels: back_labels, index: back_index },
         thumb_forward: ActionCombo { labels: fwd_labels, index: fwd_index },
-        lighting: spec.has_rgb().then(|| platform::settings::LightingInit {
-            effect_labels: effect_labels.clone(),
-            effect_index,
-            color: (color.r, color.g, color.b),
-        }),
+        // Scroll-wheel remap is scaffolded, not implemented: a single identity
+        // entry, mounted disabled by the window. No config key, no events.
+        wheel: ActionCombo { labels: vec!["Middle click (default)".to_string()], index: 0 },
+        lighting,
     };
     let tx = tx.clone();
     thread::spawn(move || {
         use platform::settings::SettingsEvent as SE;
+        // Clear the daemon's `settings_open` latch when this thread ends, on a
+        // normal return *or* a panic during window construction. Without this,
+        // any failure to complete `open` would leave the latch stuck `true`
+        // and silently swallow every later "open settings" click.
+        struct CloseGuard(Sender<Event>);
+        impl Drop for CloseGuard {
+            fn drop(&mut self) {
+                let _ = self.0.send(Event::Menu(MenuAction::SettingsClosed));
+            }
+        }
+        let _close_guard = CloseGuard(tx.clone());
         let tx_ev = tx.clone();
         platform::settings::open(init, move |ev| {
             let cmd = match ev {
@@ -251,17 +277,24 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
                 SE::ThumbForward(i) => {
                     fwd_values.get(i).map(|s| MenuAction::SetThumbForward(s.clone()))
                 }
-                SE::Effect(i) => effect_labels.get(i).map(|s| MenuAction::SetEffectKind(s.clone())),
-                SE::Color(r, g, b) => Some(MenuAction::SetColor(Rgb::new(r, g, b))),
-                SE::Apply => Some(MenuAction::Apply),
+                // Lighting events carry the zone's row index = its position
+                // in the spec's rgb_zones (the rows were built in that order).
+                SE::Effect(zi, i) => spec.rgb_zones.get(zi).and_then(|&zone| {
+                    EFFECT_PRESETS
+                        .get(i)
+                        .map(|kind| MenuAction::SetZoneEffectKind(zone, kind.to_string()))
+                }),
+                SE::Color(zi, r, g, b) => spec
+                    .rgb_zones
+                    .get(zi)
+                    .map(|&zone| MenuAction::SetZoneColor(zone, Rgb::new(r, g, b))),
                 SE::Save => Some(MenuAction::Save),
             };
             if let Some(c) = cmd {
                 let _ = tx_ev.send(Event::Menu(c));
             }
         });
-        // Window closed.
-        let _ = tx.send(Event::Menu(MenuAction::SettingsClosed));
+        // `_close_guard` sends SettingsClosed as this thread unwinds (see above).
     });
 }
 
@@ -290,7 +323,7 @@ impl Bindings {
 mod menu_id {
     /// DPI menu items encode their value in the id: `DPI_FLAG | dpi`. DPI fits
     /// in a u16, so the encoded range (0x1_0000..0x2_0000) can't collide with
-    /// the small fixed ids below (and is checked before `TRAY_DOUBLE_CLICK`).
+    /// the small fixed ids below (and is checked before `TRAY_CLICK`).
     pub const DPI_FLAG: u32 = 0x1_0000;
 
     pub const STATIC_RED: u32 = 30;
@@ -379,7 +412,7 @@ fn build_menu_spec(spec: Option<&DeviceSpec>) -> Vec<platform::tray::MenuItem> {
 
 fn menu_action_for(id: u32) -> Option<MenuAction> {
     use menu_id::*;
-    // Value-encoded DPI ids first (an exact range check, so TRAY_DOUBLE_CLICK
+    // Value-encoded DPI ids first (an exact range check, so TRAY_CLICK
     // — which also has the flag bit set — falls through to the match below).
     if (DPI_FLAG..DPI_FLAG + 0x1_0000).contains(&id) {
         return Some(MenuAction::SetDpi((id - DPI_FLAG) as u16));
@@ -406,7 +439,7 @@ fn menu_action_for(id: u32) -> Option<MenuAction> {
         SETTINGS => MenuAction::OpenSettings,
         RELOAD => MenuAction::ReloadConfig,
         QUIT => MenuAction::Quit,
-        _ if id == platform::tray::TRAY_DOUBLE_CLICK => MenuAction::OpenSettings,
+        _ if id == platform::tray::TRAY_CLICK => MenuAction::OpenSettings,
         _ => return None,
     })
 }
@@ -612,7 +645,10 @@ fn run_session(
             }
             Ok(Event::Menu(MenuAction::OpenSettings)) => {
                 if *settings_open {
-                    log.log("Settings window already open.");
+                    // The window already exists; surface it (it may be buried
+                    // behind other windows) instead of doing nothing.
+                    platform::settings::focus();
+                    log.log("Settings already open; brought to foreground.");
                 } else {
                     *settings_open = true;
                     open_settings_window(cfg, spec, tx);
@@ -676,13 +712,18 @@ fn apply_startup_lighting(ctrl: &Mouse, cfg: &Config, log: &Logger) {
         }
         return;
     }
-    match EffectSpec::from_config(&cfg.lighting, &cfg.color) {
-        Ok(Some(effect)) => match effect.apply(ctrl) {
-            Ok(()) => log.log(&format!("Lighting set to {}.", effect.describe())),
-            Err(e) => log.log(&format!("WARN could not set lighting: {e}")),
-        },
-        Ok(None) => {} // "keep": leave lighting untouched
-        Err(e) => log.log(&format!("WARN invalid lighting config: {e}")),
+    // Each zone resolves its own effect + color (override, else device-wide),
+    // so the wheel and logo can carry different lighting.
+    for &zone in ctrl.spec().rgb_zones {
+        let name = razer_proto::led::name(zone);
+        match EffectSpec::from_config(cfg.zone_lighting(name), cfg.zone_color(name)) {
+            Ok(Some(effect)) => match effect.apply_zone(ctrl, zone) {
+                Ok(()) => log.log(&format!("Lighting ({name}) set to {}.", effect.describe())),
+                Err(e) => log.log(&format!("WARN could not set {name} lighting: {e}")),
+            },
+            Ok(None) => {} // "keep": leave this zone untouched
+            Err(e) => log.log(&format!("WARN invalid {name} lighting config: {e}")),
+        }
     }
 }
 
@@ -722,14 +763,17 @@ fn handle_menu(
             log.log("Settings: polling rate -> keep (unmanaged).");
         }
         MenuAction::Effect(spec) => {
+            // Tray presets are device-wide: apply to every zone and drop any
+            // per-zone overrides so the pick actually shows everywhere.
             spec.apply(ctrl)?;
             let (lighting, color) = spec.to_config();
             cfg.lighting = lighting;
             if let Some(c) = color {
                 cfg.color = c;
             }
+            cfg.zones.clear();
             save_config(cfg, log);
-            log.log(&format!("Menu: lighting -> {}.", spec.describe()));
+            log.log(&format!("Menu: lighting -> {} (all zones).", spec.describe()));
         }
         MenuAction::SetUpAction(s) => {
             match crate::actions::parse(&s) {
@@ -771,43 +815,39 @@ fn handle_menu(
             }
             Err(e) => log.log(&format!("Settings: invalid thumb_forward {s:?}: {e}")),
         },
-        MenuAction::SetEffectKind(kind) => match EffectSpec::from_config(&kind, &cfg.color) {
-            Ok(Some(spec)) => {
-                spec.apply(ctrl)?;
-                let (lighting, color) = spec.to_config();
-                cfg.lighting = lighting;
-                if let Some(c) = color {
-                    cfg.color = c;
+        MenuAction::SetZoneEffectKind(zone, kind) => {
+            let name = razer_proto::led::name(zone);
+            match EffectSpec::from_config(&kind, cfg.zone_color(name)) {
+                Ok(parsed) => {
+                    if let Some(spec) = parsed {
+                        spec.apply_zone(ctrl, zone)?;
+                    }
+                    // Record the kind as this zone's override ("keep" included:
+                    // it means "don't touch this zone at startup").
+                    cfg.zones.entry(name.to_string()).or_default().lighting =
+                        Some(kind.to_lowercase());
+                    save_config(cfg, log);
+                    match parsed {
+                        Some(spec) => log
+                            .log(&format!("Settings: {name} lighting -> {}.", spec.describe())),
+                        None => log.log(&format!("Settings: {name} lighting -> keep.")),
+                    }
                 }
-                save_config(cfg, log);
-                log.log(&format!("Settings: lighting -> {}.", spec.describe()));
+                Err(e) => log.log(&format!("Settings: invalid {name} effect {kind:?}: {e}")),
             }
-            Ok(None) => {
-                cfg.lighting = "keep".into();
-                save_config(cfg, log);
-                log.log("Settings: lighting -> keep.");
-            }
-            Err(e) => log.log(&format!("Settings: invalid effect {kind:?}: {e}")),
-        },
-        MenuAction::SetColor(rgb) => {
-            cfg.color = format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b);
-            // Re-apply live if the current effect is color-based.
-            if let Ok(Some(spec)) = EffectSpec::from_config(&cfg.lighting, &cfg.color) {
+        }
+        MenuAction::SetZoneColor(zone, rgb) => {
+            let name = razer_proto::led::name(zone);
+            let hex = format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b);
+            cfg.zones.entry(name.to_string()).or_default().color = Some(hex.clone());
+            // Re-apply live if this zone's effective effect is color-based.
+            if let Ok(Some(spec)) = EffectSpec::from_config(cfg.zone_lighting(name), &hex) {
                 if matches!(spec, EffectSpec::Static(_) | EffectSpec::Breathing(_)) {
-                    spec.apply(ctrl)?;
+                    spec.apply_zone(ctrl, zone)?;
                 }
             }
             save_config(cfg, log);
-            log.log(&format!("Settings: color -> {}.", cfg.color));
-        }
-        MenuAction::Apply => {
-            let (dx, dy) = cfg.dpi_xy();
-            let _ = ctrl.set_dpi(dx, dy);
-            if let Some(hz) = cfg.polling_rate {
-                let _ = ctrl.set_polling_rate(hz);
-            }
-            apply_startup_lighting(ctrl, cfg, log);
-            log.log("Settings: applied current config to device.");
+            log.log(&format!("Settings: {name} color -> {hex}."));
         }
         MenuAction::Save => {
             save_config(cfg, log);
@@ -994,7 +1034,7 @@ mod tests {
         let v3 = razer_proto::DEATHADDER_V3;
         let mut cfg = Config::default(); // polling_rate = None
         let (labels, idx) = polling_options(&cfg, &v3);
-        assert_eq!(labels[0], "keep");
+        assert_eq!(labels[0], "keep — leave as set");
         assert_eq!(idx, 0, "unmanaged config must select keep");
         assert_eq!(labels.len(), v3.polling.rates.len() + 1);
 
@@ -1011,11 +1051,20 @@ mod tests {
     #[test]
     fn effect_options_index_tracks_lighting() {
         let mut cfg = Config::default(); // lighting = keep
-        let (labels, idx) = effect_options(&cfg);
+        let (labels, idx) = effect_options(cfg.zone_lighting("wheel"));
         assert_eq!(labels[idx], "keep");
         cfg.lighting = "spectrum".into();
-        let (labels, idx) = effect_options(&cfg);
+        let (labels, idx) = effect_options(cfg.zone_lighting("wheel"));
         assert_eq!(labels[idx], "spectrum");
+        // A zone override wins over the device-wide kind.
+        cfg.zones.insert(
+            "logo".into(),
+            crate::config::ZoneConfig { lighting: Some("breathing".into()), color: None },
+        );
+        let (labels, idx) = effect_options(cfg.zone_lighting("logo"));
+        assert_eq!(labels[idx], "breathing");
+        let (labels, idx) = effect_options(cfg.zone_lighting("wheel"));
+        assert_eq!(labels[idx], "spectrum", "un-overridden zone follows device-wide");
     }
 
     #[test]
@@ -1051,7 +1100,7 @@ mod tests {
     fn menu_action_for_covers_double_click_and_settings() {
         assert!(matches!(menu_action_for(menu_id::SETTINGS), Some(MenuAction::OpenSettings)));
         assert!(matches!(
-            menu_action_for(platform::tray::TRAY_DOUBLE_CLICK),
+            menu_action_for(platform::tray::TRAY_CLICK),
             Some(MenuAction::OpenSettings)
         ));
         assert!(menu_action_for(9999).is_none());
@@ -1063,9 +1112,9 @@ mod tests {
             let id = menu_id::DPI_FLAG | dpi as u32;
             assert!(matches!(menu_action_for(id), Some(MenuAction::SetDpi(v)) if v == dpi));
         }
-        // TRAY_DOUBLE_CLICK has the flag bit set but is outside the value range.
+        // TRAY_CLICK has the flag bit set but is outside the value range.
         assert!(!matches!(
-            menu_action_for(platform::tray::TRAY_DOUBLE_CLICK),
+            menu_action_for(platform::tray::TRAY_CLICK),
             Some(MenuAction::SetDpi(_))
         ));
     }

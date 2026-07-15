@@ -286,6 +286,37 @@ impl Mouse {
         let txn = self.spec.transaction_id;
         self.apply_zones(|zone| proto::effect_none_report(txn, zone))
     }
+
+    // Per-zone variants: same no-op convention — a zone the device doesn't
+    // have (not in `rgb_zones`) is silently accepted, never an error.
+
+    fn apply_zone(&self, zone: u8, report: [u8; REPORT_LEN]) -> Result<()> {
+        if !self.spec.rgb_zones.contains(&zone) {
+            return Ok(());
+        }
+        self.send_command(&report)?;
+        Ok(())
+    }
+
+    /// Static single color on one zone (a `led` id from the spec's `rgb_zones`).
+    pub fn set_zone_color(&self, zone: u8, rgb: Rgb) -> Result<()> {
+        self.apply_zone(zone, proto::effect_static_report(self.spec.transaction_id, zone, rgb))
+    }
+
+    /// Breathing (single color) on one zone.
+    pub fn set_zone_breathing(&self, zone: u8, rgb: Rgb) -> Result<()> {
+        self.apply_zone(zone, proto::effect_breathing_report(self.spec.transaction_id, zone, rgb))
+    }
+
+    /// Spectrum cycling on one zone.
+    pub fn set_zone_spectrum(&self, zone: u8) -> Result<()> {
+        self.apply_zone(zone, proto::effect_spectrum_report(self.spec.transaction_id, zone))
+    }
+
+    /// Lighting off (none) on one zone.
+    pub fn set_zone_off(&self, zone: u8) -> Result<()> {
+        self.apply_zone(zone, proto::effect_none_report(self.spec.transaction_id, zone))
+    }
 }
 
 /// Paths of every auxiliary (non-control) HID collection of the given device

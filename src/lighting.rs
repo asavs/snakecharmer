@@ -23,6 +23,16 @@ impl EffectSpec {
         }
     }
 
+    /// Apply this effect to a single lighting zone (a `razer_proto::led` id).
+    pub fn apply_zone(&self, dev: &Mouse, zone: u8) -> Result<(), razer_hid::Error> {
+        match self {
+            EffectSpec::Static(c) => dev.set_zone_color(zone, *c),
+            EffectSpec::Breathing(c) => dev.set_zone_breathing(zone, *c),
+            EffectSpec::Spectrum => dev.set_zone_spectrum(zone),
+            EffectSpec::Off => dev.set_zone_off(zone),
+        }
+    }
+
     /// A short human-readable description (for logs).
     pub fn describe(&self) -> String {
         match self {

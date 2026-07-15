@@ -78,10 +78,15 @@ pub enum CalloutSlot {
     DpiDown,
     ThumbBack,
     ThumbForward,
+    /// The scroll wheel / middle click (a disabled, identity-only dropdown —
+    /// middle-click remap is scaffolded, not yet implemented).
+    Wheel,
 }
 
-/// Width of the dropdown a callout reserves space for (design units).
-pub const CALLOUT_COMBO_W: i32 = 130;
+/// Width of the dropdown a callout reserves space for (design units). Wide
+/// enough for the longest self-identifying entry ("Middle click (default)")
+/// without clipping.
+pub const CALLOUT_COMBO_W: i32 = 145;
 /// Closed height of the dropdown a callout reserves space for.
 pub const CALLOUT_COMBO_H: i32 = 24;
 /// Vertical offset from a captioned callout's label baseline to its
@@ -331,6 +336,46 @@ pub fn measure(diagram: &Diagram) -> (i32, i32, i32, i32) {
         return (0, 0, 0, 0);
     }
     (x0, y0, x1, y1)
+}
+
+/// Horizontal extent `(x0, x1)` in design units of the diagram's primary
+/// outline ([`Role::Body`] shapes), or `None` if it has none. The settings
+/// window uses this to center the *mouse body* on the window centerline
+/// (rather than the full content bounds, which lean toward the wider caption
+/// column). Generic: it keys only on the role, no per-device knowledge.
+pub fn body_x_bounds(diagram: &Diagram) -> Option<(i32, i32)> {
+    let (mut x0, mut x1) = (i32::MAX, i32::MIN);
+    let mut add = |x: i32| {
+        x0 = x0.min(x);
+        x1 = x1.max(x);
+    };
+    for s in &diagram.shapes {
+        match s {
+            Shape::Path { role: Role::Body, start, curves, .. } => {
+                add(start.0);
+                for &((c1x, _), (c2x, _), (ex, _)) in curves {
+                    add(c1x);
+                    add(c2x);
+                    add(ex);
+                }
+            }
+            Shape::RoundRect { role: Role::Body, x, w, .. } => {
+                add(*x);
+                add(x + w);
+            }
+            Shape::Circle { role: Role::Body, cx, r, .. } => {
+                add(cx - r);
+                add(cx + r);
+            }
+            Shape::Polyline { role: Role::Body, points } => {
+                for &(x, _) in points {
+                    add(x);
+                }
+            }
+            _ => {}
+        }
+    }
+    (x0 <= x1).then_some((x0, x1))
 }
 
 /// Initialize GDI+ for this process; returns the token for [`shutdown`].

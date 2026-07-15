@@ -71,6 +71,10 @@ pub enum CalloutSlot {
     DpiDown,
     ThumbBack,
     ThumbForward,
+    /// The scroll wheel / middle click. Scaffold only: the settings window
+    /// mounts a disabled, identity-only dropdown here (middle-click remap is
+    /// not yet implemented).
+    Wheel,
 }
 
 /// A drawing primitive. Everything is const-constructible so diagrams live
@@ -260,10 +264,20 @@ impl Diagram {
                     out.push_str(&svg_text(text_class(role), at, anchor, text));
                 }
                 // A static picture has no dropdown to mount, so a callout is
-                // simply its caption: label line + note line.
+                // simply its caption: label line + note line (each emitted only
+                // when non-empty, e.g. the wheel callout carries a label only).
                 Shape::Callout { at, anchor, label, note, note_role, .. } => {
-                    out.push_str(&svg_text(text_class(Role::Label), at, anchor, label));
-                    out.push_str(&svg_text(text_class(note_role), (at.0, at.1 + 16), anchor, note));
+                    if !label.is_empty() {
+                        out.push_str(&svg_text(text_class(Role::Label), at, anchor, label));
+                    }
+                    if !note.is_empty() {
+                        out.push_str(&svg_text(
+                            text_class(note_role),
+                            (at.0, at.1 + 16),
+                            anchor,
+                            note,
+                        ));
+                    }
                 }
             }
         }

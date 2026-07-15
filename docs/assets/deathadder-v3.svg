@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-104 -42 770 447" width="770" height="447" font-family="ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace" font-size="13">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-94 -42 671 447" width="671" height="447" font-family="ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace" font-size="13">
   <style>
     svg { --fg: #6e7781; --rgb: #2da44e; --btn: #4a7fd4; }
     @media (prefers-color-scheme: dark) {
@@ -43,24 +43,19 @@
   <polyline class="det" points="218,106 237,106"/>
   <polyline class="det" points="218,114 237,114"/>
   <polyline class="det" points="219,122 236,122"/>
-  <polyline class="lead" points="243,98 396,98"/>
-  <text class="txt" x="402" y="95">scroll wheel — middle click</text>
-  <text class="sub" x="402" y="111">no RGB zones on this model</text>
-  <text class="sub" x="402" y="130">no wheel DPI buttons — the DPI</text>
-  <text class="sub" x="402" y="146">button is on the underside; it cycles</text>
-  <text class="sub" x="402" y="162">onboard stages in firmware and</text>
-  <text class="sub" x="402" y="178">can't be remapped or listened to</text>
+  <polyline class="lead" points="243,98 332,98"/>
+  <text class="txt" x="348" y="95">scroll wheel — middle click</text>
   <path class="btn" d="M141 139 C144 138 147 140 148 144 C150 183 150 183 150 183 C150 189 147 192 143 193 C141 193 138 191 138 187 C138 146 138 146 138 146 C138 142 139 139 141 139 Z"/>
   <path class="btn" d="M143 197 C146 197 148 199 148 204 C148 244 148 244 148 244 C148 249 145 253 141 253 C138 252 136 249 136 245 C137 204 137 204 137 204 C137 200 139 197 143 197 Z"/>
   <polyline class="det" points="140,146 147,145"/>
   <polyline class="det" points="138,204 147,202"/>
-  <polyline class="lead" points="138,166 116,166"/>
-  <polyline class="lead" points="136,225 116,225"/>
-  <text class="txt" x="112" y="162" text-anchor="end">"forward"</text>
-  <text class="sub" x="112" y="178" text-anchor="end">XBUTTON2</text>
-  <text class="txt" x="112" y="221" text-anchor="end">"back"</text>
-  <text class="sub" x="112" y="237" text-anchor="end">XBUTTON1</text>
-  <text class="sub" x="112" y="255" text-anchor="end">remaps use a global mouse hook</text>
-  <text class="sub" x="112" y="271" text-anchor="end">(~µs per mouse event);</text>
-  <text class="sub" x="112" y="287" text-anchor="end">default = no hook, zero cost</text>
+  <polyline class="lead" points="138,166 126,166"/>
+  <polyline class="lead" points="136,225 126,225"/>
+  <text class="txt" x="122" y="162" text-anchor="end">"forward"</text>
+  <text class="sub" x="122" y="178" text-anchor="end">XBUTTON2</text>
+  <text class="txt" x="122" y="221" text-anchor="end">"back"</text>
+  <text class="sub" x="122" y="237" text-anchor="end">XBUTTON1</text>
+  <text class="sub" x="122" y="255" text-anchor="end">default = no hook, zero cost</text>
+  <text class="sub" x="122" y="271" text-anchor="end">remaps use a global mouse hook</text>
+  <text class="sub" x="122" y="287" text-anchor="end">(~µs per mouse event)</text>
 </svg>

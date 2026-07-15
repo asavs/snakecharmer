@@ -73,7 +73,9 @@ Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI
   while a remap is configured; at the default (`none`/`none`) no hook is installed at
   all, so the pointer's motion path is untouched. Note: games accept MB4/MB5 natively,
   so most people don't need this.
-- **RGB lighting** — static, breathing, spectrum, or off, for both lit zones.
+- **RGB lighting** — static, breathing, spectrum, or off, per zone: the wheel and
+  logo can carry different effects and colors (settings window), or one pick for
+  both (tray menu).
 - **System tray** with quick DPI, lighting, reload, and quit, plus a native settings
   window (no admin, windowless until opened).
 
@@ -134,10 +136,16 @@ dpi_up = "copy"           # front DPI button
 dpi_down = "paste"        # rear DPI button
 thumb_back = "none"       # "none" = keep native Back
 thumb_forward = "none"    # "none" = keep native Forward
-lighting = "keep"         # keep | static | breathing | spectrum | off
+lighting = "keep"         # keep | static | breathing | spectrum | off (all zones)
 color = "#00ff00"
 reassert_interval_secs = 60
 # polling_rate = 1000    # Hz, per-device (see docs/SUPPORTED-DEVICES.md); omit = leave as-is
+
+# Optional per-zone overrides (zones: "wheel", "logo"); unset fields fall back
+# to the device-wide lighting/color above. The settings window writes these.
+# [zones.logo]
+# lighting = "breathing"
+# color = "#ff0000"
 ```
 
 ### PC Vitals health capsule

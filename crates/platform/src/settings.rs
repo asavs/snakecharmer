@@ -3,20 +3,25 @@
 //!
 //! The window is generic: the app supplies current values + label lists via
 //! [`SettingsInit`] and a callback; the window emits [`SettingsEvent`]s (with
-//! indices/values) on live changes and on Apply/Save. Mapping indices back to
+//! indices/values) on live changes and on Save. Mapping indices back to
 //! action strings / effects stays in the app, so this module knows nothing
 //! about Razer specifics. Capability gating is generic too: optional groups
 //! ([`SettingsInit::dpi_buttons`], [`SettingsInit::lighting`]) simply don't
-//! create their controls when `None`, and the layout reflows so no gaps
+//! create their controls when absent, and the layout reflows so no gaps
 //! remain.
 //!
-//! Layout (a portrait window, width < height): centered rows of device-wide
-//! knobs at the top — a modest-width DPI slider row, then polling and (when
-//! present) lighting rows — the device schematic ([`SettingsInit::diagram`],
-//! drawn anti-aliased with GDI+, see [`crate::diagram`]) as the centerpiece
-//! in the middle with the per-button dropdowns mounted *on* it at its
-//! callout slots, and the apply/save hint plus Apply/Save/Close centered at
-//! the bottom.
+//! Layout: centered rows of device-wide knobs at the top — a modest-width DPI
+//! slider row, then polling and one lighting row per zone — the device
+//! schematic ([`SettingsInit::diagram`], drawn anti-aliased with GDI+, see
+//! [`crate::diagram`]) as the centerpiece in the middle with the per-button
+//! dropdowns mounted *on* it at its callout slots, and a single Save button
+//! (changes already apply live; the titlebar X closes) with the save hint
+//! under it, centered at the bottom.
+//!
+//! The window sizes itself to its content on both axes (nothing is stretched
+//! to hit a target aspect): the width is twice the diagram's widest arm about
+//! its body centerline, the height is the stacked bands. Both shipping
+//! schematics are taller than they are wide, so it comes out portrait.
 //!
 //! Look and feel: comctl32 v6 visual styles (manifest embedded by the build
 //! scripts), Segoe UI 9 pt, and a dark titlebar when the OS theme is dark.
@@ -38,16 +43,44 @@ use windows_sys::Win32::UI::Controls::{
     TB_BOTTOM, TB_ENDTRACK, TB_LINEDOWN, TB_LINEUP, TB_PAGEDOWN, TB_PAGEUP, TB_THUMBPOSITION,
     TB_TOP,
 };
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    AdjustWindowRect, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-    GetMessageW, LoadCursorW, RegisterClassW, SendMessageW, SetWindowTextW, ShowWindow,
-    TranslateMessage, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT,
-    IDC_ARROW, MSG, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_CTLCOLORSTATIC, WM_DESTROY, WM_HSCROLL,
-    WM_PAINT, WM_SETFONT, WNDCLASSW, WS_CHILD, WS_OVERLAPPED, WS_CAPTION, WS_SYSMENU, WS_TABSTOP,
-    WS_VISIBLE,
+    AdjustWindowRect, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow, DispatchMessageW,
+    GetMessageW, LoadCursorW, RegisterClassW, SendMessageW, SetForegroundWindow, SetWindowPos,
+    SetWindowTextW, ShowWindow, TranslateMessage, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL,
+    CB_SETCURSEL, CW_USEDEFAULT, HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_CTLCOLORSTATIC,
+    WM_DESTROY, WM_HSCROLL, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WS_CHILD, WS_OVERLAPPED,
+    WS_CAPTION, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
 };
 
+use std::sync::atomic::{AtomicIsize, Ordering};
+
 use crate::diagram::{self, CalloutSlot, Diagram, Palette};
+
+/// The open settings window's handle (0 = none), for cross-thread focus
+/// requests. Set once the window is created, cleared on `WM_DESTROY`. Mirrors
+/// the tray module's `TRAY_HWND` pattern.
+static SETTINGS_HWND: AtomicIsize = AtomicIsize::new(0);
+
+/// Bring the open settings window to the foreground, raising it above other
+/// windows. A no-op when no window is open. Called when the tray is clicked
+/// while a window already exists — a second [`open`] is refused by the
+/// daemon's single-window latch, so this surfaces the existing window instead
+/// of the click doing nothing.
+pub fn focus() {
+    let hwnd = SETTINGS_HWND.load(Ordering::SeqCst);
+    if hwnd == 0 {
+        return;
+    }
+    // SAFETY: ShowWindow/SetForegroundWindow tolerate a stale HWND (they fail
+    // harmlessly); the window runs its own message loop on another thread.
+    unsafe {
+        let hwnd = hwnd as HWND;
+        ShowWindow(hwnd, SW_SHOW);
+        SetForegroundWindow(hwnd);
+    }
+}
 
 // Style/message constants windows-sys does not surface as named items.
 const SS_CENTER: u32 = 0x0000_0001;
@@ -61,17 +94,18 @@ const ID_TB_DPI: u16 = 101;
 const ID_LBL_DPI: u16 = 102;
 const ID_CB_UP: u16 = 103;
 const ID_CB_DOWN: u16 = 104;
-const ID_CB_EFFECT: u16 = 105;
 const ID_CB_THUMB_BACK: u16 = 111;
 const ID_CB_THUMB_FWD: u16 = 112;
 const ID_CB_POLL: u16 = 113;
+const ID_CB_WHEEL: u16 = 114;
 const ID_BTN_DPI_MINUS: u16 = 115;
 const ID_BTN_DPI_PLUS: u16 = 116;
-const ID_SWATCH: u16 = 106;
-const ID_BTN_COLOR: u16 = 107;
-const ID_BTN_APPLY: u16 = 108;
 const ID_BTN_SAVE: u16 = 109;
-const ID_BTN_CLOSE: u16 = 110;
+// Per-zone lighting controls: id = base + zone index (up to MAX_ZONES zones).
+const MAX_ZONES: u16 = 16;
+const ID_CB_EFFECT_BASE: u16 = 200;
+const ID_SWATCH_BASE: u16 = 216;
+const ID_BTN_COLOR_BASE: u16 = 232;
 
 // Layout metrics (px at 96 dpi; the running cursor stacks controls with these).
 const MARGIN: i32 = 16;
@@ -89,19 +123,24 @@ const COMBO_H: i32 = 24;
 const COMBO_DROP: i32 = 200;
 /// Vertical gap after each control group.
 const GROUP_GAP: i32 = 12;
+/// Breathing room above and below the diagram pane (larger than GROUP_GAP so
+/// the schematic sits in open space, not crowded against the top cluster or
+/// the bottom bar).
+const DIAGRAM_VGAP: i32 = 30;
 /// Top-cluster row 1 (the DPI slider row) height.
 const ROW1_H: i32 = 30;
 /// Top-cluster dropdown row (polling / lighting) height.
 const ROW2_H: i32 = 26;
-/// Bottom button row (Apply/Save/Close) height.
+/// Bottom button row (Save) height.
 const BOTTOM_H: i32 = 28;
 /// Width of the DPI trackbar itself (its row is centered, never full-width).
 const SLIDER_W: i32 = 240;
-/// Minimum portrait aspect: height ≥ width × this. The diagram data is
-/// intrinsically wide (a caption column and a combo column flank the mouse),
-/// so a full 1:1.618 would be mostly void; this keeps the window clearly
-/// portrait while the slack breathes around the diagram.
-const PORTRAIT_MIN: f32 = 1.2;
+/// Width of the polling dropdown. Sized for its longest entry —
+/// "keep — leave as set" (~109 px in Segoe UI 9 pt) plus the drop arrow and
+/// borders — because that entry is the *selected* one whenever polling is
+/// unmanaged, i.e. what a fresh config shows first. The rate entries
+/// ("1000 Hz") are half this; the wide one sets the floor.
+const POLL_COMBO_W: i32 = 140;
 /// Minimum client width (the centered rows must fit without a diagram).
 const MIN_CLIENT_W: i32 = 430;
 
@@ -122,9 +161,12 @@ pub struct DpiButtonsInit {
     pub down: ActionCombo,
 }
 
-/// Initial values for the lighting controls (effect dropdown + color swatch +
-/// picker). `None` in [`SettingsInit`] = no lighting hardware, no controls.
-pub struct LightingInit {
+/// Initial values for one lighting zone's controls (a captioned row: effect
+/// dropdown + color swatch + picker). One row is created per entry in
+/// [`SettingsInit::lighting`]; an empty vec = no lighting hardware, no rows.
+pub struct LightingZoneInit {
+    /// Row caption naming the zone (e.g. "Wheel", "Logo").
+    pub label: String,
     pub effect_labels: Vec<String>,
     pub effect_index: usize,
     pub color: (u8, u8, u8),
@@ -146,10 +188,18 @@ pub struct SettingsInit {
     pub dpi_buttons: Option<DpiButtonsInit>,
     pub thumb_back: ActionCombo,
     pub thumb_forward: ActionCombo,
-    pub lighting: Option<LightingInit>,
+    /// The scroll-wheel / middle-click dropdown. Scaffold only: it carries a
+    /// single identity entry and is mounted *disabled* at the wheel callout —
+    /// middle-click remap is not implemented, so it previews the future
+    /// without pretending to be functional. Ignored if the diagram has no
+    /// [`CalloutSlot::Wheel`].
+    pub wheel: ActionCombo,
+    /// One lighting row per zone, in device order (empty = no lighting).
+    pub lighting: Vec<LightingZoneInit>,
 }
 
 /// Events emitted by the window on live changes / button presses.
+/// Lighting events carry the zone's index into [`SettingsInit::lighting`].
 #[derive(Debug, Clone, Copy)]
 pub enum SettingsEvent {
     Dpi(u16),
@@ -158,9 +208,8 @@ pub enum SettingsEvent {
     DownAction(usize),
     ThumbBack(usize),
     ThumbForward(usize),
-    Effect(usize),
-    Color(u8, u8, u8),
-    Apply,
+    Effect(usize, usize),
+    Color(usize, u8, u8, u8),
     Save,
 }
 
@@ -172,16 +221,25 @@ struct DiagramPane {
     palette: Palette,
 }
 
+/// One lighting zone's color swatch: its STATIC control, current color, and
+/// the solid brush WM_CTLCOLORSTATIC paints it with.
+struct Swatch {
+    hwnd: HWND,
+    color: (u8, u8, u8),
+    brush: HBRUSH,
+}
+
 struct WindowState {
     on_event: Box<dyn Fn(SettingsEvent)>,
     tb: HWND,
     lbl_dpi: HWND,
-    /// Null when the device has no lighting (no swatch control exists).
-    swatch: HWND,
-    color: (u8, u8, u8),
-    swatch_brush: HBRUSH,
+    /// One entry per lighting zone (empty when the device has no lighting).
+    swatches: Vec<Swatch>,
     /// Owned UI font (Segoe UI 9 pt) shared by all controls.
     ui_font: HFONT,
+    /// Runtime-drawn titlebar/taskbar icon (freed on `WM_DESTROY`); null if
+    /// icon creation failed.
+    hicon: HICON,
     pane: Option<DiagramPane>,
     dpi_min: u16,
     dpi_max: u16,
@@ -299,11 +357,11 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         let thumb_in_diagram = slot_rect(CalloutSlot::ThumbBack).is_some()
             && slot_rect(CalloutSlot::ThumbForward).is_some();
 
-        // --- Vertical plan (portrait): centered top cluster (slider row,
-        // polling row, lighting row, any fallback rows), diagram in the
-        // middle, bottom bar (hint + buttons). The width comes from the
-        // diagram; any stretch toward PORTRAIT_MIN opens up as breathing
-        // room around the diagram.
+        // --- Vertical plan: centered top cluster (slider row, polling row,
+        // lighting row, any fallback rows), diagram in the middle, bottom bar
+        // (buttons + hint). Both axes are content-driven — the width comes from
+        // the diagram's arms about its centered body, the height from the sum of
+        // the stacked bands — so the window is exactly as large as it needs to be.
         let fb_row = LBL_H + LBL_GAP + COMBO_H + GROUP_GAP;
         let mut fb_h = 0i32;
         if init.dpi_buttons.is_some() && !dpi_in_diagram {
@@ -316,23 +374,45 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             fb_h += GROUP_GAP;
         }
         let mut top_h = ROW1_H + GROUP_GAP + ROW2_H; // DPI slider + polling
-        if init.lighting.is_some() {
-            top_h += GROUP_GAP + ROW2_H; // lighting row
-        }
+        top_h += init.lighting.len() as i32 * (GROUP_GAP + ROW2_H); // one row per zone
         top_h += fb_h;
-        let bottom_h = 16 + 6 + BOTTOM_H; // hint line above the button row
-        let natural_h = MARGIN
+        let bottom_h = BOTTOM_H + 6 + 16; // button row + gap + hint line below it
+        // Content-driven height: the diagram sits one DIAGRAM_VGAP below the
+        // top cluster and one above the bottom bar — even, generous breathing
+        // room, no portrait-aspect stretch (the window is as tall as its
+        // content). Without a diagram, a plain GROUP_GAP separates the bars.
+        let dia_gap = if has_diagram { DIAGRAM_VGAP } else { GROUP_GAP };
+        let client_h = MARGIN
             + top_h
-            + GROUP_GAP
-            + if has_diagram { dia_h + GROUP_GAP } else { 0 }
+            + dia_gap
+            + if has_diagram { dia_h + dia_gap } else { 0 }
             + bottom_h
             + MARGIN;
-        let client_w = (dia_w + 2 * MARGIN).max(MIN_CLIENT_W);
-        let client_h = natural_h.max((client_w as f32 * PORTRAIT_MIN).round() as i32);
-        // Portrait slack: half above the diagram (below the top cluster),
-        // half below it (above the bottom bar) — diagram stays the centered
-        // centerpiece, the clusters stay pinned to their edges.
-        let slack = client_h - natural_h;
+
+        // Horizontal placement centers the *mouse body* on the window
+        // centerline (item 5): the caption column is wider than the combo
+        // column, so centering full content bounds leaves the body left of
+        // center. `body_off` is the body midpoint's distance (px) from the
+        // content's left edge; the window is sized so both content arms clear
+        // the margins with the body centered.
+        let body_off: f32 = pane_meta
+            .and_then(|(scale, _, (x0, _))| {
+                init.diagram
+                    .as_ref()
+                    .and_then(diagram::body_x_bounds)
+                    .map(|(bx0, bx1)| (((bx0 + bx1) / 2 - x0) as f32) * scale)
+            })
+            .unwrap_or(dia_w as f32 / 2.0);
+        let left_arm = body_off;
+        let right_arm = dia_w as f32 - body_off;
+        let half = left_arm.max(right_arm);
+        let client_w = if has_diagram {
+            ((2.0 * half).ceil() as i32 + 2 * MARGIN).max(MIN_CLIENT_W)
+        } else {
+            MIN_CLIENT_W
+        };
+        let pane_origin_x = (client_w / 2 - body_off.round() as i32)
+            .clamp(0, (client_w - dia_w).max(0));
 
         let style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
         let mut rect = RECT { left: 0, top: 0, right: client_w, bottom: client_h };
@@ -362,6 +442,8 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             diagram::shutdown(gdiplus);
             return;
         }
+        // Publish the handle so a repeat tray click can focus this window.
+        SETTINGS_HWND.store(hwnd as isize, Ordering::SeqCst);
 
         // Dark titlebar when the OS theme is dark (silently a no-op on builds
         // without the attribute; the client area keeps native system colors).
@@ -373,6 +455,14 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                 &dark as *const i32 as _,
                 std::mem::size_of::<i32>() as u32,
             );
+        }
+
+        // App icon for the titlebar/taskbar, drawn with the GDI+ already up for
+        // the diagram pane; freed on WM_DESTROY.
+        let hicon = crate::icon::create_app_icon();
+        if !hicon.is_null() {
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL as WPARAM, hicon as LPARAM);
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG as WPARAM, hicon as LPARAM);
         }
 
         // Segoe UI 9 pt for every control (falls back to the stock GUI font
@@ -417,9 +507,10 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             child
         };
 
-        // Diagram pane: drawn anti-aliased in WM_PAINT (no child control);
-        // centered horizontally, and vertically within the portrait slack.
-        let pane_origin = ((client_w - dia_w) / 2, MARGIN + top_h + GROUP_GAP + slack / 2);
+        // Diagram pane: drawn anti-aliased in WM_PAINT (no child control).
+        // Horizontally the *body* sits on the window centerline (see body_off);
+        // vertically it hangs one dia_gap below the top cluster.
+        let pane_origin = (pane_origin_x, MARGIN + top_h + dia_gap);
         let pane = pane_meta.map(|(scale, palette, _)| DiagramPane {
             diagram: init.diagram.clone().expect("pane_meta implies a diagram"),
             origin: pane_origin,
@@ -428,8 +519,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         });
 
         // --- Top cluster, every row centered. Creation order = tab order:
-        // DPI slider row, polling, lighting, per-button dropdowns, then
-        // Apply/Save/Close.
+        // DPI slider row, polling, lighting, per-button dropdowns, then Save.
         let mut y = MARGIN;
         let combo_style = (CBS_DROPDOWNLIST as u32) | WS_TABSTOP;
 
@@ -469,27 +559,50 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // Polling row, centered (lighting gets its own centered row below —
         // both are device-wide like DPI, so they live in the top cluster;
         // the diagram hosts only the per-button controls).
-        let poll_w = 208 + 4 + 110;
+        let poll_lbl_w = 92;
+        let poll_w = poll_lbl_w + 4 + POLL_COMBO_W;
         x = (client_w - poll_w) / 2;
-        let _ = mk("STATIC", "Polling rate (\"keep\" = leave as set):", 0, 0, x, y + 5, 208, LBL_H);
-        let _ = make_combo(ID_CB_POLL, x + 212, y + 1, 110, &init.polling_labels, init.polling_index);
+        let _ = mk("STATIC", "Polling rate:", 0, 0, x, y + 5, poll_lbl_w, LBL_H);
+        let _ = make_combo(
+            ID_CB_POLL,
+            x + poll_lbl_w + 4,
+            y + 1,
+            POLL_COMBO_W,
+            &init.polling_labels,
+            init.polling_index,
+        );
         y += ROW2_H;
-        let mut swatch: HWND = std::ptr::null_mut();
-        let mut color = (0u8, 0u8, 0u8);
-        if let Some(l) = &init.lighting {
-            color = l.color;
+        // One lighting row per zone, each captioned with its zone name so two
+        // zones (e.g. wheel + logo) get independent effect and color controls.
+        let mut swatches: Vec<Swatch> = Vec::new();
+        for (zi, l) in init.lighting.iter().take(MAX_ZONES as usize).enumerate() {
+            let zi16 = zi as u16;
             y += GROUP_GAP;
             let light_w = 52 + 4 + 110 + 16 + 38 + 2 + 60 + 6 + 90;
             x = (client_w - light_w) / 2;
-            let _ = mk("STATIC", "Lighting:", 0, 0, x, y + 5, 52, LBL_H);
+            let _ = mk("STATIC", &format!("{}:", l.label), 0, 0, x, y + 5, 52, LBL_H);
             x += 52 + 4;
-            let _ = make_combo(ID_CB_EFFECT, x, y + 1, 110, &l.effect_labels, l.effect_index);
+            let _ = make_combo(ID_CB_EFFECT_BASE + zi16, x, y + 1, 110, &l.effect_labels, l.effect_index);
             x += 110 + 16;
             let _ = mk("STATIC", "Color:", 0, 0, x, y + 5, 38, LBL_H);
             x += 38 + 2;
-            swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH, x, y + 2, 60, 22);
+            let swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH_BASE + zi16, x, y + 2, 60, 22);
             x += 60 + 6;
-            let _ = mk("BUTTON", "Choose...", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_COLOR, x, y, 90, ROW2_H);
+            let _ = mk(
+                "BUTTON",
+                "Choose...",
+                BS_PUSHBUTTON | WS_TABSTOP,
+                ID_BTN_COLOR_BASE + zi16,
+                x,
+                y,
+                90,
+                ROW2_H,
+            );
+            swatches.push(Swatch {
+                hwnd: swatch,
+                color: l.color,
+                brush: CreateSolidBrush(colorref(l.color)),
+            });
             y += ROW2_H;
         }
 
@@ -544,7 +657,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                 // right beside the thumb dropdowns — stated exactly once.)
                 let _ = mk(
                     "STATIC",
-                    "Remaps use a global hook (~\u{00B5}s per mouse event); the default entry = no hook.",
+                    "Default = no hook, zero cost; remaps use a global hook (~\u{00B5}s per mouse event).",
                     SS_CENTER,
                     0,
                     MARGIN,
@@ -580,39 +693,41 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                 place(ID_CB_THUMB_BACK, CalloutSlot::ThumbBack, &init.thumb_back);
                 place(ID_CB_THUMB_FWD, CalloutSlot::ThumbForward, &init.thumb_forward);
             }
+            // The wheel dropdown is a scaffold: mounted at the wheel callout but
+            // DISABLED (identity-only), so it previews a future middle-click
+            // remap without claiming a capability that doesn't exist yet.
+            if let Some((cx, cy, cw, _)) = slot_rect(CalloutSlot::Wheel) {
+                let px = pane_origin.0 + (((cx - bx0) as f32) * scale).round() as i32;
+                let py = pane_origin.1 + (((cy - by0) as f32) * scale).round() as i32;
+                let pw = ((cw as f32) * scale).round() as i32;
+                let cb = make_combo(ID_CB_WHEEL, px, py, pw, &init.wheel.labels, init.wheel.index);
+                EnableWindow(cb, 0);
+            }
         }
 
-        // --- Bottom bar, centered: the apply/save hint line directly above
-        // the Apply (re-push config) / Save / Close row.
-        let by = client_h - MARGIN - BOTTOM_H;
+        // --- Bottom bar, centered: just Save (changes apply live as they're
+        // made, and the titlebar X closes) with the hint line directly BELOW it.
+        let by = client_h - MARGIN - bottom_h;
+        let bx = (client_w - 90) / 2;
+        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, bx, by, 90, BOTTOM_H);
         let _ = mk(
             "STATIC",
             "Changes apply immediately; Save writes config.toml.",
             SS_CENTER,
             0,
             MARGIN,
-            by - 6 - 16,
+            by + BOTTOM_H + 6,
             client_w - 2 * MARGIN,
             16,
         );
-        let btn_row_w = 3 * 90 + 2 * 8;
-        let bx = (client_w - btn_row_w) / 2;
-        let _ = mk("BUTTON", "Apply", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_APPLY, bx, by, 90, BOTTOM_H);
-        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, bx + 98, by, 90, BOTTOM_H);
-        let _ = mk("BUTTON", "Close", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_CLOSE, bx + 196, by, 90, BOTTOM_H);
 
         let state = Box::new(WindowState {
             on_event: Box::new(on_event),
             tb,
             lbl_dpi,
-            swatch,
-            color,
-            swatch_brush: if swatch.is_null() {
-                std::ptr::null_mut()
-            } else {
-                CreateSolidBrush(colorref(color))
-            },
+            swatches,
             ui_font,
+            hicon,
             pane,
             dpi_min: init.dpi_min,
             dpi_max: init.dpi_max,
@@ -620,7 +735,27 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowLongPtrW, GWLP_USERDATA};
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(state) as isize);
 
+        // The *first* ShowWindow call in a process ignores our nCmdShow and
+        // uses the launcher's STARTUPINFO.wShowWindow instead (a documented
+        // Win32 quirk). Snakecharmer is often started hidden — a login task or
+        // wrapper that suppresses the console-window flash — so that inherited
+        // SW_HIDE turns this SW_SHOW into a no-op: the window is fully built
+        // but never appears. Its message loop then never ends, `open` never
+        // returns, and the daemon's `settings_open` latch never clears, so
+        // every later tray click is swallowed as "already open". SetWindowPos
+        // with SWP_SHOWWINDOW sets WS_VISIBLE directly and is not subject to
+        // the first-call override; then bring it to the foreground.
         ShowWindow(hwnd, SW_SHOW);
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW,
+        );
+        SetForegroundWindow(hwnd);
 
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
@@ -704,10 +839,13 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                             (st.on_event)(SettingsEvent::ThumbForward(i as usize));
                         }
                     }
-                    (ID_CB_EFFECT, CBN_SELCHANGE) => {
+                    (id, CBN_SELCHANGE)
+                        if (ID_CB_EFFECT_BASE..ID_CB_EFFECT_BASE + MAX_ZONES).contains(&id) =>
+                    {
                         let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
                         if i >= 0 {
-                            (st.on_event)(SettingsEvent::Effect(i as usize));
+                            let zone = (id - ID_CB_EFFECT_BASE) as usize;
+                            (st.on_event)(SettingsEvent::Effect(zone, i as usize));
                         }
                     }
                     (ID_CB_POLL, CBN_SELCHANGE) => {
@@ -716,15 +854,21 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                             (st.on_event)(SettingsEvent::Polling(i as usize));
                         }
                     }
-                    (ID_BTN_COLOR, BN_CLICKED) => {
-                        if let Some(c) = choose_color(hwnd, st.color) {
-                            st.color = c;
-                            // Rebuild the swatch brush.
-                            DeleteObject(st.swatch_brush);
-                            st.swatch_brush = CreateSolidBrush(colorref(c));
-                            use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
-                            InvalidateRect(st.swatch, std::ptr::null(), 1);
-                            (st.on_event)(SettingsEvent::Color(c.0, c.1, c.2));
+                    (id, BN_CLICKED)
+                        if (ID_BTN_COLOR_BASE..ID_BTN_COLOR_BASE + MAX_ZONES).contains(&id) =>
+                    {
+                        let zone = (id - ID_BTN_COLOR_BASE) as usize;
+                        if let Some(sw) = st.swatches.get(zone) {
+                            if let Some(c) = choose_color(hwnd, sw.color) {
+                                let sw = &mut st.swatches[zone];
+                                sw.color = c;
+                                // Rebuild the swatch brush.
+                                DeleteObject(sw.brush);
+                                sw.brush = CreateSolidBrush(colorref(c));
+                                use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
+                                InvalidateRect(sw.hwnd, std::ptr::null(), 1);
+                                (st.on_event)(SettingsEvent::Color(zone, c.0, c.1, c.2));
+                            }
                         }
                     }
                     (ID_BTN_DPI_MINUS | ID_BTN_DPI_PLUS, BN_CLICKED) => {
@@ -739,26 +883,21 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                         SetWindowTextW(st.lbl_dpi, txt.as_ptr());
                         (st.on_event)(SettingsEvent::Dpi(dpi));
                     }
-                    (ID_BTN_APPLY, BN_CLICKED) => (st.on_event)(SettingsEvent::Apply),
                     (ID_BTN_SAVE, BN_CLICKED) => (st.on_event)(SettingsEvent::Save),
-                    (ID_BTN_CLOSE, BN_CLICKED) => {
-                        DestroyWindow(hwnd);
-                    }
                     _ => {}
                 }
             }
             0
         }
         WM_CTLCOLORSTATIC => {
-            // Paint the swatch static with the current color.
+            // Paint a zone's swatch static with that zone's current color.
             if let Some(st) = state_mut(hwnd) {
-                use windows_sys::Win32::UI::WindowsAndMessaging::GetDlgCtrlID;
-                if !st.swatch.is_null() && GetDlgCtrlID(lparam as HWND) == ID_SWATCH as i32 {
+                if let Some(sw) = st.swatches.iter().find(|s| s.hwnd == lparam as HWND) {
                     let hdc = wparam as windows_sys::Win32::Graphics::Gdi::HDC;
                     SetBkMode(hdc, OPAQUE as i32);
                     use windows_sys::Win32::Graphics::Gdi::SetBkColor;
-                    SetBkColor(hdc, colorref(st.color));
-                    return st.swatch_brush as LRESULT;
+                    SetBkColor(hdc, colorref(sw.color));
+                    return sw.brush as LRESULT;
                 }
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -771,14 +910,21 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
             use windows_sys::Win32::UI::WindowsAndMessaging::{
                 GetWindowLongPtrW, PostQuitMessage, GWLP_USERDATA,
             };
+            // Stop advertising the handle before it becomes invalid.
+            SETTINGS_HWND.store(0, Ordering::SeqCst);
             let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut WindowState;
             if !ptr.is_null() {
                 let st = Box::from_raw(ptr);
-                if !st.swatch_brush.is_null() {
-                    DeleteObject(st.swatch_brush);
+                for sw in &st.swatches {
+                    if !sw.brush.is_null() {
+                        DeleteObject(sw.brush);
+                    }
                 }
                 if !st.ui_font.is_null() {
                     DeleteObject(st.ui_font as _);
+                }
+                if !st.hicon.is_null() {
+                    DestroyIcon(st.hicon);
                 }
                 drop(st);
             }

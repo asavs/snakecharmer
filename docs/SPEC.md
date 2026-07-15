@@ -32,8 +32,9 @@ resources refutes itself.
 
 ## UI
 - **Tray icon** (`Shell_NotifyIcon`) with a right-click menu (quick DPI, lighting,
-  reload, quit) and a **settings window**: DPI slider, color picker + effect dropdown,
-  per-button action dropdowns, Apply / Save.
+  reload, quit) and a **settings window**: DPI slider, per-zone lighting rows
+  (effect dropdown + color picker per RGB zone), per-button action dropdowns, Save
+  (changes apply live).
 - Config persisted as TOML in `%LOCALAPPDATA%\Snakecharmer\config.toml`.
 - Runs at login via a Startup-folder shortcut (no admin), windowless until opened.
 

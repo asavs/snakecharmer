@@ -3,9 +3,21 @@
 //! Persisted as TOML at `%LOCALAPPDATA%\Snakecharmer\config.toml`. Defaults are
 //! written if the file is missing. This seeds the Phase-4 settings window.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+
+/// Per-zone lighting override (`[zones.wheel]`, `[zones.logo]`). Absent fields
+/// fall back to the device-wide `lighting` / `color`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ZoneConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lighting: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -33,6 +45,11 @@ pub struct Config {
     pub polling_rate: Option<u16>,
     /// How often (seconds) to re-assert driver mode + DPI.
     pub reassert_interval_secs: u64,
+    /// Per-zone lighting overrides, keyed by zone name (`wheel`, `logo`).
+    /// A zone without an entry (or with a field unset) uses the device-wide
+    /// `lighting` / `color`. Kept last: TOML tables must follow plain values.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub zones: BTreeMap<String, ZoneConfig>,
 }
 
 impl Default for Config {
@@ -48,6 +65,7 @@ impl Default for Config {
             color: "#00ff00".to_string(),
             polling_rate: None,
             reassert_interval_secs: 60,
+            zones: BTreeMap::new(),
         }
     }
 }
@@ -56,6 +74,22 @@ impl Config {
     /// The resolved (x, y) DPI, filling Y from X when unset.
     pub fn dpi_xy(&self) -> (u16, u16) {
         (self.dpi, self.dpi_y.unwrap_or(self.dpi))
+    }
+
+    /// Effective lighting effect for a zone: its override, else device-wide.
+    pub fn zone_lighting(&self, zone: &str) -> &str {
+        self.zones
+            .get(zone)
+            .and_then(|z| z.lighting.as_deref())
+            .unwrap_or(&self.lighting)
+    }
+
+    /// Effective color for a zone: its override, else device-wide.
+    pub fn zone_color(&self, zone: &str) -> &str {
+        self.zones
+            .get(zone)
+            .and_then(|z| z.color.as_deref())
+            .unwrap_or(&self.color)
     }
 
     /// Config directory: `%LOCALAPPDATA%\Snakecharmer` (falls back to CWD).
@@ -135,11 +169,38 @@ mod tests {
             color: "#ff8800".into(),
             polling_rate: Some(500),
             reassert_interval_secs: 30,
+            zones: BTreeMap::from([(
+                "logo".to_string(),
+                ZoneConfig { lighting: Some("breathing".into()), color: None },
+            )]),
         };
         let text = toml::to_string_pretty(&c).unwrap();
         let back: Config = toml::from_str(&text).unwrap();
         assert_eq!(c, back);
         assert_eq!(back.dpi_xy(), (1600, 800));
+    }
+
+    #[test]
+    fn zone_overrides_fall_back_to_device_wide() {
+        let mut c = Config::default(); // lighting=keep, color=#00ff00
+        assert_eq!(c.zone_lighting("wheel"), "keep");
+        assert_eq!(c.zone_color("wheel"), "#00ff00");
+
+        c.zones.insert(
+            "wheel".into(),
+            ZoneConfig { lighting: Some("static".into()), color: Some("#ff0000".into()) },
+        );
+        c.zones.insert("logo".into(), ZoneConfig { lighting: Some("spectrum".into()), color: None });
+        assert_eq!(c.zone_lighting("wheel"), "static");
+        assert_eq!(c.zone_color("wheel"), "#ff0000");
+        assert_eq!(c.zone_lighting("logo"), "spectrum");
+        assert_eq!(c.zone_color("logo"), "#00ff00", "unset color falls back");
+    }
+
+    #[test]
+    fn empty_zones_stay_out_of_the_toml() {
+        let text = toml::to_string_pretty(&Config::default()).unwrap();
+        assert!(!text.contains("zones"), "no empty [zones] table:\n{text}");
     }
 
     #[test]
