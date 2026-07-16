@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>snakecharmer diagram point editor</title>
+<style>
+  :root { --bg: #f6f8fa; --fg: #1f2328; --panel: #ffffff; --line: #d0d7de; --accent: #4a7fd4; --ok: #2da44e; --bad: #d1242f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d1117; --fg: #e6edf3; --panel: #161b22; --line: #30363d; --accent: #6ca0f0; --ok: #3fb950; --bad: #f85149; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; display: flex; height: 100vh; background: var(--bg); color: var(--fg);
+         font: 13px ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+  #stage { flex: 1; overflow: hidden; position: relative; }
+  #stage svg { width: 100%; height: 100%; }
+  #side { width: 400px; border-left: 1px solid var(--line); background: var(--panel);
+          display: flex; flex-direction: column; }
+  #side header { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  #side header h1 { font-size: 14px; margin: 0 0 4px; }
+  #dev { color: var(--accent); }
+  #side header p { margin: 2px 0; opacity: .75; font-size: 11.5px; }
+  #status { padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--line); min-height: 34px; }
+  #status.ok { color: var(--ok); } #status.bad { color: var(--bad); }
+  #out { margin: 0; padding: 8px 12px; overflow: auto; white-space: pre-wrap; font-size: 11.5px;
+         user-select: text; max-height: 26%; }
+  #history { flex: 1; overflow: auto; border-top: 1px solid var(--line); padding: 8px 12px; }
+  #history .htitle { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; opacity: .6; margin-bottom: 8px; }
+  .hitem { margin-bottom: 10px; border-left: 2px solid var(--accent); padding-left: 8px;
+           cursor: pointer; border-radius: 0 4px 4px 0; }
+  .hitem:hover { background: rgba(110,160,240,.08); }
+  .hitem.pinned { background: rgba(110,160,240,.14); border-left-color: var(--ok); }
+  .hmeta { opacity: .6; font-size: 11px; margin-bottom: 2px; }
+  #notebox { padding: 8px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+  #notebox textarea { background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font: inherit; resize: vertical; min-height: 44px; }
+  #notebox .target { font-size: 11px; opacity: .7; }
+  #bar { padding: 8px 12px; border-top: 1px solid var(--line); display: flex; gap: 8px; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+           padding: 6px 14px; font: inherit; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  .h-anchor { fill: var(--accent); stroke: #fff; stroke-width: 1; cursor: grab; }
+  .h-ctrl   { fill: var(--panel); stroke: var(--accent); stroke-width: 1.2; cursor: grab; }
+  .h-active { stroke: var(--accent); stroke-width: 1.8; filter: drop-shadow(0 0 3px var(--accent)); }
+  .h-guide  { stroke: var(--accent); stroke-width: .6; stroke-dasharray: 3 3; opacity: .6; pointer-events: none; }
+  .halo     { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-opacity: .22;
+              stroke-linecap: round; filter: drop-shadow(0 0 4px var(--accent)); pointer-events: none; }
+  .h-hover  { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-opacity: .35;
+              stroke-linecap: round; pointer-events: none; }
+  .h-ghost  { fill: var(--accent); opacity: .3; pointer-events: none; }
+  .h-note     { fill: none; stroke: var(--accent); stroke-width: 1.6; pointer-events: none;
+                animation: notepulse 1.4s ease-in-out infinite; }
+  .h-note-dot { fill: var(--accent); pointer-events: none; }
+  @keyframes notepulse { 0%, 100% { stroke-opacity: .9; r: 5px; } 50% { stroke-opacity: .3; r: 9px; } }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="side">
+  <header>
+    <h1>diagram editor &mdash; <span id="dev">detecting&hellip;</span></h1>
+    <p>hover to preview a shape's points &middot; click selects the <b>whole shape</b> &middot; click its segments to toggle them off/on &middot; double-click drops the shape &middot; esc clears.</p>
+    <p>squares = anchors, circles = adjusters; the glowing one is your &ldquo;this point&rdquo; for notes.</p>
+    <p>ctrl+z undoes a drag/nudge &middot; ctrl+y (or ctrl+shift+z) redoes.</p>
+    <p><b>delete point</b> (or the Delete key) removes the glowing point: anchors merge their curves, adjusters straighten their segment.</p>
+    <p>notes queue quietly (enter sends, shift+enter for a newline) &mdash; <b>finish</b> writes lib.rs, regenerates, rebuilds &amp; restarts the daemon, and wakes claude with everything queued.</p>
+  </header>
+  <div id="status">loading current diagram&hellip;</div>
+  <pre id="out">no changes yet</pre>
+  <div id="history">
+    <div class="htitle">notes queued for claude &mdash; hover to see the joint, click to pin</div>
+    <div id="hlist">&hellip;</div>
+  </div>
+  <div id="notebox">
+    <div class="target" id="noteTarget">note about: nothing selected — click segments first (or leave unselected for a general note)</div>
+    <textarea id="noteText" placeholder="tell claude about the selected segments/points… enter queues it, finish delivers"></textarea>
+    <button id="sendNote" class="ghost">queue note for claude</button>
+  </div>
+  <div id="bar">
+    <button id="save">finish</button>
+    <button id="undo" class="ghost" disabled>undo</button>
+    <button id="del" class="ghost">delete point</button>
+    <button id="reset" class="ghost">reset</button>
+    <button id="revert" class="ghost">revert selected</button>
+  </div>
+</div>
+<script>
+'use strict';
+const stage = document.getElementById('stage');
+const out = document.getElementById('out');
+const statusEl = document.getElementById('status');
+let svg = null, handleLayer = null, hoverLayer = null, noteLayer = null;
+let pinnedEntry = null, pinnedDiv = null;
+let lastHandle = null, lastHandleEl = null, lastHandleIdx = -1;
+let dragging = false;
+const selection = new Map();  // element -> Set of selected segment indices
+const originals = new Map();
+const models = new Map();
+const changed = new Set();
+const undoStack = [], redoStack = [];
+
+// one undo step per gesture: a drag pushes once at its start, and rapid
+// consecutive arrow-nudges on the same handle coalesce into one step
+function pushUndo(el, nudge) {
+  const top = undoStack[undoStack.length - 1];
+  if (nudge && top && top.el === el && top.nudge && Date.now() - top.t < 900) {
+    top.t = Date.now();
+    return;
+  }
+  undoStack.push({ el, state: JSON.stringify(models.get(el)), nudge: !!nudge, t: Date.now() });
+  if (undoStack.length > 200) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoBtn();
+}
+function restore(el, state) {
+  models.set(el, JSON.parse(state));
+  apply(el);
+  if (JSON.stringify(models.get(el)) === JSON.stringify(originals.get(el))) changed.delete(el);
+  else changed.add(el);
+  if (lastHandleEl === el) { lastHandle = null; lastHandleEl = null; lastHandleIdx = -1; }
+  render(); emit(); updateUndoBtn();
+}
+function doUndo() {
+  const u = undoStack.pop();
+  if (!u) return;
+  redoStack.push({ el: u.el, state: JSON.stringify(models.get(u.el)) });
+  restore(u.el, u.state);
+}
+function doRedo() {
+  const r = redoStack.pop();
+  if (!r) return;
+  undoStack.push({ el: r.el, state: JSON.stringify(models.get(r.el)), nudge: false, t: Date.now() });
+  restore(r.el, r.state);
+}
+function updateUndoBtn() {
+  document.getElementById('undo').disabled = !undoStack.length;
+}
+
+function status(msg, cls) { statusEl.textContent = msg; statusEl.className = cls || ''; }
+
+// ---------- loading ----------
+async function init() {
+  try {
+    const name = await (await fetch('/device')).text();
+    document.getElementById('dev').textContent = name;
+    const text = await (await fetch('/diagram.svg?ts=' + Date.now())).text();
+    loadText(text);
+    status('ready — click a segment to select it', 'ok');
+    loadNotes();
+  } catch (e) {
+    status('cannot reach the editor server — is `cargo run --bin diagram-editor` still running?', 'bad');
+  }
+}
+function loadText(text) {
+  stage.querySelectorAll(':scope > svg').forEach(e => e.remove());
+  svg = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+  stage.appendChild(svg);
+  svg.removeAttribute('width'); svg.removeAttribute('height');
+  noteLayer = mk('g', {});
+  hoverLayer = mk('g', {});
+  handleLayer = mk('g', {});
+  svg.appendChild(noteLayer);
+  svg.appendChild(hoverLayer);
+  svg.appendChild(handleLayer);
+  pinnedEntry = null;
+  if (pinnedDiv) { pinnedDiv.classList.remove('pinned'); pinnedDiv = null; }
+  selection.clear(); originals.clear(); models.clear(); changed.clear();
+  undoStack.length = 0; redoStack.length = 0; updateUndoBtn();
+  lastHandle = null; lastHandleEl = null; lastHandleIdx = -1;
+  for (const el of svg.querySelectorAll('path, polyline, rect, circle')) {
+    const m = parse(el);
+    if (!m) continue;
+    models.set(el, m);
+    originals.set(el, JSON.parse(JSON.stringify(m)));
+    el.style.cursor = 'pointer';
+    el.style.pointerEvents = 'stroke';
+    el.addEventListener('pointerdown', ev => {
+      if (ev.button !== 0) return;
+      ev.stopPropagation();
+      shapeClick(el, closestSegment(models.get(el), svgPoint(ev)));
+    });
+    el.addEventListener('dblclick', ev => {
+      ev.stopPropagation(); ev.preventDefault();
+      selection.delete(el);
+      if (lastHandleEl === el) { lastHandle = null; lastHandleEl = null; lastHandleIdx = -1; }
+      updateNoteTarget(); render();
+    });
+    el.addEventListener('pointermove', ev => {
+      if (dragging) return;
+      showHover(el, svgPoint(ev));
+    });
+    el.addEventListener('pointerleave', () => hoverLayer.replaceChildren());
+  }
+  emit(); updateNoteTarget(); render();
+}
+init();
+
+// ---------- geometry models ----------
+function parse(el) {
+  const t = el.tagName;
+  if (t === 'polyline') {
+    const pts = (el.getAttribute('points') || '').trim().split(/\s+/)
+      .map(p => p.split(',').map(Number)).filter(p => p.length === 2);
+    return pts.length ? { kind: 'polyline', pts } : null;
+  }
+  if (t === 'rect') {
+    const n = a => +(el.getAttribute(a) || 0);
+    return { kind: 'rect', x: n('x'), y: n('y'), w: n('width'), h: n('height'), r: n('rx') };
+  }
+  if (t === 'circle') {
+    const n = a => +(el.getAttribute(a) || 0);
+    return { kind: 'circle', cx: n('cx'), cy: n('cy'), r: n('r') };
+  }
+  if (t === 'path') {
+    const d = el.getAttribute('d') || '';
+    const m = d.match(/^\s*M\s*(-?[\d.]+)[ ,](-?[\d.]+)((?:\s*C(?:\s*-?[\d.]+[ ,]-?[\d.]+){3})*)\s*(Z?)\s*$/i);
+    if (!m) return null;
+    const pts = [[+m[1], +m[2]]];
+    for (const c of m[3].matchAll(/C((?:\s*-?[\d.]+[ ,]-?[\d.]+){3})/gi)) {
+      const nums = c[1].trim().split(/[\s,]+/).map(Number);
+      for (let i = 0; i < 6; i += 2) pts.push([nums[i], nums[i + 1]]);
+    }
+    return { kind: 'path', closed: m[4].toUpperCase() === 'Z', pts };
+  }
+  return null;
+}
+function apply(el) {
+  const m = models.get(el);
+  if (m.kind === 'polyline') el.setAttribute('points', m.pts.map(p => p.join(',')).join(' '));
+  else if (m.kind === 'rect') { el.setAttribute('x', m.x); el.setAttribute('y', m.y);
+    el.setAttribute('width', m.w); el.setAttribute('height', m.h); el.setAttribute('rx', m.r); }
+  else if (m.kind === 'circle') { el.setAttribute('cx', m.cx); el.setAttribute('cy', m.cy); el.setAttribute('r', m.r); }
+  else if (m.kind === 'path') {
+    let d = `M${m.pts[0][0]} ${m.pts[0][1]}`;
+    for (let i = 1; i < m.pts.length; i += 3)
+      d += ` C${m.pts[i][0]} ${m.pts[i][1]} ${m.pts[i+1][0]} ${m.pts[i+1][1]} ${m.pts[i+2][0]} ${m.pts[i+2][1]}`;
+    if (m.closed) d += ' Z';
+    el.setAttribute('d', d);
+  }
+}
+
+// ---------- segments ----------
+function segmentCount(m) {
+  if (m.kind === 'path') return (m.pts.length - 1) / 3;
+  if (m.kind === 'polyline') return Math.max(1, m.pts.length - 1);
+  return 1; // rect / circle toggle as a whole
+}
+function cubicAt(a, c1, c2, b, t) {
+  const u = 1 - t;
+  return [
+    u*u*u*a[0] + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*b[0],
+    u*u*u*a[1] + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*b[1],
+  ];
+}
+function closestSegment(m, p) {
+  if (m.kind === 'path') {
+    let best = 0, bestD = Infinity;
+    for (let k = 0; k < segmentCount(m); k++) {
+      const a = m.pts[3*k], c1 = m.pts[3*k+1], c2 = m.pts[3*k+2], b = m.pts[3*k+3];
+      for (let s = 0; s <= 12; s++) {
+        const q = cubicAt(a, c1, c2, b, s / 12);
+        const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        if (d < bestD) { bestD = d; best = k; }
+      }
+    }
+    return best;
+  }
+  if (m.kind === 'polyline') {
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i + 1 < m.pts.length; i++) {
+      const a = m.pts[i], b = m.pts[i+1];
+      const dx = b[0]-a[0], dy = b[1]-a[1];
+      const L2 = dx*dx + dy*dy || 1;
+      const t = Math.max(0, Math.min(1, ((p[0]-a[0])*dx + (p[1]-a[1])*dy) / L2));
+      const d = Math.hypot(a[0]+t*dx - p[0], a[1]+t*dy - p[1]);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+  return 0;
+}
+// first click grabs the whole shape; further clicks toggle single segments
+function shapeClick(el, seg) {
+  const set = selection.get(el);
+  if (!set) {
+    const n = segmentCount(models.get(el));
+    selection.set(el, new Set(Array.from({ length: n }, (_, i) => i)));
+  } else if (set.has(seg)) {
+    set.delete(seg);
+    if (!set.size) selection.delete(el);
+    if (lastHandleEl === el) { lastHandle = null; lastHandleEl = null; lastHandleIdx = -1; }
+  } else {
+    set.add(seg);
+  }
+  updateNoteTarget(); render();
+}
+// hover preview: ghost anchors for the whole shape + a soft highlight on the
+// segment the cursor is nearest to (what a click would toggle)
+function showHover(el, p) {
+  hoverLayer.replaceChildren();
+  const m = models.get(el);
+  const seg = closestSegment(m, p);
+  for (const h of haloFor(el, m, new Set([seg]))) {
+    h.setAttribute('class', 'h-hover');
+    hoverLayer.appendChild(h);
+  }
+  if (!selection.has(el)) {
+    for (const q of anchorPoints(m))
+      hoverLayer.appendChild(mk('rect', { class: 'h-ghost',
+        x: q[0] - 2, y: q[1] - 2, width: 4, height: 4 }));
+  }
+}
+function anchorPoints(m) {
+  if (m.kind === 'path') {
+    const out = [];
+    for (let i = 0; i < m.pts.length; i += 3) out.push(m.pts[i]);
+    return out;
+  }
+  if (m.kind === 'polyline') return m.pts;
+  if (m.kind === 'rect') return [[m.x, m.y], [m.x + m.w, m.y + m.h]];
+  return [[m.cx, m.cy]];
+}
+window.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape') {
+    selection.clear();
+    lastHandle = null; lastHandleEl = null; lastHandleIdx = -1;
+    unpinNote();
+    updateNoteTarget(); render();
+  }
+});
+
+// ---------- rust identity ----------
+const ROLE = { body: 'Role::Body', det: 'Role::Detail', lead: 'Role::Lead',
+               rgb: 'Role::RgbZone', btn: 'Role::Button' };
+const P = p => `(${p[0]}, ${p[1]})`;
+function rust(el, m) {
+  const r = ROLE[el.getAttribute('class')] || 'Role::Detail';
+  if (m.kind === 'polyline')
+    return `Shape::Polyline { role: ${r}, points: &[${m.pts.map(P).join(', ')}] }`;
+  if (m.kind === 'rect')
+    return `Shape::RoundRect { role: ${r}, x: ${m.x}, y: ${m.y}, w: ${m.w}, h: ${m.h}, r: ${m.r} }`;
+  if (m.kind === 'circle')
+    return `Shape::Circle { role: ${r}, cx: ${m.cx}, cy: ${m.cy}, r: ${m.r} }`;
+  const cs = [];
+  for (let i = 1; i < m.pts.length; i += 3) cs.push(`(${P(m.pts[i])}, ${P(m.pts[i+1])}, ${P(m.pts[i+2])})`);
+  return `Shape::Path { role: ${r}, start: ${P(m.pts[0])}, closed: ${m.closed}, curves: &[${cs.join(', ')}] }`;
+}
+function segmentLabel(m, k) {
+  if (m.kind === 'path') {
+    const a = m.pts[3*k], b = m.pts[3*k+3];
+    return `segment #${k}: ${P(a)} → ${P(b)} via ${P(m.pts[3*k+1])}, ${P(m.pts[3*k+2])}`;
+  }
+  if (m.kind === 'polyline') return `segment #${k}: ${P(m.pts[k])} → ${P(m.pts[k+1])}`;
+  return 'whole shape';
+}
+function updateNoteTarget() {
+  const t = document.getElementById('noteTarget');
+  if (!selection.size) {
+    t.textContent = 'note about: nothing selected — click segments first (or leave unselected for a general note)';
+    return;
+  }
+  let segs = 0;
+  for (const set of selection.values()) segs += set.size;
+  const one = selection.size === 1 && segs === 1;
+  if (one) {
+    const [el, set] = selection.entries().next().value;
+    t.textContent = 'note about: ' + segmentLabel(models.get(el), [...set][0]) +
+      ' of ' + rust(el, models.get(el)).slice(0, 48) + '…';
+  } else {
+    t.textContent = `note about: ${segs} segment(s) across ${selection.size} shape(s)`;
+  }
+}
+
+// ---------- handles & highlighting ----------
+function mk(tag, attrs) {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function onLine(a, b, c) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  return Math.abs((c[0] - a[0]) * dy - (c[1] - a[1]) * dx) / len < 1.5;
+}
+// handle defs for just the selected segments of one element
+function handleDefs(m, segs) {
+  const defs = [];
+  const seen = new Set();
+  const A = arr => {
+    if (seen.has(arr)) return;
+    seen.add(arr);
+    defs.push({ kind: 'anchor', arr, get: () => [arr[0], arr[1]], set: (x, y) => { arr[0] = x; arr[1] = y; } });
+  };
+  if (m.kind === 'rect') {
+    defs.push({ kind: 'anchor', get: () => [m.x, m.y],
+      set: (x, y) => { m.w += m.x - x; m.h += m.y - y; m.x = x; m.y = y; } });
+    defs.push({ kind: 'anchor', get: () => [m.x + m.w, m.y + m.h],
+      set: (x, y) => { m.w = x - m.x; m.h = y - m.y; } });
+    return defs;
+  }
+  if (m.kind === 'circle') {
+    defs.push({ kind: 'anchor', get: () => [m.cx, m.cy], set: (x, y) => { m.cx = x; m.cy = y; } });
+    defs.push({ kind: 'ctrl', get: () => [m.cx + m.r, m.cy],
+      set: x => { m.r = Math.max(1, Math.round(x - m.cx)); } });
+    return defs;
+  }
+  if (m.kind === 'polyline') {
+    for (const k of segs) { A(m.pts[k]); A(m.pts[k+1]); }
+    return defs;
+  }
+  for (const k of [...segs].sort((a, b) => a - b)) {
+    const a = m.pts[3*k], c1 = m.pts[3*k+1], c2 = m.pts[3*k+2], b = m.pts[3*k+3];
+    A(a);
+    if (!(onLine(a, b, c1) && onLine(a, b, c2))) {
+      if (c1[0] === c2[0] && c1[1] === c2[1]) {
+        defs.push({ kind: 'ctrl', seg: k, get: () => [c1[0], c1[1]],
+          set: (x, y) => { c1[0] = c2[0] = x; c1[1] = c2[1] = y; }, guides: [[a, c1], [b, c1]] });
+      } else {
+        defs.push({ kind: 'ctrl', seg: k, get: () => [c1[0], c1[1]],
+          set: (x, y) => { c1[0] = x; c1[1] = y; }, guides: [[a, c1]] });
+        defs.push({ kind: 'ctrl', seg: k, get: () => [c2[0], c2[1]],
+          set: (x, y) => { c2[0] = x; c2[1] = y; }, guides: [[b, c2]] });
+      }
+    }
+    A(b);
+  }
+  return defs;
+}
+function haloFor(el, m, segs) {
+  if (m.kind === 'rect' || m.kind === 'circle') {
+    const h = el.cloneNode(false);
+    h.removeAttribute('class'); h.setAttribute('class', 'halo');
+    return [h];
+  }
+  if (m.kind === 'polyline')
+    return [...segs].map(k => mk('line', { class: 'halo',
+      x1: m.pts[k][0], y1: m.pts[k][1], x2: m.pts[k+1][0], y2: m.pts[k+1][1] }));
+  let d = '';
+  for (const k of [...segs].sort((a, b) => a - b)) {
+    const a = m.pts[3*k], c1 = m.pts[3*k+1], c2 = m.pts[3*k+2], b = m.pts[3*k+3];
+    d += `M${a[0]} ${a[1]} C${c1[0]} ${c1[1]} ${c2[0]} ${c2[1]} ${b[0]} ${b[1]} `;
+  }
+  return [mk('path', { class: 'halo', d: d.trim() })];
+}
+function render() {
+  if (!handleLayer) return;
+  handleLayer.replaceChildren();
+  for (const [el, segs] of selection) {
+    const m = models.get(el);
+    for (const h of haloFor(el, m, segs)) handleLayer.appendChild(h);
+  }
+  for (const [el, segs] of selection) {
+    const m = models.get(el);
+    const defs = handleDefs(m, segs);
+    for (const d of defs)
+      for (const g of d.guides || [])
+        handleLayer.appendChild(mk('line', { class: 'h-guide',
+          x1: g[0][0], y1: g[0][1], x2: g[1][0], y2: g[1][1] }));
+    defs.forEach((d, idx) => {
+      const [x, y] = d.get();
+      const active = lastHandleEl === el && lastHandleIdx === idx;
+      const cls = (d.kind === 'ctrl' ? 'h-ctrl' : 'h-anchor') + (active ? ' h-active' : '');
+      const h = d.kind === 'ctrl'
+        ? mk('circle', { class: cls, cx: x, cy: y, r: 3.2 })
+        : mk('rect', { class: cls, x: x - 2.8, y: y - 2.8, width: 5.6, height: 5.6 });
+      h.style.pointerEvents = 'all';
+      h.addEventListener('pointerdown', ev => startDrag(ev, el, d, idx));
+      handleLayer.appendChild(h);
+    });
+  }
+}
+function svgPoint(ev) {
+  const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+  const q = p.matrixTransform(svg.getScreenCTM().inverse());
+  return [Math.round(q.x), Math.round(q.y)];
+}
+function startDrag(ev, el, def, idx) {
+  ev.stopPropagation(); ev.preventDefault();
+  lastHandle = def; lastHandleEl = el; lastHandleIdx = idx;
+  pushUndo(el);
+  dragging = true;
+  hoverLayer.replaceChildren();
+  render();
+  const move = e => { const [x, y] = svgPoint(e); def.set(x, y); touch(el); };
+  const up = () => {
+    dragging = false;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+// delete the active point: path anchors merge their two curves into one,
+// polyline vertices just drop, and adjusters straighten their segment
+function deletePoint() {
+  if (!lastHandle || !lastHandleEl) { status('click a point first, then delete', ''); return; }
+  const el = lastHandleEl, def = lastHandle, m = models.get(el);
+  if (m.kind === 'rect' || m.kind === 'circle') {
+    status('rects and circles have no removable points', ''); return;
+  }
+  if (def.kind === 'ctrl') {
+    const k = def.seg, a = m.pts[3*k], b = m.pts[3*k+3];
+    pushUndo(el);
+    m.pts[3*k+1] = [Math.round(a[0] + (b[0]-a[0])/3), Math.round(a[1] + (b[1]-a[1])/3)];
+    m.pts[3*k+2] = [Math.round(a[0] + 2*(b[0]-a[0])/3), Math.round(a[1] + 2*(b[1]-a[1])/3)];
+    status('adjusters removed — segment is straight now', 'ok');
+  } else if (m.kind === 'polyline') {
+    if (m.pts.length <= 2) { status('a polyline needs at least two points', ''); return; }
+    const idx = m.pts.indexOf(def.arr);
+    if (idx < 0) return;
+    pushUndo(el);
+    m.pts.splice(idx, 1);
+    status('point deleted', 'ok');
+  } else { // path anchor
+    const idx = m.pts.indexOf(def.arr);
+    if (idx < 0) return;
+    if (m.pts.length <= 4) { status('a path needs at least one segment', ''); return; }
+    if (idx === 0 || idx === m.pts.length - 1) {
+      if (m.closed) { status("can't delete a closed path's start point (yet) — drag it instead", ''); return; }
+      pushUndo(el);
+      if (idx === 0) m.pts.splice(0, 3);
+      else m.pts.splice(m.pts.length - 3, 3);
+      status('end point deleted', 'ok');
+    } else {
+      pushUndo(el);
+      m.pts.splice(idx - 1, 3); // anchor + flanking controls: neighbours merge
+      status('point deleted — neighbouring curves merged', 'ok');
+    }
+  }
+  lastHandle = null; lastHandleEl = null; lastHandleIdx = -1;
+  const n = segmentCount(m);
+  selection.set(el, new Set(Array.from({ length: n }, (_, i) => i)));
+  touch(el); updateNoteTarget();
+}
+function touch(el) {
+  apply(el);
+  if (JSON.stringify(models.get(el)) === JSON.stringify(originals.get(el))) changed.delete(el);
+  else changed.add(el);
+  render();
+  emit();
+}
+window.addEventListener('keydown', ev => {
+  if (/^(TEXTAREA|INPUT)$/.test(ev.target.tagName)) return;
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {
+    ev.preventDefault(); doUndo(); return;
+  }
+  if ((ev.ctrlKey || ev.metaKey) && (ev.key.toLowerCase() === 'y' ||
+      (ev.key.toLowerCase() === 'z' && ev.shiftKey))) {
+    ev.preventDefault(); doRedo(); return;
+  }
+  if (ev.key === 'Delete' || ev.key === 'Backspace') {
+    ev.preventDefault(); deletePoint(); return;
+  }
+  if (!lastHandle || !lastHandleEl) return;
+  const d = { ArrowLeft: [-1,0], ArrowRight: [1,0], ArrowUp: [0,-1], ArrowDown: [0,1] }[ev.key];
+  if (!d) return;
+  ev.preventDefault();
+  pushUndo(lastHandleEl, true);
+  const [x, y] = lastHandle.get();
+  lastHandle.set(x + d[0], y + d[1]);
+  touch(lastHandleEl);
+});
+
+// ---------- zoom & pan ----------
+stage.addEventListener('wheel', ev => {
+  if (!svg) return;
+  ev.preventDefault();
+  const vb = svg.viewBox.baseVal;
+  const k = ev.deltaY > 0 ? 1.12 : 1/1.12;
+  const [mx, my] = svgPoint(ev);
+  vb.x = mx - (mx - vb.x) * k; vb.y = my - (my - vb.y) * k;
+  vb.width *= k; vb.height *= k;
+}, { passive: false });
+stage.addEventListener('pointerdown', ev => {
+  if (ev.button !== 1 || !svg) return;
+  ev.preventDefault();
+  const vb = svg.viewBox.baseVal;
+  const start = { x: ev.clientX, y: ev.clientY, vx: vb.x, vy: vb.y };
+  const scale = vb.width / stage.clientWidth;
+  const move = e => { vb.x = start.vx - (e.clientX - start.x) * scale; vb.y = start.vy - (e.clientY - start.y) * scale; };
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+});
+
+// ---------- note history ----------
+// pull the note's target back out of the markdown so hovering/clicking the
+// history entry can light up the joint it was about
+function parseEntry(e) {
+  const shapes = [];
+  let cur = null;
+  for (const line of e.split('\n')) {
+    let m;
+    if ((m = line.match(/^- shape: `Shape::(\w+)(.*)`\s*$/))) {
+      cur = { kind: m[1], ints: (m[2].match(/-?\d+/g) || []).map(Number), segs: [] };
+      shapes.push(cur);
+    } else if (cur && (m = line.match(/^\s*- selected segment #(\d+)/))) {
+      cur.segs.push(+m[1]);
+    }
+  }
+  const pm = e.match(/^- about this specific point: \((-?\d+), (-?\d+)\)/m);
+  return {
+    shapes,
+    point: pm ? [+pm[1], +pm[2]] : null,
+    note: (e.match(/^- note: ([\s\S]*)$/m) || [])[1] || '',
+    time: (e.match(/^- time: (\d+)/m) || [])[1],
+  };
+}
+// notes can reference coordinates from before a drag/save, so match by best
+// coordinate overlap (against current AND pre-edit numbers) instead of equality
+function matchNoteShape(kindName, ints) {
+  let best = null, bestScore = -1;
+  for (const [el, m] of models) {
+    if (KIND[m.kind] !== kindName) continue;
+    for (const cand of [flat(m), flat(originals.get(el))]) {
+      if (cand.length !== ints.length) continue;
+      let s = 0;
+      for (let i = 0; i < cand.length; i++) if (cand[i] === ints[i]) s++;
+      if (s > bestScore) { bestScore = s; best = el; }
+    }
+  }
+  return best && bestScore >= ints.length * 0.6 ? best : null;
+}
+function drawNoteTarget(entry, layer) {
+  for (const s of entry.shapes) {
+    const el = matchNoteShape(s.kind, s.ints);
+    if (!el) continue;
+    const m = models.get(el);
+    const n = segmentCount(m);
+    const segs = s.segs.length
+      ? new Set(s.segs.filter(k => k < n))
+      : new Set(Array.from({ length: n }, (_, i) => i));
+    for (const h of haloFor(el, m, segs)) {
+      h.setAttribute('class', 'h-hover');
+      layer.appendChild(h);
+    }
+    for (const q of anchorPoints(m))
+      layer.appendChild(mk('rect', { class: 'h-ghost',
+        x: q[0] - 2, y: q[1] - 2, width: 4, height: 4 }));
+  }
+  if (entry.point) {
+    layer.appendChild(mk('circle', { class: 'h-note', cx: entry.point[0], cy: entry.point[1], r: 6 }));
+    layer.appendChild(mk('circle', { class: 'h-note-dot', cx: entry.point[0], cy: entry.point[1], r: 1.6 }));
+  }
+}
+function redrawPin() {
+  if (!noteLayer) return;
+  noteLayer.replaceChildren();
+  if (pinnedEntry) drawNoteTarget(pinnedEntry, noteLayer);
+}
+function unpinNote() {
+  pinnedEntry = null;
+  if (pinnedDiv) { pinnedDiv.classList.remove('pinned'); pinnedDiv = null; }
+  redrawPin();
+}
+async function loadNotes() {
+  const list = document.getElementById('hlist');
+  try {
+    const t = await (await fetch('/notes?ts=' + Date.now())).text();
+    list.replaceChildren();
+    unpinNote();
+    const entries = t.split(/^## /m).slice(1);
+    if (!entries.length) { list.textContent = 'none — claude has read everything'; return; }
+    for (const e of entries) {
+      const entry = parseEntry(e);
+      const div = document.createElement('div'); div.className = 'hitem';
+      const meta = document.createElement('div'); meta.className = 'hmeta';
+      let nseg = 0;
+      for (const s of entry.shapes) nseg += s.segs.length;
+      meta.textContent = (entry.time ? new Date(+entry.time * 1000).toLocaleTimeString() + ' — ' : '')
+        + (entry.shapes[0] ? entry.shapes[0].kind : 'general')
+        + (nseg ? ` · ${nseg} segment(s)` : '')
+        + (entry.point ? ` @ (${entry.point[0]}, ${entry.point[1]})` : '');
+      const body = document.createElement('div'); body.textContent = entry.note;
+      div.append(meta, body);
+      if (entry.shapes.length || entry.point) {
+        div.addEventListener('mouseenter', () => {
+          hoverLayer.replaceChildren();
+          drawNoteTarget(entry, hoverLayer);
+        });
+        div.addEventListener('mouseleave', () => hoverLayer.replaceChildren());
+        div.addEventListener('click', () => {
+          if (pinnedDiv === div) { unpinNote(); return; }
+          if (pinnedDiv) pinnedDiv.classList.remove('pinned');
+          pinnedEntry = entry; pinnedDiv = div;
+          div.classList.add('pinned');
+          redrawPin();
+        });
+      } else {
+        div.style.cursor = 'default';
+      }
+      list.appendChild(div);
+    }
+  } catch { list.textContent = '(history unavailable)'; }
+}
+
+// ---------- save / reset / notes ----------
+const KIND = { path: 'Path', polyline: 'Polyline', rect: 'RoundRect', circle: 'Circle' };
+function flat(m) {
+  if (m.kind === 'path' || m.kind === 'polyline') return m.pts.flat();
+  if (m.kind === 'rect') return [m.x, m.y, m.w, m.h, m.r];
+  return [m.cx, m.cy, m.r];
+}
+function emit() {
+  if (!changed.size) { out.textContent = 'no changes yet'; return; }
+  out.textContent = `${changed.size} shape(s) modified — press save to write them back`;
+}
+let notesQueued = 0;
+document.getElementById('save').onclick = async function () {
+  if (!changed.size && !notesQueued) { status('nothing to finish — no moved points, no queued notes', ''); return; }
+  this.disabled = true;
+  status(changed.size
+    ? 'finishing — rewriting lib.rs, regenerating SVGs, rebuilding, restarting daemon… (~30s)'
+    : 'finishing — waking claude with your notes…');
+  const payload = [...changed].map(el => ({
+    kind: KIND[models.get(el).kind],
+    old: flat(originals.get(el)),
+    new: flat(models.get(el)),
+  }));
+  try {
+    const r = await fetch('/save', { method: 'POST', body: JSON.stringify(payload) });
+    out.textContent = await r.text();
+    if (r.ok) { status('finished — claude is on it', 'ok'); notesQueued = 0; await init(); }
+    else status('finish failed — details below', 'bad');
+  } catch (e) {
+    status('finish failed: ' + e, 'bad');
+  }
+  this.disabled = false;
+};
+document.getElementById('reset').onclick = () => { init(); };
+document.getElementById('undo').onclick = doUndo;
+document.getElementById('del').onclick = deletePoint;
+document.getElementById('revert').onclick = () => {
+  const targets = selection.size ? [...selection.keys()] : [];
+  for (const el of targets) {
+    if (changed.has(el)) pushUndo(el); // make reverts undoable too
+    models.set(el, JSON.parse(JSON.stringify(originals.get(el))));
+    changed.delete(el);
+    apply(el);
+  }
+  render(); emit();
+};
+document.getElementById('noteText').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && !ev.shiftKey) {
+    ev.preventDefault();
+    document.getElementById('sendNote').click();
+  }
+});
+document.getElementById('sendNote').onclick = async function () {
+  const text = document.getElementById('noteText').value.trim();
+  if (!text) { status('write something first', ''); return; }
+  const body = { note: text };
+  if (selection.size) {
+    body.shapes = [...selection].map(([el, segs]) => {
+      const m = models.get(el);
+      const s = { shape: rust(el, m), segments: [...segs].sort((a, b) => a - b).map(k => segmentLabel(m, k)) };
+      if (changed.has(el)) s.original = rust(el, originals.get(el));
+      return s;
+    });
+    if (lastHandle && lastHandleEl && selection.has(lastHandleEl)) {
+      const [x, y] = lastHandle.get();
+      body.point = `(${x}, ${y})`;
+    }
+  }
+  this.disabled = true;
+  try {
+    const r = await fetch('/note', { method: 'POST', body: JSON.stringify(body) });
+    if (r.ok) {
+      document.getElementById('noteText').value = '';
+      notesQueued++;
+      status('note queued — claude sees it when you press finish', 'ok');
+      loadNotes();
+    } else status('note failed: ' + await r.text(), 'bad');
+  } catch (e) { status('note failed: ' + e, 'bad'); }
+  this.disabled = false;
+};
+</script>
+</body>
+</html>

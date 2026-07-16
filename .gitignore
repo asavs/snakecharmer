@@ -4,3 +4,5 @@
 
 # Raw AI session log — kept locally, not shipped (huge + leaks local paths)
 SUBAGENT-TRANSCRIPT.md
+tools/diagram-notes.md
+tools/diagram-finish.signal
