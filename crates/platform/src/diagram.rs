@@ -81,12 +81,25 @@ pub enum CalloutSlot {
     /// The scroll wheel / middle click (a disabled, identity-only dropdown —
     /// middle-click remap is scaffolded, not yet implemented).
     Wheel,
+    /// A lighting zone's control cluster (effect dropdown + color swatch +
+    /// picker button in one row); the payload is the zone's index into
+    /// [`SettingsInit::lighting`](crate::settings::SettingsInit::lighting).
+    /// Reserves a wider rect than the plain dropdown slots.
+    Lighting(u8),
 }
 
 /// Width of the dropdown a callout reserves space for (design units). Wide
 /// enough for the longest self-identifying entry ("Middle click (default)")
 /// without clipping.
 pub const CALLOUT_COMBO_W: i32 = 145;
+/// A [`CalloutSlot::Lighting`] cluster's parts, left to right: effect
+/// dropdown, color swatch, picker button, with [`LIGHT_GAP`] between them.
+pub const LIGHT_COMBO_W: i32 = 110;
+pub const LIGHT_SWATCH_W: i32 = 40;
+pub const LIGHT_BTN_W: i32 = 70;
+pub const LIGHT_GAP: i32 = 4;
+/// Full width a Lighting callout reserves (one row of the three controls).
+pub const LIGHT_ROW_W: i32 = LIGHT_COMBO_W + LIGHT_GAP + LIGHT_SWATCH_W + LIGHT_GAP + LIGHT_BTN_W;
 /// Closed height of the dropdown a callout reserves space for.
 pub const CALLOUT_COMBO_H: i32 = 24;
 /// Vertical offset from a captioned callout's label baseline to its
@@ -126,14 +139,23 @@ pub enum Shape {
 /// The rect (design units: x, y, w, h) a callout reserves for its dropdown.
 /// `has_caption` selects the stacked (below the caption lines) or bare
 /// (centered on the caption block) mount — see the two `CALLOUT_COMBO_DY*`.
-fn callout_combo_rect(at: (i32, i32), anchor: Anchor, has_caption: bool) -> (i32, i32, i32, i32) {
+fn callout_combo_rect(
+    slot: CalloutSlot,
+    at: (i32, i32),
+    anchor: Anchor,
+    has_caption: bool,
+) -> (i32, i32, i32, i32) {
+    let w = match slot {
+        CalloutSlot::Lighting(_) => LIGHT_ROW_W,
+        _ => CALLOUT_COMBO_W,
+    };
     let x = match anchor {
         Anchor::Start => at.0,
-        Anchor::Middle => at.0 - CALLOUT_COMBO_W / 2,
-        Anchor::End => at.0 - CALLOUT_COMBO_W,
+        Anchor::Middle => at.0 - w / 2,
+        Anchor::End => at.0 - w,
     };
     let dy = if has_caption { CALLOUT_COMBO_DY } else { CALLOUT_COMBO_DY_BARE };
-    (x, at.1 + dy, CALLOUT_COMBO_W, CALLOUT_COMBO_H)
+    (x, at.1 + dy, w, CALLOUT_COMBO_H)
 }
 
 /// Whether a callout draws any caption text at all.
@@ -148,9 +170,10 @@ pub fn callout_combo_rects(diagram: &Diagram) -> Vec<(CalloutSlot, (i32, i32, i3
         .shapes
         .iter()
         .filter_map(|s| match s {
-            Shape::Callout { slot, at, anchor, label, note, .. } => {
-                Some((*slot, callout_combo_rect(*at, *anchor, callout_has_caption(label, note))))
-            }
+            Shape::Callout { slot, at, anchor, label, note, .. } => Some((
+                *slot,
+                callout_combo_rect(*slot, *at, *anchor, callout_has_caption(label, note)),
+            )),
             _ => None,
         })
         .collect()
@@ -300,7 +323,7 @@ pub fn measure(diagram: &Diagram) -> (i32, i32, i32, i32) {
                     add(tx0, at.1 - size);
                     add(tx1, at.1 + size / 3);
                 }
-                Shape::Callout { at, anchor, label, note, note_role, .. } => {
+                Shape::Callout { slot, at, anchor, label, note, note_role } => {
                     // Caption lines (skipped when empty — caption-less
                     // callouts are just their dropdown)...
                     let has_caption = callout_has_caption(label, note);
@@ -322,7 +345,7 @@ pub fn measure(diagram: &Diagram) -> (i32, i32, i32, i32) {
                         }
                     }
                     // ...plus the reserved dropdown rect.
-                    let (cx, cy, cw, ch) = callout_combo_rect(*at, *anchor, has_caption);
+                    let (cx, cy, cw, ch) = callout_combo_rect(*slot, *at, *anchor, has_caption);
                     add(cx, cy);
                     add(cx + cw, cy + ch);
                 }

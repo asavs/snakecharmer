@@ -166,6 +166,7 @@ fn to_platform_diagram(d: &razer_proto::diagram::Diagram) -> platform::diagram::
                     rd::CalloutSlot::ThumbBack => pd::CalloutSlot::ThumbBack,
                     rd::CalloutSlot::ThumbForward => pd::CalloutSlot::ThumbForward,
                     rd::CalloutSlot::Wheel => pd::CalloutSlot::Wheel,
+                    rd::CalloutSlot::Lighting(z) => pd::CalloutSlot::Lighting(z),
                 };
                 // The window's dropdowns are self-identifying (index 0 names
                 // the button — see combo_options), so the callout captions

@@ -11,10 +11,12 @@
 //! remain.
 //!
 //! Layout: centered rows of device-wide knobs at the top — a modest-width DPI
-//! slider row, then polling and one lighting row per zone — the device
-//! schematic ([`SettingsInit::diagram`], drawn anti-aliased with GDI+, see
-//! [`crate::diagram`]) as the centerpiece in the middle with the per-button
-//! dropdowns mounted *on* it at its callout slots, and a single Save button
+//! slider row, then polling; lighting zones mount *on* the schematic beside
+//! their zone markers when the diagram carries `Lighting` slots, else as one
+//! top-cluster row per zone — the device schematic ([`SettingsInit::diagram`],
+//! drawn anti-aliased with GDI+, see [`crate::diagram`]) as the centerpiece in
+//! the middle with the per-button dropdowns mounted *on* it at its callout
+//! slots, and a single Save button
 //! (changes already apply live; the titlebar X closes) with the save hint
 //! under it, centered at the bottom.
 //!
@@ -356,6 +358,11 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             && slot_rect(CalloutSlot::DpiDown).is_some();
         let thumb_in_diagram = slot_rect(CalloutSlot::ThumbBack).is_some()
             && slot_rect(CalloutSlot::ThumbForward).is_some();
+        // Lighting rides the diagram only when EVERY zone has a slot there;
+        // a partial set falls back to top-cluster rows so no zone vanishes.
+        let lighting_in_diagram = !init.lighting.is_empty()
+            && (0..init.lighting.len().min(MAX_ZONES as usize))
+                .all(|i| slot_rect(CalloutSlot::Lighting(i as u8)).is_some());
 
         // --- Vertical plan: centered top cluster (slider row, polling row,
         // lighting row, any fallback rows), diagram in the middle, bottom bar
@@ -374,7 +381,9 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             fb_h += GROUP_GAP;
         }
         let mut top_h = ROW1_H + GROUP_GAP + ROW2_H; // DPI slider + polling
-        top_h += init.lighting.len() as i32 * (GROUP_GAP + ROW2_H); // one row per zone
+        if !lighting_in_diagram {
+            top_h += init.lighting.len() as i32 * (GROUP_GAP + ROW2_H); // one row per zone
+        }
         top_h += fb_h;
         let bottom_h = BOTTOM_H + 6 + 16; // button row + gap + hint line below it
         // Content-driven height: the diagram sits one DIAGRAM_VGAP below the
@@ -574,8 +583,15 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         y += ROW2_H;
         // One lighting row per zone, each captioned with its zone name so two
         // zones (e.g. wheel + logo) get independent effect and color controls.
+        // Skipped entirely when the diagram hosts the zones at Lighting slots
+        // (the clusters mount on the pane below, beside their zone markers).
         let mut swatches: Vec<Swatch> = Vec::new();
-        for (zi, l) in init.lighting.iter().take(MAX_ZONES as usize).enumerate() {
+        for (zi, l) in init
+            .lighting
+            .iter()
+            .take(if lighting_in_diagram { 0 } else { MAX_ZONES as usize })
+            .enumerate()
+        {
             let zi16 = zi as u16;
             y += GROUP_GAP;
             let light_w = 52 + 4 + 110 + 16 + 38 + 2 + 60 + 6 + 90;
@@ -702,6 +718,57 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                 let pw = ((cw as f32) * scale).round() as i32;
                 let cb = make_combo(ID_CB_WHEEL, px, py, pw, &init.wheel.labels, init.wheel.index);
                 EnableWindow(cb, 0);
+            }
+            // Lighting clusters, one per zone, mounted beside their zone
+            // markers: effect dropdown, color swatch, picker button in a row.
+            // The zone's identity comes from the diagram's own captions
+            // ("RGB zone 0x01" etc.), so the cluster carries no label.
+            if lighting_in_diagram {
+                for (zi, l) in init.lighting.iter().take(MAX_ZONES as usize).enumerate() {
+                    let zi16 = zi as u16;
+                    let Some((cx, cy, _, _)) = slot_rect(CalloutSlot::Lighting(zi as u8)) else {
+                        continue;
+                    };
+                    let py = pane_origin.1 + (((cy - by0) as f32) * scale).round() as i32;
+                    let sx = |d: i32| {
+                        pane_origin.0 + (((cx + d - bx0) as f32) * scale).round() as i32
+                    };
+                    let sw = |w: i32| ((w as f32) * scale).round() as i32;
+                    let _ = make_combo(
+                        ID_CB_EFFECT_BASE + zi16,
+                        sx(0),
+                        py,
+                        sw(diagram::LIGHT_COMBO_W),
+                        &l.effect_labels,
+                        l.effect_index,
+                    );
+                    let swatch = mk(
+                        "STATIC",
+                        "",
+                        SS_CENTER,
+                        ID_SWATCH_BASE + zi16,
+                        sx(diagram::LIGHT_COMBO_W + diagram::LIGHT_GAP),
+                        py + 1,
+                        sw(diagram::LIGHT_SWATCH_W),
+                        22,
+                    );
+                    let _ = mk(
+                        "BUTTON",
+                        "Choose...",
+                        BS_PUSHBUTTON | WS_TABSTOP,
+                        ID_BTN_COLOR_BASE + zi16,
+                        sx(diagram::LIGHT_COMBO_W + diagram::LIGHT_GAP
+                            + diagram::LIGHT_SWATCH_W + diagram::LIGHT_GAP),
+                        py,
+                        sw(diagram::LIGHT_BTN_W),
+                        ROW2_H,
+                    );
+                    swatches.push(Swatch {
+                        hwnd: swatch,
+                        color: l.color,
+                        brush: CreateSolidBrush(colorref(l.color)),
+                    });
+                }
             }
         }
 

@@ -100,11 +100,18 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
             Shape::Polyline { role: Role::Detail, points: &[(219, 105), (237, 105)] },
             Shape::Polyline { role: Role::Detail, points: &[(219, 115), (237, 115)] },
             Shape::Polyline { role: Role::Detail, points: &[(219, 125), (237, 125)] },
-            Shape::Polyline { role: Role::Lead, points: &[(241, 98), (396, 98)] },
-            Shape::Callout { slot: CalloutSlot::Wheel, at: (402, 95), anchor: Anchor::Start,
+            // middle click rides the LEFT arm (empty space above the thumb
+            // callouts); the wheel's right-arm lead belongs to its RGB zone
+            Shape::Polyline { role: Role::Lead, points: &[(212, 98), (104, 98)] },
+            Shape::Callout { slot: CalloutSlot::Wheel, at: (100, 95), anchor: Anchor::End,
                 label: "scroll wheel — middle click", note: "", note_role: Role::Note },
-            // Below the wheel's dropdown-mount rect so the window doesn't cover it.
-            Shape::Text { role: Role::RgbZone, at: (402, 128), anchor: Anchor::Start, text: "RGB zone 0x01" },
+            // Wheel zone lighting at the end of its own lead: the caption
+            // names the zone, the bare Lighting slot mounts the effect +
+            // color cluster in the settings window.
+            Shape::Polyline { role: Role::Lead, points: &[(241, 98), (396, 98)] },
+            Shape::Text { role: Role::RgbZone, at: (402, 95), anchor: Anchor::Start, text: "RGB zone 0x01" },
+            Shape::Callout { slot: CalloutSlot::Lighting(0), at: (402, 110), anchor: Anchor::Start,
+                label: "", note: "", note_role: Role::Note },
             // dpi_up (front, nearer the wheel) and dpi_down (rear) — center strip
             Shape::RoundRect { role: Role::Button, x: 222, y: 140, w: 13, h: 30, r: 4 },
             Shape::Polyline { role: Role::Lead, points: &[(235, 155), (396, 155)] },
@@ -146,6 +153,9 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
             Shape::Polyline { role: Role::Lead, points: &[(252, 300), (396, 300)] },
             Shape::Text { role: Role::Label, at: (402, 297), anchor: Anchor::Start, text: "logo" },
             Shape::Text { role: Role::RgbZone, at: (402, 313), anchor: Anchor::Start, text: "RGB zone 0x04" },
+            // Logo zone lighting cluster, mirroring the wheel's.
+            Shape::Callout { slot: CalloutSlot::Lighting(1), at: (402, 325), anchor: Anchor::Start,
+                label: "", note: "", note_role: Role::Note },
             // footnote, wrapped so it never widens the canvas (the thumb-hook
             // disclaimer lives beside the thumb callouts)
             Shape::Text { role: Role::Note, at: (330, 420), anchor: Anchor::Middle, text: "DPI-button remaps are hook-free:" },

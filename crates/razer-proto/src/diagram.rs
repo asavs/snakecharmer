@@ -75,6 +75,11 @@ pub enum CalloutSlot {
     /// mounts a disabled, identity-only dropdown here (middle-click remap is
     /// not yet implemented).
     Wheel,
+    /// A lighting zone's controls (effect dropdown + color swatch + picker),
+    /// mounted beside that zone's marker on the schematic. Carries the zone's
+    /// index into `DeviceSpec::rgb_zones` (= the settings window's lighting
+    /// rows), so diagrams stay generic over zone count.
+    Lighting(u8),
 }
 
 /// A drawing primitive. Everything is const-constructible so diagrams live

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-116 -27 768 478" width="768" height="478" font-family="ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace" font-size="13">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-129 -27 781 478" width="781" height="478" font-family="ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace" font-size="13">
   <style>
     svg { --fg: #6e7781; --rgb: #2da44e; --btn: #4a7fd4; }
     @media (prefers-color-scheme: dark) {
@@ -39,9 +39,10 @@
   <polyline class="det" points="219,105 237,105"/>
   <polyline class="det" points="219,115 237,115"/>
   <polyline class="det" points="219,125 237,125"/>
+  <polyline class="lead" points="212,98 104,98"/>
+  <text class="txt" x="100" y="95" text-anchor="end">scroll wheel — middle click</text>
   <polyline class="lead" points="241,98 396,98"/>
-  <text class="txt" x="402" y="95">scroll wheel — middle click</text>
-  <text class="rgbt" x="402" y="128">RGB zone 0x01</text>
+  <text class="rgbt" x="402" y="95">RGB zone 0x01</text>
   <rect class="btn" x="222" y="140" width="13" height="30" rx="4"/>
   <polyline class="lead" points="235,155 396,155"/>
   <text class="txt" x="402" y="151">dpi_up</text>
