@@ -1098,6 +1098,34 @@ mod tests {
     }
 
     #[test]
+    fn diagram_arm_balance_within_slack() {
+        // A heads-up, not a hard requirement — see platform::settings::
+        // CENTER_SLACK's docs. Hardware dictates which callouts land on
+        // which side (an RGB zone's controls sit beside that zone; a device
+        // with no lighting has nothing to balance a wheel callout against),
+        // so some imbalance is often unavoidable and the settings window
+        // already absorbs up to CENTER_SLACK of it as body drift before any
+        // margin skew shows. This just tells a new device's author how much
+        // residual skew to expect. Computed at scale=1 (true for every
+        // diagram today — all comfortably under platform's PANE_MAX_W).
+        let budget = 2.0 * platform::settings::CENTER_SLACK;
+        for spec in razer_proto::SUPPORTED {
+            let diagram = to_platform_diagram(&spec.diagram);
+            let Some((left, right)) = platform::diagram::arm_balance(&diagram) else { continue };
+            let imbalance = (left - right).abs();
+            if imbalance > budget {
+                eprintln!(
+                    "note: {}'s diagram has a {imbalance:.0}px left/right arm imbalance \
+                     (left={left:.0} right={right:.0}) — CENTER_SLACK absorbs {budget:.0}px \
+                     before margins go visibly lopsided; balance callouts across both arms \
+                     if the hardware allows it",
+                    spec.name,
+                );
+            }
+        }
+    }
+
+    #[test]
     fn menu_action_for_covers_double_click_and_settings() {
         assert!(matches!(menu_action_for(menu_id::SETTINGS), Some(MenuAction::OpenSettings)));
         assert!(matches!(

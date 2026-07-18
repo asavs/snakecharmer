@@ -58,23 +58,30 @@ fn diagram_full() -> Diagram {
             },
             Shape::Text { role: Role::Note, at: (186, 74), anchor: Anchor::Middle, text: "left".into() },
             Shape::Text { role: Role::Note, at: (270, 74), anchor: Anchor::Middle, text: "right".into() },
-            // scroll wheel (long slot) — RGB zone
+            // scroll wheel (long slot) — RGB zone. Keybind rides the LEFT
+            // arm, RGB rides the RIGHT — same split as the DPI/thumb
+            // keybinds vs. the logo's RGB below, so each side carries 3
+            // balanced callouts (mirrors the Elite).
             Shape::RoundRect { role: Role::AccentA, x: 219, y: 68, w: 18, h: 56, r: 9 },
             Shape::Polyline { role: Role::Detail, points: vec![(220, 78), (236, 78)] },
             Shape::Polyline { role: Role::Detail, points: vec![(220, 88), (236, 88)] },
             Shape::Polyline { role: Role::Detail, points: vec![(220, 98), (236, 98)] },
             Shape::Polyline { role: Role::Detail, points: vec![(220, 108), (236, 108)] },
             Shape::Polyline { role: Role::Detail, points: vec![(220, 118), (236, 118)] },
+            Shape::Polyline { role: Role::Lead, points: vec![(215, 96), (104, 96)] },
+            callout(CalloutSlot::Wheel, (100, 93), Anchor::End),
             Shape::Polyline { role: Role::Lead, points: vec![(241, 96), (396, 96)] },
-            callout(CalloutSlot::Wheel, (402, 93), Anchor::Start),
-            Shape::Text { role: Role::AccentA, at: (402, 128), anchor: Anchor::Start, text: "RGB zone 0x01".into() },
+            callout(CalloutSlot::Lighting(0), (402, 93), Anchor::Start),
             // dpi_up (front, nearer the wheel) and dpi_down (rear) — center strip
             Shape::RoundRect { role: Role::AccentB, x: 218, y: 134, w: 20, h: 15, r: 5 },
-            Shape::Polyline { role: Role::Lead, points: vec![(242, 142), (396, 142)] },
-            callout(CalloutSlot::DpiUp, (402, 138), Anchor::Start),
+            Shape::Polyline { role: Role::Lead, points: vec![(242, 142), (396, 154)] },
+            callout(CalloutSlot::DpiUp, (402, 154), Anchor::Start),
             Shape::RoundRect { role: Role::AccentB, x: 218, y: 155, w: 20, h: 15, r: 5 },
-            Shape::Polyline { role: Role::Lead, points: vec![(242, 163), (340, 163), (372, 204), (396, 204)] },
-            callout(CalloutSlot::DpiDown, (402, 204), Anchor::Start),
+            Shape::Polyline { role: Role::Lead, points: vec![(242, 163), (396, 221)] },
+            // hook-free note in the gap between the DPI dropdowns — beside
+            // the buttons it describes, not a distant footnote.
+            Shape::Text { role: Role::Note, at: (402, 193), anchor: Anchor::Start, text: "rebinds always hook-free".into() },
+            callout(CalloutSlot::DpiDown, (402, 221), Anchor::Start),
             // thumb buttons on the flare
             Shape::RoundRect { role: Role::AccentB, x: 126, y: 168, w: 18, h: 40, r: 6 },
             Shape::RoundRect { role: Role::AccentB, x: 120, y: 218, w: 18, h: 40, r: 6 },
@@ -96,11 +103,8 @@ fn diagram_full() -> Diagram {
                 curves: vec![((220, 290), (238, 300), (222, 310))],
             },
             Shape::Polyline { role: Role::Lead, points: vec![(248, 300), (396, 300)] },
-            Shape::Text { role: Role::Label, at: (402, 297), anchor: Anchor::Start, text: "logo".into() },
-            Shape::Text { role: Role::AccentA, at: (402, 313), anchor: Anchor::Start, text: "RGB zone 0x04".into() },
-            // footnote (the thumb-hook disclaimer lives beside the thumb dropdowns)
-            Shape::Text { role: Role::Note, at: (330, 420), anchor: Anchor::Middle, text: "DPI-button remaps are hook-free:".into() },
-            Shape::Text { role: Role::Note, at: (330, 436), anchor: Anchor::Middle, text: "vendor codes in driver mode, pointer motion untouched".into() },
+            // Logo zone's lighting cluster, mirroring the wheel's.
+            callout(CalloutSlot::Lighting(1), (402, 297), Anchor::Start),
         ],
     }
 }

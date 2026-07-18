@@ -295,8 +295,10 @@ Annotation content rules:
 - **Put the hook disclaimer at the point of decision**: the thumb-hook cost note is a
   short wrapped `Note` block directly under the thumb callouts — exactly where the
   settings window mounts the remap dropdowns — not a distant footnote. Devices with
-  vendor-code buttons additionally keep the hook-free driver-mode line as a centered
-  footnote (`Note`, `anchor: Middle`, under everything).
+  vendor-code DPI buttons apply the same rule: a single `rebinds always hook-free`
+  line sits in the caption column between the `dpi_up` note and the `dpi_down`
+  label — the gap a static SVG leaves open because it never draws the live dropdown
+  box. Not a distant footnote either.
 - The caption text you write on a `Callout` appears **only in the generated SVG**: in
   the settings window each callout mounts a dropdown whose index-0 entry names its own
   button (`← Back (default)`, `Front DPI — unbound`), so the captions are suppressed

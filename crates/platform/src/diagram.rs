@@ -93,13 +93,13 @@ pub enum CalloutSlot {
 /// without clipping.
 pub const CALLOUT_COMBO_W: i32 = 145;
 /// A [`CalloutSlot::Lighting`] cluster's parts, left to right: effect
-/// dropdown, color swatch, picker button, with [`LIGHT_GAP`] between them.
+/// dropdown, then the color swatch (itself the picker trigger — see
+/// `settings::ID_BTN_COLOR_BASE`), with [`LIGHT_GAP`] between them.
 pub const LIGHT_COMBO_W: i32 = 110;
 pub const LIGHT_SWATCH_W: i32 = 40;
-pub const LIGHT_BTN_W: i32 = 70;
 pub const LIGHT_GAP: i32 = 4;
-/// Full width a Lighting callout reserves (one row of the three controls).
-pub const LIGHT_ROW_W: i32 = LIGHT_COMBO_W + LIGHT_GAP + LIGHT_SWATCH_W + LIGHT_GAP + LIGHT_BTN_W;
+/// Full width a Lighting callout reserves (one row of the two controls).
+pub const LIGHT_ROW_W: i32 = LIGHT_COMBO_W + LIGHT_GAP + LIGHT_SWATCH_W;
 /// Closed height of the dropdown a callout reserves space for.
 pub const CALLOUT_COMBO_H: i32 = 24;
 /// Vertical offset from a captioned callout's label baseline to its
@@ -399,6 +399,28 @@ pub fn body_x_bounds(diagram: &Diagram) -> Option<(i32, i32)> {
         }
     }
     (x0 <= x1).then_some((x0, x1))
+}
+
+/// How far the diagram's content reaches left and right of the mouse body's
+/// centerline (design units, unscaled) — `(left_arm, right_arm)`. `None`
+/// when there's no body path or the content has zero width.
+///
+/// The two arms are almost never equal: which callouts land on which side is
+/// dictated by the hardware (an RGB zone's controls sit beside that zone; a
+/// device with no lighting has nothing to balance a wheel callout against),
+/// so every diagram — present or future — carries some imbalance. The
+/// settings window (see its `CENTER_SLACK` clamp) uses this to bound how much
+/// of that imbalance becomes an asymmetric margin versus the body drifting
+/// off the window's centerline.
+pub fn arm_balance(diagram: &Diagram) -> Option<(f32, f32)> {
+    let (x0, _, x1, _) = measure(diagram);
+    let (bx0, bx1) = body_x_bounds(diagram)?;
+    let w = x1 - x0;
+    if w <= 0 {
+        return None;
+    }
+    let body_off = ((bx0 + bx1) / 2 - x0) as f32;
+    Some((body_off, w as f32 - body_off))
 }
 
 /// Initialize GDI+ for this process; returns the token for [`shutdown`].

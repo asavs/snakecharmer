@@ -100,17 +100,15 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
             Shape::Polyline { role: Role::Detail, points: &[(219, 105), (237, 105)] },
             Shape::Polyline { role: Role::Detail, points: &[(219, 115), (237, 115)] },
             Shape::Polyline { role: Role::Detail, points: &[(219, 125), (237, 125)] },
-            // middle click rides the LEFT arm (empty space above the thumb
-            // callouts); the wheel's right-arm lead belongs to its RGB zone
+            // Keybind rides the LEFT arm, RGB rides the RIGHT — same split as
+            // the DPI/thumb keybinds vs. the logo's RGB below, so each side
+            // of the mouse carries 3 balanced callouts (Wheel/ThumbForward/
+            // ThumbBack left; Lighting(0)+DPI pair+Lighting(1) right).
             Shape::Polyline { role: Role::Lead, points: &[(212, 98), (104, 98)] },
             Shape::Callout { slot: CalloutSlot::Wheel, at: (100, 95), anchor: Anchor::End,
                 label: "scroll wheel — middle click", note: "", note_role: Role::Note },
-            // Wheel zone lighting at the end of its own lead: the caption
-            // names the zone, the bare Lighting slot mounts the effect +
-            // color cluster in the settings window.
             Shape::Polyline { role: Role::Lead, points: &[(241, 98), (396, 98)] },
-            Shape::Text { role: Role::RgbZone, at: (402, 95), anchor: Anchor::Start, text: "RGB zone 0x01" },
-            Shape::Callout { slot: CalloutSlot::Lighting(0), at: (402, 110), anchor: Anchor::Start,
+            Shape::Callout { slot: CalloutSlot::Lighting(0), at: (402, 95), anchor: Anchor::Start,
                 label: "", note: "", note_role: Role::Note },
             // dpi_up (front, nearer the wheel) and dpi_down (rear) — center strip
             Shape::RoundRect { role: Role::Button, x: 222, y: 140, w: 13, h: 30, r: 4 },
@@ -119,6 +117,10 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
                 label: "dpi_up", note: "code 0x20 · front, nearer the wheel", note_role: Role::Button },
             Shape::RoundRect { role: Role::Button, x: 222, y: 170, w: 13, h: 31, r: 4 },
             Shape::Polyline { role: Role::Lead, points: &[(235, 185), (340, 185), (372, 218), (396, 218)] },
+            // hook-free note sits in the caption column, in the gap between
+            // dpi_up's note and dpi_down's label — right beside the buttons
+            // it describes, not a distant footnote.
+            Shape::Text { role: Role::Note, at: (402, 190), anchor: Anchor::Start, text: "rebinds always hook-free" },
             Shape::Callout { slot: CalloutSlot::DpiDown, at: (402, 218), anchor: Anchor::Start,
                 label: "dpi_down", note: "code 0x21 · rear button", note_role: Role::Button },
             // thumb buttons (drawn as clean crescents following the waist)
@@ -151,15 +153,9 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
                 ((212, 292), (244, 308), (228, 316)),
             ]},
             Shape::Polyline { role: Role::Lead, points: &[(252, 300), (396, 300)] },
-            Shape::Text { role: Role::Label, at: (402, 297), anchor: Anchor::Start, text: "logo" },
-            Shape::Text { role: Role::RgbZone, at: (402, 313), anchor: Anchor::Start, text: "RGB zone 0x04" },
             // Logo zone lighting cluster, mirroring the wheel's.
-            Shape::Callout { slot: CalloutSlot::Lighting(1), at: (402, 325), anchor: Anchor::Start,
+            Shape::Callout { slot: CalloutSlot::Lighting(1), at: (402, 297), anchor: Anchor::Start,
                 label: "", note: "", note_role: Role::Note },
-            // footnote, wrapped so it never widens the canvas (the thumb-hook
-            // disclaimer lives beside the thumb callouts)
-            Shape::Text { role: Role::Note, at: (330, 420), anchor: Anchor::Middle, text: "DPI-button remaps are hook-free:" },
-            Shape::Text { role: Role::Note, at: (330, 436), anchor: Anchor::Middle, text: "vendor codes in driver mode, pointer motion untouched" },
         ],
     },
 };

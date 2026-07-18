@@ -33,26 +33,29 @@
 use windows_sys::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
 use windows_sys::Win32::Graphics::Gdi::{
-    BeginPaint, CreateFontW, CreateSolidBrush, DeleteObject, EndPaint, GetStockObject,
-    GetSysColor, SetBkMode, CLEARTYPE_QUALITY, COLOR_BTNTEXT, COLOR_GRAYTEXT, DEFAULT_GUI_FONT,
-    FW_NORMAL, HBRUSH, HFONT, HGDIOBJ, OPAQUE, PAINTSTRUCT,
+    BeginPaint, CreateFontW, CreateSolidBrush, DeleteObject, EndPaint, FillRect, FrameRect,
+    GetStockObject, GetSysColor, CLEARTYPE_QUALITY, COLOR_BTNTEXT, COLOR_GRAYTEXT,
+    DEFAULT_GUI_FONT, FW_NORMAL, HBRUSH, HFONT, HGDIOBJ, PAINTSTRUCT,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 use windows_sys::Win32::UI::Controls::Dialogs::{ChooseColorW, CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW};
 use windows_sys::Win32::UI::Controls::{
-    InitCommonControlsEx, ICC_BAR_CLASSES, INITCOMMONCONTROLSEX, TBM_SETPOS, TBM_SETRANGE,
-    TB_BOTTOM, TB_ENDTRACK, TB_LINEDOWN, TB_LINEUP, TB_PAGEDOWN, TB_PAGEUP, TB_THUMBPOSITION,
-    TB_TOP,
+    InitCommonControlsEx, DRAWITEMSTRUCT, ICC_BAR_CLASSES, INITCOMMONCONTROLSEX, TBM_SETPOS,
+    TBM_SETRANGE, TB_BOTTOM, TB_ENDTRACK, TB_LINEDOWN, TB_LINEUP, TB_PAGEDOWN, TB_PAGEUP,
+    TB_THUMBPOSITION, TB_TOP, WM_MOUSELEAVE,
 };
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    EnableWindow, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
+};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    AdjustWindowRect, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow, DispatchMessageW,
-    GetMessageW, LoadCursorW, RegisterClassW, SendMessageW, SetForegroundWindow, SetWindowPos,
-    SetWindowTextW, ShowWindow, TranslateMessage, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL,
-    CB_SETCURSEL, CW_USEDEFAULT, HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_CTLCOLORSTATIC,
-    WM_DESTROY, WM_HSCROLL, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WS_CHILD, WS_OVERLAPPED,
+    AdjustWindowRect, CallWindowProcW, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow,
+    DispatchMessageW, GetMessageW, GetParent, LoadCursorW, RegisterClassW, SendMessageW,
+    SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage,
+    CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
+    HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DRAWITEM, WM_HSCROLL,
+    WM_MOUSEMOVE, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WNDPROC, WS_CHILD, WS_OVERLAPPED,
     WS_CAPTION, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
 };
 
@@ -88,6 +91,7 @@ pub fn focus() {
 const SS_CENTER: u32 = 0x0000_0001;
 const TBM_GETPOS: u32 = 0x0400; // WM_USER + 0
 const BS_PUSHBUTTON: u32 = 0x0000_0000;
+const BS_OWNERDRAW: u32 = 0x0000_000B;
 const CBN_SELCHANGE: u16 = 1;
 const BN_CLICKED: u16 = 0;
 
@@ -106,11 +110,23 @@ const ID_BTN_SAVE: u16 = 109;
 // Per-zone lighting controls: id = base + zone index (up to MAX_ZONES zones).
 const MAX_ZONES: u16 = 16;
 const ID_CB_EFFECT_BASE: u16 = 200;
-const ID_SWATCH_BASE: u16 = 216;
+/// The color swatch doubles as the picker button: one owner-drawn control,
+/// clicked to open [`ChooseColorW`], with a hover border painted in
+/// [`WM_DRAWITEM`] ([`swatch_wndproc`] tracks the hover state).
 const ID_BTN_COLOR_BASE: u16 = 232;
 
 // Layout metrics (px at 96 dpi; the running cursor stacks controls with these).
 const MARGIN: i32 = 16;
+/// How far the mouse body may drift off the window's centerline (px) to
+/// absorb a diagram's left/right arm imbalance (see
+/// [`diagram::arm_balance`]) — without this, whichever side has less content
+/// simply keeps `half`'s worth of margin, so a lopsided diagram (e.g. a
+/// lighting cluster on only one side) reads as a crooked window. Splitting
+/// the imbalance between body off-center and margin keeps both bounded; 0
+/// would recover exact body-centering with unbounded margin skew instead.
+/// `pub` so device-diagram tests (e.g. the daemon's) can warn an author when
+/// their new diagram's imbalance will exceed what this absorbs cleanly.
+pub const CENTER_SLACK: f32 = 16.0;
 /// Width of a fallback labeled-combo row (diagrams without callout slots).
 const COL_W: i32 = 340;
 /// Widest the diagram pane may grow; larger diagrams scale down to fit.
@@ -223,12 +239,15 @@ struct DiagramPane {
     palette: Palette,
 }
 
-/// One lighting zone's color swatch: its STATIC control, current color, and
-/// the solid brush WM_CTLCOLORSTATIC paints it with.
+/// One lighting zone's color swatch: the owner-drawn button that is both the
+/// color preview and the picker trigger (see [`ID_BTN_COLOR_BASE`]), its
+/// current color, the solid brush [`WM_DRAWITEM`] fills it with, and whether
+/// the pointer is currently over it (painted as a highlighted border).
 struct Swatch {
     hwnd: HWND,
     color: (u8, u8, u8),
     brush: HBRUSH,
+    hovered: bool,
 }
 
 struct WindowState {
@@ -402,25 +421,30 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // centerline (item 5): the caption column is wider than the combo
         // column, so centering full content bounds leaves the body left of
         // center. `body_off` is the body midpoint's distance (px) from the
-        // content's left edge; the window is sized so both content arms clear
-        // the margins with the body centered.
+        // content's left edge — see CENTER_SLACK below for how it's actually
+        // used (centering exactly on it is only the target, not guaranteed).
         let body_off: f32 = pane_meta
-            .and_then(|(scale, _, (x0, _))| {
-                init.diagram
-                    .as_ref()
-                    .and_then(diagram::body_x_bounds)
-                    .map(|(bx0, bx1)| (((bx0 + bx1) / 2 - x0) as f32) * scale)
+            .and_then(|(scale, _, _)| {
+                init.diagram.as_ref().and_then(diagram::arm_balance).map(|(l, _)| l * scale)
             })
             .unwrap_or(dia_w as f32 / 2.0);
-        let left_arm = body_off;
-        let right_arm = dia_w as f32 - body_off;
+        // Centering exactly on the body (item 5's stated goal) can leave one
+        // arm with far more margin than the other whenever a diagram's
+        // callouts are lopsided — see CENTER_SLACK. `anchor` is the point the
+        // window actually centers on: the body center, pulled toward the
+        // content's midpoint by up to CENTER_SLACK so a small imbalance
+        // becomes equal margins instead of a crooked window, while a large
+        // one is only ever off by CENTER_SLACK's worth of body drift.
+        let anchor = (dia_w as f32 / 2.0).clamp(body_off - CENTER_SLACK, body_off + CENTER_SLACK);
+        let left_arm = anchor;
+        let right_arm = dia_w as f32 - anchor;
         let half = left_arm.max(right_arm);
         let client_w = if has_diagram {
             ((2.0 * half).ceil() as i32 + 2 * MARGIN).max(MIN_CLIENT_W)
         } else {
             MIN_CLIENT_W
         };
-        let pane_origin_x = (client_w / 2 - body_off.round() as i32)
+        let pane_origin_x = (client_w / 2 - anchor.round() as i32)
             .clamp(0, (client_w - dia_w).max(0));
 
         let style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
@@ -594,7 +618,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         {
             let zi16 = zi as u16;
             y += GROUP_GAP;
-            let light_w = 52 + 4 + 110 + 16 + 38 + 2 + 60 + 6 + 90;
+            let light_w = 52 + 4 + 110 + 16 + 38 + 2 + 60;
             x = (client_w - light_w) / 2;
             let _ = mk("STATIC", &format!("{}:", l.label), 0, 0, x, y + 5, 52, LBL_H);
             x += 52 + 4;
@@ -602,22 +626,15 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             x += 110 + 16;
             let _ = mk("STATIC", "Color:", 0, 0, x, y + 5, 38, LBL_H);
             x += 38 + 2;
-            let swatch = mk("STATIC", "", SS_CENTER, ID_SWATCH_BASE + zi16, x, y + 2, 60, 22);
-            x += 60 + 6;
-            let _ = mk(
-                "BUTTON",
-                "Choose...",
-                BS_PUSHBUTTON | WS_TABSTOP,
-                ID_BTN_COLOR_BASE + zi16,
-                x,
-                y,
-                90,
-                ROW2_H,
-            );
+            // The swatch is the picker trigger — no separate button — sized
+            // as the swatch always was, hover-highlighted.
+            let swatch = mk("BUTTON", "", BS_OWNERDRAW | WS_TABSTOP, ID_BTN_COLOR_BASE + zi16, x, y, 60, ROW2_H);
+            subclass_swatch(swatch);
             swatches.push(Swatch {
                 hwnd: swatch,
                 color: l.color,
                 brush: CreateSolidBrush(colorref(l.color)),
+                hovered: false,
             });
             y += ROW2_H;
         }
@@ -742,31 +759,24 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                         &l.effect_labels,
                         l.effect_index,
                     );
+                    // The swatch is the picker trigger — no separate button —
+                    // sized as the swatch always was, hover-highlighted.
                     let swatch = mk(
-                        "STATIC",
-                        "",
-                        SS_CENTER,
-                        ID_SWATCH_BASE + zi16,
-                        sx(diagram::LIGHT_COMBO_W + diagram::LIGHT_GAP),
-                        py + 1,
-                        sw(diagram::LIGHT_SWATCH_W),
-                        22,
-                    );
-                    let _ = mk(
                         "BUTTON",
-                        "Choose...",
-                        BS_PUSHBUTTON | WS_TABSTOP,
+                        "",
+                        BS_OWNERDRAW | WS_TABSTOP,
                         ID_BTN_COLOR_BASE + zi16,
-                        sx(diagram::LIGHT_COMBO_W + diagram::LIGHT_GAP
-                            + diagram::LIGHT_SWATCH_W + diagram::LIGHT_GAP),
+                        sx(diagram::LIGHT_COMBO_W + diagram::LIGHT_GAP),
                         py,
-                        sw(diagram::LIGHT_BTN_W),
+                        sw(diagram::LIGHT_SWATCH_W),
                         ROW2_H,
                     );
+                    subclass_swatch(swatch);
                     swatches.push(Swatch {
                         hwnd: swatch,
                         color: l.color,
                         brush: CreateSolidBrush(colorref(l.color)),
+                        hovered: false,
                     });
                 }
             }
@@ -837,6 +847,51 @@ unsafe fn state_mut<'a>(hwnd: HWND) -> Option<&'a mut WindowState> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, GWLP_USERDATA};
     let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut WindowState;
     ptr.as_mut()
+}
+
+/// Replace a swatch button's WNDPROC with [`swatch_wndproc`], stashing the
+/// original in the child's own (otherwise-unused) GWLP_USERDATA slot — the
+/// parent's GWLP_USERDATA already holds [`WindowState`], so this can't reuse
+/// that slot.
+unsafe fn subclass_swatch(hwnd: HWND) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowLongPtrW, GWLP_USERDATA};
+    let orig = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, swatch_wndproc as *const () as isize);
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA, orig);
+}
+
+/// Tracks hover on one swatch button, toggling [`Swatch::hovered`] (read by
+/// [`WM_DRAWITEM`] to paint the highlighted border) and forwarding every
+/// other message to the original BUTTON WNDPROC.
+unsafe extern "system" fn swatch_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, GWLP_USERDATA};
+
+    let set_hovered = |hovered: bool| {
+        if let Some(st) = state_mut(GetParent(hwnd)) {
+            if let Some(sw) = st.swatches.iter_mut().find(|s| s.hwnd == hwnd) {
+                if sw.hovered != hovered {
+                    sw.hovered = hovered;
+                    InvalidateRect(hwnd, std::ptr::null(), 0);
+                }
+            }
+        }
+    };
+    match msg {
+        WM_MOUSEMOVE => {
+            set_hovered(true);
+            let mut tme = TRACKMOUSEEVENT {
+                cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+                dwFlags: TME_LEAVE,
+                hwndTrack: hwnd,
+                dwHoverTime: 0,
+            };
+            TrackMouseEvent(&mut tme);
+        }
+        WM_MOUSELEAVE => set_hovered(false),
+        _ => {}
+    }
+    let orig: WNDPROC = std::mem::transmute(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    CallWindowProcW(orig, hwnd, msg, wparam, lparam)
 }
 
 fn snap50(v: i32) -> u16 {
@@ -956,15 +1011,31 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
             }
             0
         }
-        WM_CTLCOLORSTATIC => {
-            // Paint a zone's swatch static with that zone's current color.
+        WM_DRAWITEM => {
+            // Paint a zone's swatch button: filled with its current color,
+            // bordered brighter while hovered — the color block is the
+            // picker trigger, so the border is its only affordance.
             if let Some(st) = state_mut(hwnd) {
-                if let Some(sw) = st.swatches.iter().find(|s| s.hwnd == lparam as HWND) {
-                    let hdc = wparam as windows_sys::Win32::Graphics::Gdi::HDC;
-                    SetBkMode(hdc, OPAQUE as i32);
-                    use windows_sys::Win32::Graphics::Gdi::SetBkColor;
-                    SetBkColor(hdc, colorref(sw.color));
-                    return sw.brush as LRESULT;
+                let dis = &*(lparam as *const DRAWITEMSTRUCT);
+                if let Some(sw) = st.swatches.iter().find(|s| s.hwnd == dis.hwndItem) {
+                    FillRect(dis.hDC, &dis.rcItem, sw.brush);
+                    let border = CreateSolidBrush(colorref(if sw.hovered {
+                        (0x2F, 0x6F, 0xD0) // accent blue, matches remappable-button role
+                    } else {
+                        (0x80, 0x80, 0x80)
+                    }));
+                    FrameRect(dis.hDC, &dis.rcItem, border);
+                    if sw.hovered {
+                        let r = RECT {
+                            left: dis.rcItem.left + 1,
+                            top: dis.rcItem.top + 1,
+                            right: dis.rcItem.right - 1,
+                            bottom: dis.rcItem.bottom - 1,
+                        };
+                        FrameRect(dis.hDC, &r, border);
+                    }
+                    DeleteObject(border);
+                    return 1;
                 }
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
