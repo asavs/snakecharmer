@@ -10,7 +10,7 @@ repository = "https://github.com/asavs/snakecharmer"
 
 [package]
 name = "snakecharmer"
-version = "0.1.0"
+version = "0.7.1"
 edition = "2021"
 description = "A tiny native Windows replacement for Razer Synapse, with a toolkit to crack your own peripherals"
 repository = "https://github.com/asavs/snakecharmer"
