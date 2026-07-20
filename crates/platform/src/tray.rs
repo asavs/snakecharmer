@@ -20,8 +20,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyMenu,
     DispatchMessageW, GetCursorPos, GetMessageW, GetWindowLongPtrW, LoadIconW, PostMessageW,
     PostQuitMessage, RegisterClassW, SetForegroundWindow, SetWindowLongPtrW, TrackPopupMenu,
-    TranslateMessage, CW_USEDEFAULT, GWLP_USERDATA, HICON, HMENU, IDI_APPLICATION, MF_POPUP,
-    MF_SEPARATOR, MF_STRING, MSG, TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_COMMAND,
+    TranslateMessage, CW_USEDEFAULT, GWLP_USERDATA, HICON, HMENU, IDI_APPLICATION, MF_CHECKED,
+    MF_POPUP, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, MSG, TPM_LEFTALIGN, TPM_RETURNCMD,
+    TPM_RIGHTBUTTON, WM_APP, WM_COMMAND,
     WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
@@ -56,6 +57,9 @@ pub fn request_hook_sync() {
 pub enum MenuItem {
     /// A clickable item that reports `id` to the callback.
     Action { id: u32, label: String },
+    /// A checkable item. Reports `id` like an `Action`; `checked` is a *render*
+    /// of state the app owns — the tray never toggles it itself.
+    Check { id: u32, label: String, checked: bool },
     /// A horizontal separator.
     Separator,
     /// A nested submenu.
@@ -65,6 +69,9 @@ pub enum MenuItem {
 impl MenuItem {
     pub fn action(id: u32, label: impl Into<String>) -> MenuItem {
         MenuItem::Action { id, label: label.into() }
+    }
+    pub fn check(id: u32, label: impl Into<String>, checked: bool) -> MenuItem {
+        MenuItem::Check { id, label: label.into(), checked }
     }
     pub fn submenu(label: impl Into<String>, items: Vec<MenuItem>) -> MenuItem {
         MenuItem::Submenu { label: label.into(), items }
@@ -210,6 +217,11 @@ unsafe fn build_menu(items: &[MenuItem]) -> HMENU {
             MenuItem::Action { id, label } => {
                 let w = to_wide(label);
                 AppendMenuW(hmenu, MF_STRING, *id as usize, w.as_ptr());
+            }
+            MenuItem::Check { id, label, checked } => {
+                let w = to_wide(label);
+                let flags = MF_STRING | if *checked { MF_CHECKED } else { MF_UNCHECKED };
+                AppendMenuW(hmenu, flags, *id as usize, w.as_ptr());
             }
             MenuItem::Submenu { label, items } => {
                 let sub = build_menu(items);

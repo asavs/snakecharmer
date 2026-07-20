@@ -36,7 +36,9 @@ resources refutes itself.
   (effect dropdown + color picker per RGB zone), per-button action dropdowns, Save
   (changes apply live).
 - Config persisted as TOML in `%LOCALAPPDATA%\Snakecharmer\config.toml`.
-- Runs at login via a Startup-folder shortcut (no admin), windowless until opened.
+- Runs at login via an app-managed `HKCU\...\Run` value (no admin; registered on first
+  run, toggleable from the tray, listed in the OS's own Startup-apps UI), windowless
+  until opened.
 
 ## Architecture (Rust, Win32-direct)
 
@@ -49,7 +51,9 @@ snakecharmer/
 │  │                    #   (hidapi crate, or windows-rs HID); the CefSharp-free core
 │  └─ input-hook/       # WH_MOUSE_LL hook for thumb-button remap + suppression
 └─ src/                 # the app: tray, settings window (egui/eframe or native),
-                        #   config load/save, wiring, login autostart
+                        #   config load/save, wiring; login autostart registration
+                        #   lives behind a platform seam (Run key today, WinRT
+                        #   StartupTask when packaged)
 ```
 
 Candidate deps (keep the tree lean for the ≤2 MB target — audit each):
@@ -92,8 +96,8 @@ Get mode (read): 00  3F  00 00 00    02  00  84  00 00     (78x00)     86  00
   running headless.
 - **P3 — RGB + tray:** Chroma commands; tray icon + menu.
 - **P4 — Settings window:** DPI slider, color picker, button dropdowns, config persistence.
-- **P5 — Thumb-button remap:** `WH_MOUSE_LL` hook + suppression; login autostart; polish
-  to the footprint gate.
+- **P5 — Thumb-button remap:** `WH_MOUSE_LL` hook + suppression; login autostart
+  (delivered: app-managed Run key + tray toggle); polish to the footprint gate.
 
 ## Milestones
 | # | Deliverable |

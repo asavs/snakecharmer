@@ -5,10 +5,12 @@
 //!   * [`acquire_single_instance`] — a named-mutex single-instance guard.
 //!   * [`alert_retry`] — a blocking Retry/Cancel message box via `MessageBoxW`.
 //!   * key-code helpers ([`vk_for_char`], [`vk_function`], and the `VK_*` consts).
+//!   * [`autostart`] — "Start with Windows" registration via the HKCU Run key.
 //!
 //! The rest of the codebase (`razer-proto`, `razer-hid`, the daemon logic) stays
 //! safe Rust and never touches Win32 directly.
 
+pub mod autostart;
 pub mod diagram;
 pub mod icon;
 pub mod mouse_hook;
