@@ -40,6 +40,9 @@ pub enum MenuAction {
     OpenSettings,
     SettingsClosed,
     ReloadConfig,
+    /// The user clicked Retry on the no-device notice: probe for the mouse
+    /// now instead of waiting out the rest of the reconnect backoff.
+    RetryProbe,
     Quit,
 }
 
@@ -505,7 +508,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
                 }
             }
         }
-        service_retry_gap(delay, &rx, &log, &mut health, &mut settings_open, &popup_open);
+        service_retry_gap(delay, &tx, &rx, &log, &mut health, &mut settings_open, &popup_open);
         prev_delay = delay;
     }
 }
@@ -522,8 +525,14 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
 /// stalls the reconnect clock; `popup_open` collapses repeat clicks while one
 /// is already up. Never shows UI on its own — only in response to a click —
 /// so the retry cycle itself stays silent.
+///
+/// The notice's Retry button ("I plugged it in") sends [`MenuAction::RetryProbe`],
+/// which ends the gap early so the next probe happens immediately. Probing is
+/// gated on that explicit click — a user without the mouse can't trigger
+/// re-enumeration by simply clicking the tray.
 fn service_retry_gap(
     delay: Duration,
+    tx: &Sender<Event>,
     rx: &Receiver<Event>,
     log: &Logger,
     health: &mut crate::health::HealthReporter,
@@ -550,26 +559,37 @@ fn service_retry_gap(
                 {
                     log.log("Settings requested with no device; showing notice.");
                     let popup_open = Arc::clone(popup_open);
+                    let tx = tx.clone();
                     thread::spawn(move || {
                         let supported: Vec<&str> = razer_proto::devices::SUPPORTED
                             .iter()
                             .map(|s| s.name)
                             .collect();
-                        platform::alert(
+                        let retry = platform::alert_retry(
                             "Snakecharmer",
                             &format!(
-                                "No supported Razer mouse found — plug one in and try again.\n\n\
-                                 Supported: {}.",
+                                "No supported Razer mouse found.\n\n\
+                                 Supported: {}.\n\n\
+                                 If you've just plugged one in, click Retry to check now.",
                                 supported.join(", ")
                             ),
                         );
                         popup_open.store(false, Ordering::SeqCst);
+                        if retry {
+                            let _ = tx.send(Event::Menu(MenuAction::RetryProbe));
+                        }
                     });
                 }
             }
             Ok(Event::Menu(MenuAction::SettingsClosed)) => {
                 *settings_open = false;
                 log.log("Settings window closed.");
+            }
+            Ok(Event::Menu(MenuAction::RetryProbe)) => {
+                // Returning ends the gap; the outer loop re-attempts the
+                // session (one probe) right away.
+                log.log("User confirmed mouse plugged in; probing now.");
+                return;
             }
             Ok(Event::Menu(action)) => {
                 // DPI presets, lighting picks, settings edits: nothing to
@@ -945,6 +965,10 @@ fn handle_menu(
         }
         MenuAction::OpenSettings | MenuAction::SettingsClosed => {
             // Handled in the run_session loop (need tx + the open flag).
+        }
+        MenuAction::RetryProbe => {
+            // Retry clicked just as the mouse connected on its own; the
+            // probe already succeeded, nothing to do.
         }
         MenuAction::ReloadConfig => {
             let (new_cfg, note) = Config::load_or_create(&Config::config_path());
