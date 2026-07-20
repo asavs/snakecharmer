@@ -45,6 +45,12 @@ pub struct Config {
     pub polling_rate: Option<u16>,
     /// How often (seconds) to re-assert driver mode + DPI.
     pub reassert_interval_secs: u64,
+    /// Whether first-run autostart registration has already been attempted.
+    /// This is a one-shot latch, NOT the autostart setting: the registry
+    /// (`platform::autostart`) is the only source of truth for current state,
+    /// because the user can revoke it from Task Manager without us running.
+    /// All this does is stop us ever re-enabling after the user turns it off.
+    pub autostart_bootstrapped: bool,
     /// Per-zone lighting overrides, keyed by zone name (`wheel`, `logo`).
     /// A zone without an entry (or with a field unset) uses the device-wide
     /// `lighting` / `color`. Kept last: TOML tables must follow plain values.
@@ -65,6 +71,7 @@ impl Default for Config {
             color: "#00ff00".to_string(),
             polling_rate: None,
             reassert_interval_secs: 60,
+            autostart_bootstrapped: false,
             zones: BTreeMap::new(),
         }
     }
@@ -169,6 +176,7 @@ mod tests {
             color: "#ff8800".into(),
             polling_rate: Some(500),
             reassert_interval_secs: 30,
+            autostart_bootstrapped: true,
             zones: BTreeMap::from([(
                 "logo".to_string(),
                 ZoneConfig { lighting: Some("breathing".into()), color: None },
@@ -211,5 +219,22 @@ mod tests {
         assert_eq!(back.dpi_up, "copy");
         assert_eq!(back.polling_rate, None, "absent polling_rate must mean leave-as-is");
         assert_eq!(back.reassert_interval_secs, 60);
+        assert!(
+            !back.autostart_bootstrapped,
+            "a pre-latch config must read as never-bootstrapped so it gets its one registration"
+        );
+    }
+
+    #[test]
+    fn autostart_latch_precedes_tables() {
+        let mut c = Config::default();
+        c.zones.insert(
+            "logo".into(),
+            ZoneConfig { lighting: Some("static".into()), color: None },
+        );
+        let text = toml::to_string_pretty(&c).unwrap();
+        let latch = text.find("autostart_bootstrapped").expect("latch must serialize");
+        let table = text.find('[').expect("zones table must serialize");
+        assert!(latch < table, "TOML scalars must precede tables:\n{text}");
     }
 }

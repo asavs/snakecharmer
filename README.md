@@ -76,8 +76,8 @@ Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI
 - **RGB lighting** — static, breathing, spectrum, or off, per zone: the wheel and
   logo can carry different effects and colors (settings window), or one pick for
   both (tray menu).
-- **System tray** with quick DPI, lighting, reload, and quit, plus a native settings
-  window (no admin, windowless until opened).
+- **System tray** with quick DPI, lighting, a Start with Windows toggle, reload, and
+  quit, plus a native settings window (no admin, windowless until opened).
 
 ## Scope
 
@@ -111,19 +111,19 @@ cargo build --release
 Produces `target\release\snakecharmer.exe` (the windowless daemon) and
 `target\release\charmctl.exe` (the console control CLI).
 
-## Run at login
+## Start with Windows
 
-Snakecharmer doesn't install itself. This drops a hidden shortcut in your Startup folder
-so the daemon launches (windowless) at each login. Skip it if you'd rather start it by
-hand.
+On first run the daemon registers itself to start at login — a per-user value named
+`Snakecharmer` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (no admin, no
+installer). Toggle it with the tray menu's **Start with Windows** checkbox; turn it off
+and it stays off. The same registration is what lists the app in Task Manager → Startup
+apps, and the tray checkbox reads the real registry state, so disabling it in either
+place keeps both in agreement.
 
-```powershell
-# add the autostart shortcut (current user, no admin):
-.\scripts\install-autostart.ps1
-
-# remove it:
-.\scripts\uninstall-autostart.ps1
-```
+Upgrading from a build that used `scripts\install-autostart.ps1`? Delete the leftover
+`Snakecharmer.vbs` (or any hand-made `Snakecharmer.lnk`) from your Startup folder
+(`Win+R` → `shell:startup`), or the daemon launches twice at login — harmless, the
+second instance exits on the single-instance mutex, but it clutters the log.
 
 ## Configuration
 

@@ -40,6 +40,10 @@ pub enum MenuAction {
     OpenSettings,
     SettingsClosed,
     ReloadConfig,
+    /// Flip the "Start with Windows" registration. Carries no payload: the
+    /// handler reads the current OS state at click time and inverts *that*,
+    /// so a stale tray tick self-corrects instead of writing the wrong value.
+    ToggleAutostart,
     /// The user clicked Retry on the no-device notice: probe for the mouse
     /// now instead of waiting out the rest of the reconnect backoff.
     RetryProbe,
@@ -348,6 +352,7 @@ mod menu_id {
     pub const OFF: u32 = 26;
 
     pub const SETTINGS: u32 = 80;
+    pub const AUTOSTART: u32 = 81;
     pub const RELOAD: u32 = 90;
     pub const QUIT: u32 = 91;
 }
@@ -373,7 +378,10 @@ fn dpi_presets(spec: Option<&DeviceSpec>) -> Vec<u16> {
     v
 }
 
-fn build_menu_spec(spec: Option<&DeviceSpec>) -> Vec<platform::tray::MenuItem> {
+/// Build the tray menu. Pure: `autostart` is the current "Start with Windows"
+/// state, read by the caller (`platform::autostart::is_enabled()`) — the tick
+/// always renders real OS state, never an optimistic guess.
+fn build_menu_spec(spec: Option<&DeviceSpec>, autostart: bool) -> Vec<platform::tray::MenuItem> {
     use menu_id::*;
     use platform::tray::MenuItem as M;
     let dpi_items: Vec<M> = dpi_presets(spec)
@@ -411,6 +419,7 @@ fn build_menu_spec(spec: Option<&DeviceSpec>) -> Vec<platform::tray::MenuItem> {
         ),
         M::Separator,
         M::action(SETTINGS, "Settings..."),
+        M::check(AUTOSTART, "Start with Windows", autostart),
         M::action(RELOAD, "Reload config"),
         M::action(QUIT, "Quit"),
     ]
@@ -443,11 +452,91 @@ fn menu_action_for(id: u32) -> Option<MenuAction> {
         SPECTRUM => MenuAction::Effect(EffectSpec::Spectrum),
         OFF => MenuAction::Effect(EffectSpec::Off),
         SETTINGS => MenuAction::OpenSettings,
+        AUTOSTART => MenuAction::ToggleAutostart,
         RELOAD => MenuAction::ReloadConfig,
         QUIT => MenuAction::Quit,
         _ if id == platform::tray::TRAY_CLICK => MenuAction::OpenSettings,
         _ => return None,
     })
+}
+
+/// Flip the "Start with Windows" registration and re-render the tray tick.
+///
+/// Shared by the in-session and no-device paths (the action is
+/// device-independent; `spec` only shapes the rebuilt menu). Reads the current
+/// OS state at click time and inverts *that*; on error it re-reads rather than
+/// assumes, so the menu always ends up showing what the OS actually holds —
+/// an `enable()` can be refused (see `platform::autostart`).
+fn toggle_autostart(spec: Option<&DeviceSpec>, log: &Logger) {
+    let want = !platform::autostart::is_enabled();
+    let attempt =
+        if want { platform::autostart::enable() } else { platform::autostart::disable() };
+    let actual = match attempt {
+        Ok(state) => state,
+        Err(e) => {
+            log.log(&format!("WARN could not update Start with Windows: {e}"));
+            platform::autostart::is_enabled()
+        }
+    };
+    let describe = |on: bool| if on { "on" } else { "off" };
+    if actual == want {
+        log.log(&format!("Menu: Start with Windows -> {}.", describe(actual)));
+    } else {
+        log.log(&format!(
+            "WARN Start with Windows: requested {}, but the OS reports {}.",
+            describe(want),
+            describe(actual)
+        ));
+    }
+    platform::tray::set_menu(build_menu_spec(spec, actual));
+}
+
+/// What the startup autostart pass should do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AutostartBoot {
+    Register,
+    Refresh,
+    Nothing,
+}
+
+/// never bootstrapped -> Register (on by default, exactly once)
+/// bootstrapped + on  -> Refresh  (self-heal a stale exe path after a move/rebuild)
+/// bootstrapped + off -> Nothing  (the user turned it off — respect it)
+fn autostart_boot_plan(bootstrapped: bool, currently_enabled: bool) -> AutostartBoot {
+    match (bootstrapped, currently_enabled) {
+        (false, _) => AutostartBoot::Register,
+        (true, true) => AutostartBoot::Refresh,
+        (true, false) => AutostartBoot::Nothing,
+    }
+}
+
+/// First-run "Start with Windows" registration, and exe-path self-heal on
+/// later launches. Skipped entirely in debug builds so `cargo run` never
+/// registers (or refreshes to) a `target\debug` exe in the user's login.
+///
+/// The latch is set whether or not the write succeeded — we get one shot; a
+/// machine where the write always fails must not retry forever.
+fn bootstrap_autostart(cfg: &mut Config, log: &Logger) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    match autostart_boot_plan(cfg.autostart_bootstrapped, platform::autostart::is_enabled()) {
+        AutostartBoot::Register => {
+            match platform::autostart::enable() {
+                Ok(true) => log.log("Start with Windows registered (first run)."),
+                Ok(false) => log.log("WARN Start with Windows registration did not take."),
+                Err(e) => log.log(&format!("WARN could not register Start with Windows: {e}")),
+            }
+            cfg.autostart_bootstrapped = true;
+            save_config(cfg, log);
+        }
+        AutostartBoot::Refresh => {
+            if let Err(e) = platform::autostart::refresh() {
+                log.log(&format!("WARN could not refresh Start with Windows entry: {e}"));
+            }
+        }
+        AutostartBoot::Nothing => {}
+    }
 }
 
 // --- Daemon ---------------------------------------------------------------
@@ -467,6 +556,10 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         cfg.reassert_interval_secs
     ));
 
+    // Register/refresh "Start with Windows" before the tray spawns, so the
+    // initial menu renders the true tick.
+    bootstrap_autostart(&mut cfg, &log);
+
     let (tx, rx) = mpsc::channel::<Event>();
 
     // Spawn the tray icon + menu once, on its own thread.
@@ -475,7 +568,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         thread::spawn(move || {
             platform::tray::run(
                 "Snakecharmer",
-                build_menu_spec(None),
+                build_menu_spec(None, platform::autostart::is_enabled()),
                 move |id| {
                     if let Some(a) = menu_action_for(id) {
                         let _ = tx.send(Event::Menu(a));
@@ -520,7 +613,8 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
 ///
 /// No-device semantics: Quit exits cleanly (same path as in-session), Open
 /// settings gets a notice box — or focuses a settings window still open from
-/// the previous session — and device-bound commands are dropped with a log
+/// the previous session — Start with Windows toggles as normal (it is
+/// device-independent), and device-bound commands are dropped with a log
 /// line. The notice box runs on a throwaway thread so a dialog left open never
 /// stalls the reconnect clock; `popup_open` collapses repeat clicks while one
 /// is already up. Never shows UI on its own — only in response to a click —
@@ -591,6 +685,9 @@ fn service_retry_gap(
                 log.log("User confirmed mouse plugged in; probing now.");
                 return;
             }
+            // Device-independent, so it must not fall into the catch-all
+            // below and go silently dead while the mouse is unplugged.
+            Ok(Event::Menu(MenuAction::ToggleAutostart)) => toggle_autostart(None, log),
             Ok(Event::Menu(action)) => {
                 // DPI presets, lighting picks, settings edits: nothing to
                 // apply them to. Drop them now rather than queue-and-burst
@@ -664,7 +761,7 @@ fn run_session(
         spec.dpi_buttons.is_some()
     ));
     // Rebuild the tray menu around this device (DPI presets over its range).
-    platform::tray::set_menu(build_menu_spec(Some(&spec)));
+    platform::tray::set_menu(build_menu_spec(Some(&spec), platform::autostart::is_enabled()));
 
     // Lock DPI (non-fatal if it fails). Every supported device has DPI.
     let (dx, dy) = cfg.dpi_xy();
@@ -970,6 +1067,10 @@ fn handle_menu(
             // Retry clicked just as the mouse connected on its own; the
             // probe already succeeded, nothing to do.
         }
+        MenuAction::ToggleAutostart => {
+            let spec = ctrl.spec();
+            toggle_autostart(Some(&spec), log);
+        }
         MenuAction::ReloadConfig => {
             let (new_cfg, note) = Config::load_or_create(&Config::config_path());
             if let Some(n) = note {
@@ -1246,6 +1347,43 @@ mod tests {
             Some(MenuAction::OpenSettings)
         ));
         assert!(menu_action_for(9999).is_none());
+    }
+
+    #[test]
+    fn autostart_boot_plan_never_re_enables() {
+        assert_eq!(autostart_boot_plan(false, false), AutostartBoot::Register);
+        assert_eq!(autostart_boot_plan(false, true), AutostartBoot::Register);
+        assert_eq!(autostart_boot_plan(true, true), AutostartBoot::Refresh);
+        // The load-bearing row: once the user turns autostart off, the
+        // bootstrap must never re-enable it.
+        assert_eq!(autostart_boot_plan(true, false), AutostartBoot::Nothing);
+    }
+
+    #[test]
+    fn autostart_menu_id_is_distinct() {
+        assert!(matches!(
+            menu_action_for(menu_id::AUTOSTART),
+            Some(MenuAction::ToggleAutostart)
+        ));
+        // Outside the value-encoded DPI range and distinct from the click id.
+        assert!(menu_id::AUTOSTART < menu_id::DPI_FLAG);
+        assert_ne!(menu_id::AUTOSTART, platform::tray::TRAY_CLICK);
+    }
+
+    #[test]
+    fn menu_spec_renders_autostart_tick() {
+        for state in [true, false] {
+            let items = build_menu_spec(None, state);
+            let tick = items.iter().find_map(|i| match i {
+                platform::tray::MenuItem::Check { id, checked, .. }
+                    if *id == menu_id::AUTOSTART =>
+                {
+                    Some(*checked)
+                }
+                _ => None,
+            });
+            assert_eq!(tick, Some(state), "the tick must render the passed state, never optimism");
+        }
     }
 
     #[test]
