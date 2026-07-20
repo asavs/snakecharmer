@@ -4,7 +4,9 @@
 //! configured keystrokes, and serve the tray menu. One process, one exe.
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -483,6 +485,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
     let mut bindings = Bindings::from_config(&cfg, &log);
     apply_thumb_hook(&cfg, &log);
     let mut settings_open = false;
+    let popup_open = Arc::new(AtomicBool::new(false));
     let mut prev_delay = Duration::ZERO; // no retry slept yet
     loop {
         let started = Instant::now();
@@ -502,9 +505,100 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
                 }
             }
         }
-        thread::sleep(delay);
+        service_retry_gap(delay, &rx, &log, &mut health, &mut settings_open, &popup_open);
         prev_delay = delay;
     }
+}
+
+/// Service tray/menu events for `delay` while no device is connected, instead
+/// of sleeping deaf through the session-retry gap. With a plain sleep here,
+/// "Open settings" and "Quit" clicks queued unhandled — Quit could not exit
+/// the app — and everything replayed in a burst once a mouse reconnected.
+///
+/// No-device semantics: Quit exits cleanly (same path as in-session), Open
+/// settings gets a notice box — or focuses a settings window still open from
+/// the previous session — and device-bound commands are dropped with a log
+/// line. The notice box runs on a throwaway thread so a dialog left open never
+/// stalls the reconnect clock; `popup_open` collapses repeat clicks while one
+/// is already up. Never shows UI on its own — only in response to a click —
+/// so the retry cycle itself stays silent.
+fn service_retry_gap(
+    delay: Duration,
+    rx: &Receiver<Event>,
+    log: &Logger,
+    health: &mut crate::health::HealthReporter,
+    settings_open: &mut bool,
+    popup_open: &Arc<AtomicBool>,
+) {
+    let deadline = Instant::now() + delay;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return;
+        }
+        match rx.recv_timeout(remaining) {
+            Ok(Event::Menu(MenuAction::Quit)) => shutdown(log, health),
+            Ok(Event::Menu(MenuAction::OpenSettings)) => {
+                if *settings_open {
+                    // A window from the previous session is still up; surface
+                    // it (it may be buried) instead of showing the notice.
+                    platform::settings::focus();
+                    log.log("Settings already open; brought to foreground (no device).");
+                } else if popup_open
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    log.log("Settings requested with no device; showing notice.");
+                    let popup_open = Arc::clone(popup_open);
+                    thread::spawn(move || {
+                        let supported: Vec<&str> = razer_proto::devices::SUPPORTED
+                            .iter()
+                            .map(|s| s.name)
+                            .collect();
+                        platform::alert(
+                            "Snakecharmer",
+                            &format!(
+                                "No supported Razer mouse found — plug one in and try again.\n\n\
+                                 Supported: {}.",
+                                supported.join(", ")
+                            ),
+                        );
+                        popup_open.store(false, Ordering::SeqCst);
+                    });
+                }
+            }
+            Ok(Event::Menu(MenuAction::SettingsClosed)) => {
+                *settings_open = false;
+                log.log("Settings window closed.");
+            }
+            Ok(Event::Menu(action)) => {
+                // DPI presets, lighting picks, settings edits: nothing to
+                // apply them to. Drop them now rather than queue-and-burst
+                // on reconnect.
+                log.log(&format!("Menu: {action:?} ignored (no device connected)."));
+            }
+            // Stragglers from the session that just ended.
+            Ok(Event::Button(_)) | Ok(Event::ListenerClosed) => {}
+            Err(RecvTimeoutError::Timeout) => return,
+            // Every sender gone (tray thread died) — nothing left to service;
+            // wait out the rest of the gap the old-fashioned way.
+            Err(RecvTimeoutError::Disconnected) => {
+                thread::sleep(remaining);
+                return;
+            }
+        }
+    }
+}
+
+/// Clean daemon exit, shared by the in-session and no-device Quit paths:
+/// publish the stopped capsule, remove the global mouse hook, end the process.
+fn shutdown(log: &Logger, health: &mut crate::health::HealthReporter) -> ! {
+    log.log("Quit selected; removing mouse hook and exiting.");
+    if let Err(error) = health.stopped() {
+        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+    }
+    platform::mouse_hook::uninstall();
+    std::process::exit(0);
 }
 
 /// Shortest / longest session-retry delays. Each retry re-enumerates HID, so a
@@ -662,12 +756,7 @@ fn run_session(
             }
             Ok(Event::Menu(action)) => {
                 if handle_menu(action, &ctrl, cfg, bindings, log, health)? {
-                    log.log("Quit selected; removing mouse hook and exiting.");
-                    if let Err(error) = health.stopped() {
-                        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
-                    }
-                    platform::mouse_hook::uninstall();
-                    std::process::exit(0);
+                    shutdown(log, health);
                 }
             }
             Ok(Event::ListenerClosed) => {

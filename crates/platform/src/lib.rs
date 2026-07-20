@@ -3,6 +3,7 @@
 //! Every `unsafe` block in the project lives here, contained and documented:
 //!   * [`send_chord`] — synthesize a keystroke via `SendInput`.
 //!   * [`acquire_single_instance`] — a named-mutex single-instance guard.
+//!   * [`alert`] — a blocking OK message box via `MessageBoxW`.
 //!   * key-code helpers ([`vk_for_char`], [`vk_function`], and the `VK_*` consts).
 //!
 //! The rest of the codebase (`razer-proto`, `razer-hid`, the daemon logic) stays
@@ -25,6 +26,9 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::Threading::CreateMutexW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, VkKeyScanW, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    MessageBoxW, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND,
 };
 
 /// Common virtual-key codes (a small, hand-picked subset).
@@ -153,6 +157,25 @@ pub fn acquire_single_instance(name: &str) -> bool {
     // SAFETY: GetLastError just reads this thread's last-error slot.
     let already = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
     !already
+}
+
+/// Show a blocking informational message box (OK button only). Blocks the
+/// calling thread until dismissed — callers that must not stall (e.g. the
+/// daemon's retry loop) should invoke this from a throwaway thread.
+pub fn alert(title: &str, text: &str) {
+    let title: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    let text: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: both buffers are valid NUL-terminated UTF-16 strings that outlive
+    // the call; a null owner HWND is explicitly allowed and makes the box
+    // free-standing. MessageBoxW does not retain the pointers.
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND,
+        );
+    }
 }
 
 /// Atomically replace a same-directory destination with a fully written temporary file.
