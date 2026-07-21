@@ -133,7 +133,7 @@ impl HealthReporter {
         Self::with_paths(capsule_path, snake_dir.join("provider-salt"))
     }
 
-    fn with_paths(capsule_path: PathBuf, salt_path: PathBuf) -> Self {
+    pub(crate) fn with_paths(capsule_path: PathBuf, salt_path: PathBuf) -> Self {
         let salt = load_or_create_salt(&salt_path);
         let mut reporter = Self {
             capsule_path,
