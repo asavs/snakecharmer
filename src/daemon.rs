@@ -621,9 +621,10 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
 /// so the retry cycle itself stays silent.
 ///
 /// The notice's Retry button ("I plugged it in") sends [`MenuAction::RetryProbe`],
-/// which ends the gap early so the next probe happens immediately. Probing is
-/// gated on that explicit click — a user without the mouse can't trigger
-/// re-enumeration by simply clicking the tray.
+/// which ends the gap early so the next probe happens immediately, and re-queues
+/// the settings request it stands for — a successful probe opens the window the
+/// user originally asked for. Probing is gated on that explicit click — a user
+/// without the mouse can't trigger re-enumeration by simply clicking the tray.
 fn service_retry_gap(
     delay: Duration,
     tx: &Sender<Event>,
@@ -681,8 +682,14 @@ fn service_retry_gap(
             }
             Ok(Event::Menu(MenuAction::RetryProbe)) => {
                 // Returning ends the gap; the outer loop re-attempts the
-                // session (one probe) right away.
+                // session (one probe) right away. RetryProbe only ever comes
+                // from the settings-triggered notice above, so the user is
+                // still waiting on that window: re-queue the request for the
+                // next session's loop to pick up once the mouse opens. If the
+                // probe fails instead, the event lands back here and re-shows
+                // the notice — also right.
                 log.log("User confirmed mouse plugged in; probing now.");
+                let _ = tx.send(Event::Menu(MenuAction::OpenSettings));
                 return;
             }
             // Device-independent, so it must not fall into the catch-all
@@ -1242,6 +1249,39 @@ mod tests {
         assert_eq!(next_retry_delay(s(12), s(1)), s(24));
         assert_eq!(next_retry_delay(s(24), s(1)), s(30));
         assert_eq!(next_retry_delay(s(30), s(1)), s(30));
+    }
+
+    #[test]
+    fn retry_probe_ends_gap_and_requeues_settings() {
+        // Retry only ever comes from the settings-triggered notice, so the
+        // gap must both end early AND re-queue OpenSettings for the session
+        // it hands off to — otherwise the reconnect "silently succeeds" and
+        // the window the user asked for never appears.
+        let (tx, rx) = mpsc::channel();
+        tx.send(Event::Menu(MenuAction::RetryProbe)).unwrap();
+        let dir = std::env::temp_dir().join("snakecharmer-test-retry-gap");
+        let log = Logger::new(dir.join("daemon.log"));
+        let mut health = crate::health::HealthReporter::with_paths(
+            dir.join("capsule.json"),
+            dir.join("provider-salt"),
+        );
+        let mut settings_open = false;
+        let popup_open = Arc::new(AtomicBool::new(false));
+        let start = Instant::now();
+        service_retry_gap(
+            Duration::from_secs(30),
+            &tx,
+            &rx,
+            &log,
+            &mut health,
+            &mut settings_open,
+            &popup_open,
+        );
+        assert!(start.elapsed() < Duration::from_secs(5), "RetryProbe must end the gap early");
+        assert!(
+            matches!(rx.try_recv(), Ok(Event::Menu(MenuAction::OpenSettings))),
+            "the settings request must be re-queued for the next session"
+        );
     }
 
     #[test]
