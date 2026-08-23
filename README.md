@@ -87,7 +87,8 @@ device is described by a small `DeviceSpec`, so adding another mouse is a one-fi
 and a contained job — a good one to hand an AI coding agent. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md)
 for the protocol, and [`docs/DRAWING-MICE-GUIDE.md`](docs/DRAWING-MICE-GUIDE.md) for the
-device's button-map diagram.
+device's button-map diagram. [`docs/DEVICE-WISHLIST.md`](docs/DEVICE-WISHLIST.md) lists the
+mice that are up for grabs, with the protocol facts OpenRazer already knows about each.
 
 Snakecharmer also isn't trying to be everything — if you want cross-brand RGB game sync,
 per-app button profiles, or you're on Linux, other tools serve you better. See

@@ -16,7 +16,10 @@ Two kinds of contributions are welcome:
 
 **The workflow:**
 
-1. **Fork or clone** this repo.
+1. **Pick a mouse and claim it.** [`docs/DEVICE-WISHLIST.md`](docs/DEVICE-WISHLIST.md) is
+   the board: every Razer mouse whose protocol is already in OpenRazer, its USB id and
+   transaction id, and who cracked the ones that shipped. Open an issue saying you're taking
+   one so two people don't crack the same mouse the same weekend. Then fork or clone.
 2. **Hand your agent [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md)** — the full,
    device-agnostic method: enumerate the mouse's HID collections, find the *reference
    implementation* for your brand (OpenRazer, libratbag, Solaar…), read the protocol out

@@ -73,6 +73,11 @@ listeners are skipped entirely on this model).
 Your mouse is ignored, never written to — the daemon simply waits for a supported device
 to appear (see the Safety FAQ in the [README](../README.md#safety)).
 
+[`DEVICE-WISHLIST.md`](DEVICE-WISHLIST.md) lists every Razer mouse OpenRazer already knows
+the protocol for — with its USB id, transaction id, DPI ceiling and lighting zones already
+filled in — and who cracked the ones that shipped. If yours is on it, most of the reading is
+done; claim it there.
+
 Adding a device is designed to be a **one-file diff**: a `DeviceSpec` const, a line in
 `SUPPORTED`, a test, and a row here. Start with
 [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md), then open a PR with the
