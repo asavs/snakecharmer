@@ -11,7 +11,7 @@ and linked where possible — if one's off, send a source and we'll fix it.
 
 ## Not competing with any of this (except one)
 
-The FOSS peripheral ecosystem is good, and none of it is a target. OpenRGB and SignalRGB
+The tools people have built around this hardware are good, and none of them are a target. OpenRGB and SignalRGB
 have poured years into lighting — effects, game sync, cross-brand orchestration — and are
 better at it than this project will ever be. X-Mouse Button Control has done
 per-application button profiles well for over a decade. AutoHotkey is a macro engine with

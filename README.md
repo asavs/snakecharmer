@@ -92,7 +92,7 @@ mice that are up for grabs, with the protocol facts OpenRazer already knows abou
 a prompt you can paste into any AI assistant to do it — [`AGENTS.md`](AGENTS.md) is the
 brief they work from, and it isn't specific to any one tool or model.
 
-### One target, and it isn't the FOSS ecosystem
+### One target, and it's Razer
 
 The essential settings and nothing else: DPI, polling rate, button rebinds, and lighting
 as a *setting* — pick a color or a basic effect, it's applied, the program goes quiet.
