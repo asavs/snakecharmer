@@ -1,0 +1,85 @@
+name: Add support for my mouse
+description: Ask for a Razer mouse to be supported, or claim one you want to add yourself.
+title: "Add <model> (1532:____)"
+labels: ["device-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **You almost certainly do not need to capture USB traffic.**
+
+        Snakecharmer's protocol knowledge comes from
+        [OpenRazer](https://github.com/openrazer/openrazer), which already documents
+        ~113 Razer mice. If yours is one of them — check
+        [`docs/DEVICE-WISHLIST.md`](../blob/master/docs/DEVICE-WISHLIST.md) — then its
+        USB id, transaction id, DPI ceiling, lighting zones and polling family are
+        already known and written down. Packet capture is only for devices that
+        aren't in that list.
+
+        What *can't* be looked up is what your hardware does when you press a button.
+        That's what this form collects. Everything below is read-only: nothing here
+        changes a setting on your mouse.
+
+  - type: input
+    id: model
+    attributes:
+      label: Which mouse?
+      description: The name on the box, or from Razer's support page.
+      placeholder: Razer DeathAdder Chroma
+    validations:
+      required: true
+
+  - type: input
+    id: pid
+    attributes:
+      label: USB product id
+      description: >
+        Device Manager → your mouse → Details → Hardware Ids. You want the four hex
+        digits after `PID_`, e.g. `HID\VID_1532&PID_0043`. This matters more than it
+        sounds: several DeathAdders look identical on a desk and are different devices
+        to the software.
+      placeholder: "0043"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: What would you like to do?
+      description: All three are welcome. Most people pick the first.
+      options:
+        - I have the mouse and can run a couple of commands — someone else writes the code
+        - I want to add it myself (claim it)
+        - I just want to register that I'd use it
+    validations:
+      required: true
+
+  - type: textarea
+    id: mode_read
+    attributes:
+      label: "Optional: what the control channel says"
+      description: >
+        With the mouse plugged in, `pip install hidapi`, then from the repo's
+        `reference/` folder run `python set_device_mode.py` with **no arguments**. It
+        only reads. Paste what it prints. This one line proves the protocol works on
+        your unit before anybody writes a line of code for it.
+      render: text
+
+  - type: textarea
+    id: button_codes
+    attributes:
+      label: "Optional: what your DPI buttons emit"
+      description: >
+        Run `python dpi_button_daemon.py` in a terminal, press the DPI-up button once
+        and the DPI-down button once, and paste the lines it logs. This is the one fact
+        no reference implementation can give us, because it needs a finger. Skip it if
+        your mouse has no buttons behind the wheel.
+      render: text
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Before you file
+      options:
+        - label: I checked [`docs/DEVICE-WISHLIST.md`](../blob/master/docs/DEVICE-WISHLIST.md) and there isn't already an issue open for this model.
+          required: true

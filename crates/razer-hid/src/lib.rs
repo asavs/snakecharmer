@@ -335,6 +335,58 @@ pub fn aux_collection_paths(api: &HidApi, product_id: u16) -> Vec<CString> {
         .collect()
 }
 
+/// A Razer mouse present on the bus, whether or not this build can drive it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DetectedMouse {
+    pub product_id: u16,
+    /// The device's own USB product string, when it reports one.
+    pub name: Option<String>,
+    /// Whether a [`DeviceSpec`](proto::DeviceSpec) covers it.
+    pub supported: bool,
+}
+
+impl std::fmt::Display for DetectedMouse {
+    /// "Razer DeathAdder Chroma (1532:0043)", falling back to the id alone.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.name {
+            Some(name) => write!(f, "{name} (1532:{:04X})", self.product_id),
+            None => write!(f, "a Razer device (1532:{:04X})", self.product_id),
+        }
+    }
+}
+
+/// Every Razer *mouse* on the bus, deduped by product id.
+///
+/// Matched on the Generic Desktop / Mouse top-level collection, the same filter
+/// [`Mouse::open_with`] uses — Razer's keyboards, headsets and mats share the
+/// vendor id, and this must not report one of those as a mouse we could support.
+///
+/// **Enumeration only: nothing is opened and nothing is written.** That is the
+/// same promise the daemon makes about unsupported hardware everywhere else
+/// (see the README's safety FAQ). It reads what the OS already knows from the
+/// descriptors, so the app can say *which* device it found rather than only
+/// which ones it wanted.
+pub fn detected_mice(api: &HidApi) -> Vec<DetectedMouse> {
+    let mut found: Vec<DetectedMouse> = Vec::new();
+    for d in api.device_list() {
+        if d.vendor_id() != proto::VENDOR_ID || d.usage_page() != 0x0001 || d.usage() != 0x0002 {
+            continue;
+        }
+        // One device exposes several collections; keep one entry per product
+        // id, upgrading it if a later collection is the one carrying the name.
+        let name = d.product_string().map(str::to_owned).filter(|s| !s.is_empty());
+        match found.iter_mut().find(|m| m.product_id == d.product_id()) {
+            Some(existing) => existing.name = existing.name.take().or(name),
+            None => found.push(DetectedMouse {
+                product_id: d.product_id(),
+                name,
+                supported: proto::spec_for(d.product_id()).is_some(),
+            }),
+        }
+    }
+    found
+}
+
 /// A readable auxiliary HID collection, used to listen for DPI-button input
 /// reports. `HidDevice` is `Send`, so a `Listener` can be moved into its own
 /// thread for a truly blocking read (no poll loop — CPU stays at ~0 when idle).

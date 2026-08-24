@@ -30,7 +30,8 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, VkKeyScanW, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    MessageBoxW, IDRETRY, MB_ICONINFORMATION, MB_RETRYCANCEL, MB_SETFOREGROUND,
+    MessageBoxW, IDRETRY, IDYES, MB_ICONINFORMATION, MB_RETRYCANCEL, MB_SETFOREGROUND, MB_YESNO,
+    SW_SHOWNORMAL,
 };
 
 /// Common virtual-key codes (a small, hand-picked subset).
@@ -180,6 +181,47 @@ pub fn alert_retry(title: &str, text: &str) -> bool {
         )
     };
     clicked == IDRETRY
+}
+
+/// Show a blocking message box with Yes/No buttons. Returns `true` for Yes.
+/// Blocks the calling thread, same as [`alert_retry`] — call it off the
+/// daemon's loop.
+pub fn alert_yes_no(title: &str, text: &str) -> bool {
+    let title: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    let text: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: both buffers are valid NUL-terminated UTF-16 strings that outlive
+    // the call; a null owner HWND is explicitly allowed and makes the box
+    // free-standing. MessageBoxW does not retain the pointers.
+    let clicked = unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_YESNO | MB_ICONINFORMATION | MB_SETFOREGROUND,
+        )
+    };
+    clicked == IDYES
+}
+
+/// Open a URL in the user's default browser. Best effort: a failure is silent,
+/// because every caller is offering a convenience the user can also decline.
+pub fn open_url(url: &str) {
+    let verb: Vec<u16> = "open".encode_utf16().chain(std::iter::once(0)).collect();
+    let url: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: both buffers are valid NUL-terminated UTF-16 strings that outlive
+    // the call; null HWND/params/directory are documented as allowed, and
+    // ShellExecuteW does not retain the pointers. The returned HINSTANCE is a
+    // legacy error code, not a handle, so there is nothing to release.
+    unsafe {
+        windows_sys::Win32::UI::Shell::ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            url.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        );
+    }
 }
 
 /// Atomically replace a same-directory destination with a fully written temporary file.

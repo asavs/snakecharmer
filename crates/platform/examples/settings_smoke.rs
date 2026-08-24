@@ -3,6 +3,7 @@
 //!
 //!   cargo run -p platform --example settings_smoke              # full layout
 //!   cargo run -p platform --example settings_smoke -- --minimal # no RGB, no DPI buttons
+//!   ... -- --no-diagram                                         # device with no button map yet
 //!   ... -- --hold 30                                            # stay open longer
 //!
 //! The sample data is platform-test data, not device truth — the real diagrams
@@ -288,6 +289,9 @@ fn combo(identity: &str, sel: usize) -> ActionCombo {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let minimal = args.iter().any(|a| a == "--minimal");
+    // A device whose DeviceSpec has `diagram: None` -- a shipped protocol port
+    // that nobody has drawn yet. The window falls back to labeled control rows.
+    let no_diagram = args.iter().any(|a| a == "--no-diagram");
     let hold_secs: u64 = args
         .iter()
         .position(|a| a == "--hold")
@@ -313,7 +317,7 @@ fn main() {
         // A V3-like device: no lighting, no wheel DPI buttons, 8 kHz polling.
         SettingsInit {
             device_name: "Sample Mouse (minimal)".to_string(),
-            diagram: Some(diagram_minimal()),
+            diagram: (!no_diagram).then(diagram_minimal),
             dpi: 1800,
             dpi_min: 100,
             dpi_max: 30000,
@@ -332,7 +336,7 @@ fn main() {
         // An Elite-like device: everything on.
         SettingsInit {
             device_name: "Sample Mouse (full)".to_string(),
-            diagram: Some(diagram_full()),
+            diagram: (!no_diagram).then(diagram_full),
             dpi: 1800,
             dpi_min: 100,
             dpi_max: 16000,
@@ -365,7 +369,12 @@ fn main() {
 
     println!(
         "Opening settings window ({}; auto-closes in ~{hold_secs}s)...",
-        if minimal { "minimal" } else { "full" }
+        match (minimal, no_diagram) {
+            (true, true) => "minimal, no diagram",
+            (true, false) => "minimal",
+            (false, true) => "full, no diagram",
+            (false, false) => "full",
+        }
     );
     settings::open(init, |ev: SettingsEvent| println!("event: {ev:?}"));
     println!("Settings window closed. Smoke test OK.");

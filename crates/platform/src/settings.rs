@@ -141,6 +141,12 @@ const COMBO_H: i32 = 24;
 const COMBO_DROP: i32 = 200;
 /// Vertical gap after each control group.
 const GROUP_GAP: i32 = 12;
+/// Height reserved for the hook-cost note under the fallback thumb rows.
+/// Two lines, because at `MIN_CLIENT_W` — the width of a window with no
+/// diagram — the sentence does not fit on one and an `SS_CENTER` static
+/// clips rather than wraps unless it has the room. (With a diagram the same
+/// fact is stated inside the schematic instead, beside the thumb dropdowns.)
+const HOOK_NOTE_H: i32 = 2 * LBL_H;
 /// Breathing room above and below the diagram pane (larger than GROUP_GAP so
 /// the schematic sits in open space, not crowded against the top cluster or
 /// the bottom bar).
@@ -394,7 +400,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             fb_h += 2 * fb_row; // up + down fallback rows
         }
         if !thumb_in_diagram {
-            fb_h += 2 * fb_row + 4 + 16; // thumb rows + hook note tucked under
+            fb_h += 2 * fb_row + 4 + HOOK_NOTE_H; // thumb rows + hook note tucked under
         }
         if fb_h > 0 {
             fb_h += GROUP_GAP;
@@ -696,9 +702,9 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                     MARGIN,
                     y,
                     client_w - 2 * MARGIN,
-                    16,
+                    HOOK_NOTE_H,
                 );
-                y += 16;
+                y += HOOK_NOTE_H;
             }
         }
         let _ = y; // cursor now == MARGIN + top_h; the pane starts below it

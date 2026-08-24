@@ -28,7 +28,10 @@ from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_dri
 
 ## Button maps
 
-Which physical control is which config key. Each diagram is **data**, not artwork: it
+Which physical control is which config key. A device may ship without one — the field is
+an `Option`, and when it's `None` the settings window lists the same controls as labeled
+rows instead of callouts on a picture — so this section covers the devices that have a
+diagram, not all of them. Each diagram is **data**, not artwork: it
 lives in the device's `DeviceSpec::diagram` as a small list of shapes, the settings
 window renders the connected device's copy natively (GDI+), and the SVGs below are
 generated from the same data (`cargo test -p razer-proto -- --ignored
@@ -72,6 +75,11 @@ listeners are skipped entirely on this model).
 
 Your mouse is ignored, never written to — the daemon simply waits for a supported device
 to appear (see the Safety FAQ in the [README](../README.md#safety)).
+
+[`DEVICE-WISHLIST.md`](DEVICE-WISHLIST.md) lists every Razer mouse OpenRazer already knows
+the protocol for — with its USB id, transaction id, DPI ceiling and lighting zones already
+filled in — and who cracked the ones that shipped. If yours is on it, most of the reading is
+done; claim it there.
 
 Adding a device is designed to be a **one-file diff**: a `DeviceSpec` const, a line in
 `SUPPORTED`, a test, and a row here. Start with

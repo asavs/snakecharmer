@@ -3,6 +3,7 @@
 //! the terminal cleanly.
 //!
 //! Usage:
+//!   charmctl devices                        list the Razer mice plugged in, supported or not
 //!   charmctl status                         device mode + DPI + polling rate (read-only)
 //!   charmctl set-dpi X [Y]                  set DPI
 //!   charmctl set-poll <hz>                  set polling rate (Hz)
@@ -20,6 +21,11 @@ use snakecharmer::lighting::EffectSpec;
 use razer_hid::Mouse;
 use razer_proto::{DeviceMode, Rgb};
 
+/// Where an unsupported device is documented (same page the daemon's tray
+/// notice offers to open).
+const WISHLIST_URL: &str =
+    "https://github.com/asavs/snakecharmer/blob/master/docs/DEVICE-WISHLIST.md";
+
 fn mode_name(b: u8) -> String {
     match DeviceMode::from_byte(b) {
         Some(DeviceMode::Hardware) => "hardware (0x00)".into(),
@@ -34,6 +40,7 @@ fn main() {
     let rest = if args.is_empty() { &[][..] } else { &args[1..] };
 
     let result: Result<(), Box<dyn std::error::Error>> = match cmd {
+        "devices" => devices(),
         "status" => status(),
         "set-dpi" => set_dpi(rest),
         "set-poll" => set_poll(rest),
@@ -63,6 +70,7 @@ fn print_help() {
     println!(
         "charmctl — Snakecharmer control CLI (supported Razer mice)\n\n\
          USAGE:\n\
+         \x20 charmctl devices                         list Razer mice plugged in, supported or not\n\
          \x20 charmctl status                          device mode + DPI + polling rate (read-only)\n\
          \x20 charmctl set-dpi X [Y]                   set DPI\n\
          \x20 charmctl set-poll <hz>                   set polling rate (Hz)\n\
@@ -75,6 +83,32 @@ fn print_help() {
          \x20 charmctl self-test                       test keystroke injection (F13)\n\
          \x20 charmctl where                           print config/log paths\n"
     );
+}
+
+/// List the Razer mice the OS can see and say which ones this build drives.
+///
+/// Read-only enumeration: no device is opened. It exists so "what is my USB
+/// product id" -- the first question the add-a-mouse issue form asks -- can be
+/// answered by running one command instead of navigating Device Manager.
+fn devices() -> Result<(), Box<dyn std::error::Error>> {
+    let api = razer_hid::open_api()?;
+    let mice = razer_hid::detected_mice(&api);
+    if mice.is_empty() {
+        println!("No Razer mice found. (Other Razer hardware is ignored: this only lists mice.)");
+        return Ok(());
+    }
+    for m in &mice {
+        let mark = if m.supported { "supported" } else { "not supported yet" };
+        println!("  {m}  --  {mark}");
+    }
+    if mice.iter().any(|m| !m.supported) {
+        println!(
+            "\nA mouse listed as not supported yet is usually a small job to add: its\n\
+             protocol is very likely already documented. What is known about it:\n\
+             \x20 {WISHLIST_URL}"
+        );
+    }
+    Ok(())
 }
 
 fn status() -> Result<(), Box<dyn std::error::Error>> {

@@ -129,6 +129,25 @@ fn effect_options(kind: &str) -> (Vec<String>, usize) {
     (labels, idx)
 }
 
+/// Where a user with an unsupported mouse is sent: the list of every Razer
+/// mouse whose protocol OpenRazer already documents, with that device's USB id
+/// and transaction id already filled in.
+const WISHLIST_URL: &str =
+    "https://github.com/asavs/snakecharmer/blob/master/docs/DEVICE-WISHLIST.md";
+
+/// Describe the Razer device that *is* plugged in but isn't supported, if there
+/// is one — "Razer DeathAdder Chroma (1532:0043)", or just the id when the
+/// device reports no product string.
+///
+/// Enumeration only; the device is never opened or written to. Returns `None`
+/// when no Razer hardware is present at all, which is a different message: one
+/// case is "plug something in", the other is "this could work, here's how".
+fn found_but_unsupported() -> Option<String> {
+    let api = razer_hid::open_api().ok()?;
+    let found = razer_hid::detected_mice(&api).into_iter().find(|m| !m.supported)?;
+    Some(found.to_string())
+}
+
 /// Map the spec's diagram data (razer-proto's DSL) into the platform
 /// renderer's generic shape types. Purely mechanical: the platform layer
 /// stays Razer-agnostic (RgbZone/Button become its two accent slots).
@@ -233,7 +252,7 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
         .collect();
     let init = platform::settings::SettingsInit {
         device_name: spec.name.to_string(),
-        diagram: Some(to_platform_diagram(&spec.diagram)),
+        diagram: spec.diagram.as_ref().map(to_platform_diagram),
         dpi: cfg.dpi,
         dpi_min: spec.dpi_min,
         dpi_max: spec.dpi_max,
@@ -656,19 +675,46 @@ fn service_retry_gap(
                     let popup_open = Arc::clone(popup_open);
                     let tx = tx.clone();
                     thread::spawn(move || {
-                        let supported: Vec<&str> = razer_proto::devices::SUPPORTED
-                            .iter()
-                            .map(|s| s.name)
-                            .collect();
-                        let retry = platform::alert_retry(
-                            "Snakecharmer",
-                            &format!(
-                                "No supported Razer mouse found.\n\n\
-                                 Supported: {}.\n\n\
-                                 If you've just plugged one in, click Retry to check now.",
-                                supported.join(", ")
-                            ),
-                        );
+                        let retry = match found_but_unsupported() {
+                            // A Razer mouse *is* plugged in, just not one
+                            // we drive. This is the moment a user most wants
+                            // this to work, so name the device and point at
+                            // the page that says adding it is small - its
+                            // protocol is very likely already documented.
+                            // Retry would only find the same unsupported
+                            // device again, so the choice offered here is
+                            // the one that can actually help.
+                            Some(found) => {
+                                if platform::alert_yes_no(
+                                    "Snakecharmer",
+                                    &format!(
+                                        "Found {found} — not supported yet.\n\n\
+                                         Its protocol is very likely already documented, so adding it \
+                                         is a small job — you may only need to report a couple of \
+                                         numbers off the device.\n\n\
+                                         Open the page that lists what is already known?"
+                                    ),
+                                ) {
+                                    platform::open_url(WISHLIST_URL);
+                                }
+                                false
+                            }
+                            None => {
+                                let supported: Vec<&str> = razer_proto::devices::SUPPORTED
+                                    .iter()
+                                    .map(|s| s.name)
+                                    .collect();
+                                platform::alert_retry(
+                                    "Snakecharmer",
+                                    &format!(
+                                        "No supported Razer mouse found.\n\n\
+                                         Supported: {}.\n\n\
+                                         If you've just plugged one in, click Retry to check now.",
+                                        supported.join(", ")
+                                    ),
+                                )
+                            }
+                        };
                         popup_open.store(false, Ordering::SeqCst);
                         if retry {
                             let _ = tx.send(Event::Menu(MenuAction::RetryProbe));
@@ -1364,7 +1410,7 @@ mod tests {
         // diagram today — all comfortably under platform's PANE_MAX_W).
         let budget = 2.0 * platform::settings::CENTER_SLACK;
         for spec in razer_proto::SUPPORTED {
-            let diagram = to_platform_diagram(&spec.diagram);
+            let Some(diagram) = spec.diagram.as_ref().map(to_platform_diagram) else { continue };
             let Some((left, right)) = platform::diagram::arm_balance(&diagram) else { continue };
             let imbalance = (left - right).abs();
             if imbalance > budget {
@@ -1406,7 +1452,10 @@ mod tests {
             Some(MenuAction::ToggleAutostart)
         ));
         // Outside the value-encoded DPI range and distinct from the click id.
-        assert!(menu_id::AUTOSTART < menu_id::DPI_FLAG);
+        // Both are consts, so this holds at compile time — in a `const` block
+        // it stays a real check instead of a runtime assert clippy rejects as
+        // constant under `-D warnings`.
+        const { assert!(menu_id::AUTOSTART < menu_id::DPI_FLAG) };
         assert_ne!(menu_id::AUTOSTART, platform::tray::TRAY_CLICK);
     }
 

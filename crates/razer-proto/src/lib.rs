@@ -101,7 +101,14 @@ pub struct DeviceSpec {
     /// [`diagram`]). One definition drives both the settings-window rendering
     /// (GDI+) and the generated `docs/assets/<device>.svg`; a drift-check test
     /// regenerates the SVG and fails if the committed asset differs.
-    pub diagram: Diagram,
+    ///
+    /// `None` is a supported, shipping state, not a placeholder: the device
+    /// works completely — DPI, polling, lighting, remapping — and the settings
+    /// window falls back to labeled control rows instead of callouts on a
+    /// picture. Drawing one is a separate contribution with a separate skill
+    /// (see `docs/DRAWING-MICE-GUIDE.md`), so a protocol port never has to wait
+    /// on an illustration, and nobody has to draw a mouse to fix a DPI range.
+    pub diagram: Option<Diagram>,
 }
 
 impl DeviceSpec {
@@ -544,7 +551,7 @@ mod tests {
         dpi_min: 100,
         dpi_max: 30000,
         polling: PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] },
-        diagram: Diagram { width: 0, height: 0, shapes: &[] },
+        diagram: None,
     };
 
     /// The transaction id lives at byte 1, which is *outside* the CRC range
@@ -840,8 +847,12 @@ mod tests {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/assets");
         std::fs::create_dir_all(dir).expect("create docs/assets");
         for spec in SUPPORTED {
+            let Some(diagram) = &spec.diagram else {
+                println!("skipped {} (no diagram)", spec.name);
+                continue;
+            };
             let path = format!("{dir}/{}.svg", diagram::asset_slug(spec.name));
-            std::fs::write(&path, spec.diagram.to_svg()).expect("write SVG asset");
+            std::fs::write(&path, diagram.to_svg()).expect("write SVG asset");
             println!("wrote {path}");
         }
     }
@@ -883,18 +894,27 @@ mod tests {
                 );
             }
 
-            // The button-map diagram is spec data (rendered in the settings
-            // window). The doc embeds its generated SVG; the file must match
-            // the emitter's output byte for byte so doc and UI can't drift.
-            assert!(
-                !spec.diagram.shapes.is_empty(),
-                "{} has no diagram — every supported device ships one",
-                spec.name
-            );
+            // The button-map diagram is optional spec data (rendered in the
+            // settings window). When a device has one the doc embeds its
+            // generated SVG, and the file must match the emitter's output byte
+            // for byte so doc and UI can't drift. When it doesn't, the doc must
+            // not claim otherwise — an embed with no diagram behind it is a
+            // broken image, and the asymmetry is what keeps "diagram pending"
+            // honest rather than aspirational.
             let slug = diagram::asset_slug(spec.name);
+            let embed = format!("assets/{slug}.svg");
+            let Some(diagram) = &spec.diagram else {
+                assert!(
+                    !doc.contains(&embed),
+                    "{} has no diagram, but docs/SUPPORTED-DEVICES.md still embeds {embed} — \
+                     remove the embed, or add the diagram to its DeviceSpec",
+                    spec.name
+                );
+                continue;
+            };
             assert!(
-                doc.contains(&format!("assets/{slug}.svg")),
-                "docs/SUPPORTED-DEVICES.md 'Button maps' section must embed assets/{slug}.svg for {}",
+                doc.contains(&embed),
+                "docs/SUPPORTED-DEVICES.md 'Button maps' section must embed {embed} for {}",
                 spec.name
             );
             let asset_path = format!(
@@ -905,7 +925,7 @@ mod tests {
                 .unwrap_or_default()
                 .replace("\r\n", "\n");
             assert!(
-                on_disk == spec.diagram.to_svg(),
+                on_disk == diagram.to_svg(),
                 "docs/assets/{slug}.svg is stale or missing — regenerate it with:\n  \
                  cargo test -p razer-proto -- --ignored regenerate_diagram_svgs"
             );
