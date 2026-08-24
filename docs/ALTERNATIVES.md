@@ -9,6 +9,25 @@ The only figures we've *measured* are our own (see the README table). Third-part
 are reported as best we can find from each project's own docs, forums, or issue tracker,
 and linked where possible — if one's off, send a source and we'll fix it.
 
+## Not competing with any of this (except one)
+
+The tools people have built around this hardware are good, and none of them are a target. OpenRGB and SignalRGB
+have poured years into lighting — effects, game sync, cross-brand orchestration — and are
+better at it than this project will ever be. X-Mouse Button Control has done
+per-application button profiles well for over a decade. AutoHotkey is a macro engine with
+two decades of momentum. libratbag and Piper are the cross-vendor Linux answer. And
+[OpenRazer](https://openrazer.github.io/) is the reason any of this is possible at all:
+they reverse-engineered Razer's protocol years ago, and every byte Snakecharmer sends was
+read out of their driver. This is their work ported to Windows, GPL because it is theirs
+as much as ours.
+
+So requests for lighting effects, game sync, or macros get **redirected here rather than
+built**. That isn't modesty, it's the design constraint: all three need something
+permanently hot, which is the exact cost this project exists to avoid.
+
+There is one target, and it is Razer Synapse — six processes, two kernel drivers, and
+half a gigabyte of resident memory to run two side buttons and a DPI setting.
+
 ## The comparison
 
 **Key:** ✅ full · 🟡 basic / partial · — not offered.
