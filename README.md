@@ -92,10 +92,31 @@ mice that are up for grabs, with the protocol facts OpenRazer already knows abou
 a prompt you can paste into any AI assistant to do it — [`AGENTS.md`](AGENTS.md) is the
 brief they work from, and it isn't specific to any one tool or model.
 
-Snakecharmer also isn't trying to be everything — if you want cross-brand RGB game sync,
-per-app button profiles, or you're on Linux, other tools serve you better. See
-[`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md) for an honest map of the landscape and
-which tool fits which need.
+### One target, and it isn't the FOSS ecosystem
+
+The essential settings and nothing else: DPI, polling rate, button rebinds, and lighting
+as a *setting* — pick a color or a basic effect, it's applied, the program goes quiet.
+Snakecharmer does not animate your lighting, sync it to anything, or run a macro engine,
+and it never will. That isn't modesty, it's the design constraint: all three need
+something permanently hot, which is the exact cost this exists to avoid.
+
+The people who do those things do them well, so the redirect *is* the answer:
+
+| If you want | Use |
+|---|---|
+| RGB synced to your games, across brands | [SignalRGB](https://signalrgb.com/) |
+| Lighting on many devices, free | [OpenRGB](https://openrgb.org/) |
+| Per-application button profiles | [X-Mouse Button Control](https://www.highrez.co.uk/downloads/xmousebuttoncontrol.htm) |
+| Macros | [AutoHotkey](https://www.autohotkey.com/) |
+| Linux | [OpenRazer](https://openrazer.github.io/) + [Polychromatic](https://polychromatic.app/) |
+| macOS | [razer-macos](https://github.com/1kc/razer-macos) |
+| Razer *and* Logitech in one tool | [libratbag](https://github.com/libratbag/libratbag) + [Piper](https://github.com/libratbag/piper) |
+| To install nothing at all | [usemice](https://github.com/robbieplata/usemice) |
+
+Running Snakecharmer *alongside* one of them is fine and sometimes ideal — it takes the
+DPI buttons X-Mouse can't see, X-Mouse does the per-app logic Snakecharmer doesn't have.
+[`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md) is the full map, including the cases where
+the honest answer is "not this."
 
 ## Requirements
 
