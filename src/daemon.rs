@@ -129,6 +129,25 @@ fn effect_options(kind: &str) -> (Vec<String>, usize) {
     (labels, idx)
 }
 
+/// Where a user with an unsupported mouse is sent: the list of every Razer
+/// mouse whose protocol OpenRazer already documents, with that device's USB id
+/// and transaction id already filled in.
+const WISHLIST_URL: &str =
+    "https://github.com/asavs/snakecharmer/blob/master/docs/DEVICE-WISHLIST.md";
+
+/// Describe the Razer device that *is* plugged in but isn't supported, if there
+/// is one — "Razer DeathAdder Chroma (1532:0043)", or just the id when the
+/// device reports no product string.
+///
+/// Enumeration only; the device is never opened or written to. Returns `None`
+/// when no Razer hardware is present at all, which is a different message: one
+/// case is "plug something in", the other is "this could work, here's how".
+fn found_but_unsupported() -> Option<String> {
+    let api = razer_hid::open_api().ok()?;
+    let found = razer_hid::detected_mice(&api).into_iter().find(|m| !m.supported)?;
+    Some(found.to_string())
+}
+
 /// Map the spec's diagram data (razer-proto's DSL) into the platform
 /// renderer's generic shape types. Purely mechanical: the platform layer
 /// stays Razer-agnostic (RgbZone/Button become its two accent slots).
@@ -656,19 +675,46 @@ fn service_retry_gap(
                     let popup_open = Arc::clone(popup_open);
                     let tx = tx.clone();
                     thread::spawn(move || {
-                        let supported: Vec<&str> = razer_proto::devices::SUPPORTED
-                            .iter()
-                            .map(|s| s.name)
-                            .collect();
-                        let retry = platform::alert_retry(
-                            "Snakecharmer",
-                            &format!(
-                                "No supported Razer mouse found.\n\n\
-                                 Supported: {}.\n\n\
-                                 If you've just plugged one in, click Retry to check now.",
-                                supported.join(", ")
-                            ),
-                        );
+                        let retry = match found_but_unsupported() {
+                            // A Razer mouse *is* plugged in, just not one
+                            // we drive. This is the moment a user most wants
+                            // this to work, so name the device and point at
+                            // the page that says adding it is small - its
+                            // protocol is very likely already documented.
+                            // Retry would only find the same unsupported
+                            // device again, so the choice offered here is
+                            // the one that can actually help.
+                            Some(found) => {
+                                if platform::alert_yes_no(
+                                    "Snakecharmer",
+                                    &format!(
+                                        "Found {found} — not supported yet.\n\n\
+                                         Its protocol is very likely already documented, so adding it \
+                                         is a small job — you may only need to report a couple of \
+                                         numbers off the device.\n\n\
+                                         Open the page that lists what is already known?"
+                                    ),
+                                ) {
+                                    platform::open_url(WISHLIST_URL);
+                                }
+                                false
+                            }
+                            None => {
+                                let supported: Vec<&str> = razer_proto::devices::SUPPORTED
+                                    .iter()
+                                    .map(|s| s.name)
+                                    .collect();
+                                platform::alert_retry(
+                                    "Snakecharmer",
+                                    &format!(
+                                        "No supported Razer mouse found.\n\n\
+                                         Supported: {}.\n\n\
+                                         If you've just plugged one in, click Retry to check now.",
+                                        supported.join(", ")
+                                    ),
+                                )
+                            }
+                        };
                         popup_open.store(false, Ordering::SeqCst);
                         if retry {
                             let _ = tx.send(Event::Menu(MenuAction::RetryProbe));

@@ -168,6 +168,7 @@ producer memory.
 ## `charmctl` — command-line control
 
 ```
+charmctl devices                         list Razer mice plugged in, supported or not
 charmctl status                          device mode + DPI + polling rate (read-only)
 charmctl set-dpi X [Y]                    set DPI
 charmctl set-poll <hz>                    set polling rate (Hz)
@@ -259,6 +260,13 @@ Nothing is ever written to it. Snakecharmer only opens devices whose USB product
 in its [supported-devices table](docs/SUPPORTED-DEVICES.md); anything else, Razer or
 not — including DeathAdder versions not yet in the table — is never touched. The daemon
 just waits in its 3-second retry loop for a supported mouse to appear.
+
+It will *name* an unsupported mouse, though. Opening Settings with one plugged in says
+which device it found and offers to open the
+[device wishlist](docs/DEVICE-WISHLIST.md), because adding it is usually a small job —
+its protocol is very likely already documented. That comes from reading the USB
+descriptors the OS already has (`charmctl devices` prints the same thing); the device
+itself is still never opened or written to.
 </details>
 
 <details>
