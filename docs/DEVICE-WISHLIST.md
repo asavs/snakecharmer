@@ -45,6 +45,29 @@ working device that nobody has drawn yet, which needs **no hardware at all**;
 [`needs-hardware`](https://github.com/asavs/snakecharmer/labels/needs-hardware) — the code
 is written and it's waiting on someone who owns the mouse to press a button.
 
+## Adding your mouse with an AI assistant
+
+You do not need a particular tool or a paid model for this — the repo does the hard part.
+Paste this into whatever assistant you have, with your mouse's name filled in:
+
+> Add support for my **<mouse>** to this repo (github.com/asavs/snakecharmer).
+>
+> 1. Find my model in `docs/DEVICE-WISHLIST.md`. It lists my USB id, transaction id, max
+>    DPI, RGB zones and polling family. If it's listed, you need no packet capture — but
+>    check each value against the OpenRazer source before using it.
+> 2. Copy the closest file in `crates/razer-proto/src/devices/`, change those values, set
+>    `diagram: None`, register it in `SUPPORTED`, and add a row to
+>    `docs/SUPPORTED-DEVICES.md`.
+> 3. Run `cargo test --workspace`.
+> 4. Follow the rules in `AGENTS.md`: only send commands read out of OpenRazer, read before
+>    you write, and if anything reads back unexpected, stop and tell me rather than trying
+>    something else.
+>
+> Then tell me what to run to check it against the real mouse.
+
+[`AGENTS.md`](../AGENTS.md) is the full brief — every agent reads it, and it is where the
+safety rules and the acceptance commands live.
+
 ## Reading the table
 
 Each column is the answer to one field of the `DeviceSpec` you're going to write, taken
