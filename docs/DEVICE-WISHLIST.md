@@ -16,9 +16,12 @@ list of mice this daemon actually talks to. This page is the board of everything
 
 The whole flow is ordinary GitHub; nothing to ask permission for.
 
-1. **Open an issue** titled `Add <model> (1532:xxxx)` and say you're working on it. Comment
-   on an existing issue if there is one, and it gets assigned to you. This is the only step
-   that exists to stop two people cracking the same mouse on the same weekend.
+1. **Open an issue** with the
+   [add-a-mouse form](https://github.com/asavs/snakecharmer/issues/new?template=device-request.yml)
+   and say you're working on it — or comment on an existing one, and it gets assigned to
+   you. This is the only step that exists to stop two people cracking the same mouse on
+   the same weekend. The form also works the other way round: if you have the hardware but
+   don't want to write any code, fill it in and someone else picks it up.
 2. **Crack it** — [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md) for the method, the
    [`reference/`](../reference/) Python toolkit for poking the device first, and
    [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md) for the diagram. It is a genuinely good
@@ -33,6 +36,14 @@ The whole flow is ordinary GitHub; nothing to ask permission for.
 
 An unclaimed row is fair game. A claim with no PR and no reply after about a month goes back
 to unclaimed; nobody is going to be precious about it.
+
+**Labels**, so you can find the shape of work you want:
+[`device-request`](https://github.com/asavs/snakecharmer/labels/device-request) — a mouse
+somebody wants; [`good first issue`](https://github.com/asavs/snakecharmer/labels/good%20first%20issue) — small
+and self-contained; [`diagram`](https://github.com/asavs/snakecharmer/labels/diagram) — a
+working device that nobody has drawn yet, which needs **no hardware at all**;
+[`needs-hardware`](https://github.com/asavs/snakecharmer/labels/needs-hardware) — the code
+is written and it's waiting on someone who owns the mouse to press a button.
 
 ## Reading the table
 
