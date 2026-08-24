@@ -233,7 +233,7 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
         .collect();
     let init = platform::settings::SettingsInit {
         device_name: spec.name.to_string(),
-        diagram: Some(to_platform_diagram(&spec.diagram)),
+        diagram: spec.diagram.as_ref().map(to_platform_diagram),
         dpi: cfg.dpi,
         dpi_min: spec.dpi_min,
         dpi_max: spec.dpi_max,
@@ -1364,7 +1364,7 @@ mod tests {
         // diagram today — all comfortably under platform's PANE_MAX_W).
         let budget = 2.0 * platform::settings::CENTER_SLACK;
         for spec in razer_proto::SUPPORTED {
-            let diagram = to_platform_diagram(&spec.diagram);
+            let Some(diagram) = spec.diagram.as_ref().map(to_platform_diagram) else { continue };
             let Some((left, right)) = platform::diagram::arm_balance(&diagram) else { continue };
             let imbalance = (left - right).abs();
             if imbalance > budget {

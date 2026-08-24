@@ -28,7 +28,10 @@ from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_dri
 
 ## Button maps
 
-Which physical control is which config key. Each diagram is **data**, not artwork: it
+Which physical control is which config key. A device may ship without one — the field is
+an `Option`, and when it's `None` the settings window lists the same controls as labeled
+rows instead of callouts on a picture — so this section covers the devices that have a
+diagram, not all of them. Each diagram is **data**, not artwork: it
 lives in the device's `DeviceSpec::diagram` as a small list of shapes, the settings
 window renders the connected device's copy natively (GDI+), and the SVGs below are
 generated from the same data (`cargo test -p razer-proto -- --ignored

@@ -23,7 +23,7 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
     // reference only): lighter modern shell — concave thumb scoop mid-left, deep
     // sculpted button plates, larger wheel set further back, side buttons above the
     // scoop. No lighting, no logo LED. Original line work.
-    diagram: Diagram {
+    diagram: Some(Diagram {
         width: 780,
         height: 430,
         shapes: &[
@@ -134,5 +134,5 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
             Shape::Text { role: Role::Note, at: (122, 271), anchor: Anchor::End, text: "remaps use a global mouse hook" },
             Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(~µs per mouse event)" },
         ],
-    },
+    }),
 };

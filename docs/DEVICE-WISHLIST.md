@@ -60,7 +60,8 @@ Two fields you'll notice are *not* here, because no reference implementation has
 
 - **`dpi_buttons`** — the vendor codes the wheel DPI buttons emit in driver mode. You read
   these off your own hardware with the listener; the Elite's are `0x20`/`0x21`.
-- **`diagram`** — the button map. Drawn per device from the official schematic.
+- **`diagram`** — the button map. Optional: `None` ships, and the settings window falls
+  back to labeled control rows. Draw it later, or let someone else.
 
 The last column isn't a device fact, it's the board: `open`, 🔧 claimed by whoever took
 it (linked to their issue), or ✅ cracked by whoever landed it, with their PR and the model

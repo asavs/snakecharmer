@@ -19,7 +19,7 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
     // reference only): right-handed ergo shell — left side flares out for the thumb
     // rest, right side tucks toward a leaning tail; long wheel slot; two-button DPI
     // strip behind the wheel; side buttons on the thumb flare. Original line work.
-    diagram: Diagram {
+    diagram: Some(Diagram {
         width: 780,
         height: 440,
         shapes: &[
@@ -157,5 +157,5 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
             Shape::Callout { slot: CalloutSlot::Lighting(1), at: (402, 297), anchor: Anchor::Start,
                 label: "", note: "", note_role: Role::Note },
         ],
-    },
+    }),
 };

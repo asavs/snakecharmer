@@ -5,6 +5,11 @@
 > original shape data. That one definition then drives the settings window (GDI+), the
 > generated `docs/assets/<device>.svg`, and the drift test that keeps them in lockstep.
 >
+> **This is optional work.** `DeviceSpec::diagram` is an `Option`, and `None` ships: the
+> device works completely and the settings window falls back to labeled control rows. So
+> nobody has to draw a mouse to add one, and drawing one for a device someone else ported
+> is a contribution in its own right.
+>
 > Companion to [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md) (which gets the
 > *protocol*; this gets the *picture*). Worked examples throughout are the two shipped
 > devices — the **DeathAdder Elite** and the **DeathAdder V3 (wired)** — whose diagrams
