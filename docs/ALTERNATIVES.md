@@ -22,8 +22,8 @@ read out of their driver. This is their work ported to Windows, GPL because it i
 as much as ours.
 
 So requests for lighting effects, game sync, or macros get **redirected here rather than
-built**. That isn't modesty, it's the design constraint: all three need something
-permanently hot, which is the exact cost this project exists to avoid.
+built**. All three need something permanently hot,
+which is the exact cost this project exists to avoid.
 
 There is one target, and it is Razer Synapse — six processes, two kernel drivers, and
 half a gigabyte of resident memory to run two side buttons and a DPI setting.

@@ -97,8 +97,8 @@ brief they work from, and it isn't specific to any one tool or model.
 The essential settings and nothing else: DPI, polling rate, button rebinds, and lighting
 as a *setting* — pick a color or a basic effect, it's applied, the program goes quiet.
 Snakecharmer does not animate your lighting, sync it to anything, or run a macro engine,
-and it never will. That isn't modesty, it's the design constraint: all three need
-something permanently hot, which is the exact cost this exists to avoid.
+and it never will. All three need something permanently hot,
+which is the exact cost this exists to avoid.
 
 The people who do those things do them well, so the redirect *is* the answer:
 
