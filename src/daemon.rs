@@ -1452,7 +1452,10 @@ mod tests {
             Some(MenuAction::ToggleAutostart)
         ));
         // Outside the value-encoded DPI range and distinct from the click id.
-        assert!(menu_id::AUTOSTART < menu_id::DPI_FLAG);
+        // Both are consts, so this holds at compile time — in a `const` block
+        // it stays a real check instead of a runtime assert clippy rejects as
+        // constant under `-D warnings`.
+        const { assert!(menu_id::AUTOSTART < menu_id::DPI_FLAG) };
         assert_ne!(menu_id::AUTOSTART, platform::tray::TRAY_CLICK);
     }
 
