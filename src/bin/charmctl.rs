@@ -125,7 +125,7 @@ fn status() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "device = {} (PID 0x{:04X}), mode = {}, dpi = {x} x {y}, polling = {poll}",
         spec.name,
-        spec.product_id,
+        mouse.product_id(),
         mode_name(mode)
     );
     Ok(())

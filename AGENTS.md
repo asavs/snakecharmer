@@ -57,6 +57,12 @@ shared layer, and that is a different change.
    ceiling, lighting zones and polling family. If it is there, **no packet capture is
    needed** — the reading is done. Verify each value against the OpenRazer source anyway;
    the table is a hint, and the driver has real asymmetries.
+   - Register a second USB id in `ALIAS_PIDS` at the top of
+     [`tools/wishlist-from-openrazer.py`](tools/wishlist-from-openrazer.py) if your model is
+     *one device with two ids* — wired and through its own dongle — that OpenRazer puts in
+     the same `case` arm of every command. Otherwise it gets two rows and duplicating the
+     spec file is the wrong move. If the two ids land in *different* arms (Viper V3 Pro),
+     they are genuinely two rows and two specs.
 2. **Copy the closest file in `crates/razer-proto/src/devices/`** and change the values.
    `deathadder_elite.rs` for a `0x3F` device with lighting; `deathadder_v3.rs` for a `0x1F`
    device without.

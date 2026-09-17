@@ -28,7 +28,7 @@
 pub mod devices;
 pub mod diagram;
 
-pub use devices::{DEATHADDER_ELITE, DEATHADDER_V3, SUPPORTED};
+pub use devices::{DEATHADDER_ELITE, DEATHADDER_V3, DEATHADDER_V4_PRO, SUPPORTED};
 use diagram::Diagram;
 
 /// USB vendor id for Razer.
@@ -75,7 +75,21 @@ pub struct PollingSpec {
 /// adding one of these to [`SUPPORTED`] — see `docs/SUPPORTED-DEVICES.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceSpec {
-    /// USB product id.
+    /// Every USB product id this spec covers.
+    ///
+    /// Usually one. A model that enumerates under a different PID depending on
+    /// how it is attached — the DeathAdder V4 Pro is a distinct USB device
+    /// wired (`0x00BE`) and over its wireless dongle (`0x00BF`) — lists both
+    /// here and shares one spec, because OpenRazer's cases for the two PIDs are
+    /// identical. Extra ids are an enumeration alias, not a second protocol.
+    pub product_ids: &'static [u16],
+    /// The USB product id the daemon logs and the tray names for this model.
+    ///
+    /// For a multi-PID device this is the id OpenRazer's `read_device_type` case
+    /// names first — the wired one, for the V4 Pro — so the string is stable
+    /// across attaches. It is *not* necessarily the id a given unit enumerated
+    /// as: code that needs that (opening the device's collections by id, say)
+    /// must take it from the bus instead.
     pub product_id: u16,
     /// transaction_id byte (offset 1 of every report); varies by model
     /// generation. Find it in the device's cases in OpenRazer's
@@ -116,11 +130,16 @@ impl DeviceSpec {
     pub fn has_rgb(&self) -> bool {
         !self.rgb_zones.is_empty()
     }
+
+    /// Whether this spec covers the given USB product id.
+    pub fn covers(&self, product_id: u16) -> bool {
+        self.product_ids.contains(&product_id)
+    }
 }
 
 /// Look up the [`DeviceSpec`] for a USB product id, if it's supported.
 pub fn spec_for(product_id: u16) -> Option<DeviceSpec> {
-    SUPPORTED.iter().copied().find(|s| s.product_id == product_id)
+    SUPPORTED.iter().copied().find(|s| s.covers(product_id))
 }
 
 /// Length of a Razer control report / response, in bytes.
@@ -543,6 +562,7 @@ mod tests {
     /// A synthetic second device for exercising per-device behavior without
     /// depending on any real spec beyond the Elite.
     const TEST_MOUSE: DeviceSpec = DeviceSpec {
+        product_ids: &[0xFFFE],
         product_id: 0xFFFE,
         transaction_id: 0x1F,
         name: "Test Mouse",
@@ -630,6 +650,30 @@ mod tests {
         );
         assert!(!v.has_rgb(), "V3 has no lighting hardware");
         assert!(v.dpi_buttons.is_none(), "V3 has no wheel DPI buttons");
+    }
+
+    /// DeathAdder V4 Pro: transaction id `0x1F` (the OpenRazer case arm does
+    /// *not* pick up the `0x3F` group the V3's PID lands in for DPI/mode), the
+    /// Focus Pro 45K sensor's ceiling, and the V3's feature shape — no
+    /// lighting, no wheel DPI buttons. Both PIDs — wired `0x00BE` and the
+    /// wireless dongle `0x00BF` — resolve to this one spec.
+    #[test]
+    fn deathadder_v4_pro_spec() {
+        let v4 = DEATHADDER_V4_PRO;
+        let r = set_dpi_report(v4.transaction_id, v4.dpi_min, v4.dpi_max, 1600, 1600).unwrap();
+        assert_eq!(r[1], 0x1F, "V4 Pro transaction id");
+        assert!(set_dpi_report(v4.transaction_id, v4.dpi_min, v4.dpi_max, 45000, 45000).is_ok());
+        assert_eq!(
+            set_dpi_report(v4.transaction_id, v4.dpi_min, v4.dpi_max, 45001, 45001),
+            Err(ProtoError::DpiOutOfRange(45001))
+        );
+        assert!(!v4.has_rgb(), "V4 Pro has no lighting hardware");
+        assert!(v4.dpi_buttons.is_none(), "V4 Pro has no wheel DPI buttons");
+        assert_eq!(spec_for(0x00BE), Some(v4), "wired PID");
+        assert_eq!(spec_for(0x00BF), Some(v4), "wireless PID");
+        assert_eq!(spec_for(0x00B2), Some(DEATHADDER_V3), "V3 unchanged");
+        assert_eq!(spec_for(0x00BD), None, "one below the wired PID");
+        assert_eq!(spec_for(0x00C0), None, "one above the wireless PID");
     }
 
     #[test]
@@ -867,12 +911,18 @@ mod tests {
             .replace("\r\n", "\n"); // normalize CRLF checkouts before verbatim matching
 
         for spec in SUPPORTED {
-            let pid = format!("1532:{:04X}", spec.product_id);
-            let row = doc
-                .lines()
-                .find(|l| l.starts_with('|') && l.contains(&pid))
+            let row = spec
+                .product_ids
+                .iter()
+                .find_map(|pid| {
+                    let pid = format!("1532:{pid:04X}");
+                    doc.lines().find(|l| l.starts_with('|') && l.contains(&pid))
+                })
                 .unwrap_or_else(|| {
-                    panic!("docs/SUPPORTED-DEVICES.md has no row for {} (`{pid}`) — add one", spec.name)
+                    panic!(
+                        "docs/SUPPORTED-DEVICES.md has no row for {} (any of {:04X?}) — add one",
+                        spec.name, spec.product_ids
+                    )
                 });
             for (what, needle) in [
                 ("model name", spec.name.to_string()),
@@ -890,7 +940,8 @@ mod tests {
             ] {
                 assert!(
                     row.contains(&needle),
-                    "doc row for {pid} is missing the {what} {needle:?}:\n  {row}"
+                    "doc row for 0x{:04X} is missing the {what} {needle:?}:\n  {row}",
+                    spec.product_id
                 );
             }
 

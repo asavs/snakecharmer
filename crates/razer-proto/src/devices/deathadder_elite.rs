@@ -7,6 +7,7 @@ use crate::{led, DeviceSpec, DpiButtons, PollingProtocol, PollingSpec};
 
 /// DeathAdder Elite (`PID 0x005C`): two RGB zones, wheel DPI buttons, 16000 DPI.
 pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
+    product_ids: &[0x005C],
     product_id: 0x005C,
     transaction_id: 0x3F,
     name: "DeathAdder Elite",
