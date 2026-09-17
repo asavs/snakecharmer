@@ -802,13 +802,17 @@ fn run_session(
     let api = razer_hid::open_api()?;
     let ctrl = Mouse::open_with(&api)?;
     let spec = ctrl.spec();
-    if let Err(error) = health.connected(spec.name, 0x1532, spec.product_id) {
+    // The id the device actually enumerated as — a spec may cover more than one
+    // (the DeathAdder V4 Pro is wired 0x00BE, wireless 0x00BF). Report and
+    // enumerate by this one; `spec.product_id` is only the canonical id.
+    let pid = ctrl.product_id();
+    if let Err(error) = health.connected(spec.name, 0x1532, pid) {
         log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
     }
     log.log(&format!(
         "Opened {} (PID 0x{:04X}, txn 0x{:02X}; rgb={}, dpi_buttons={}).",
         spec.name,
-        spec.product_id,
+        pid,
         spec.transaction_id,
         spec.has_rgb(),
         spec.dpi_buttons.is_some()
@@ -847,7 +851,7 @@ fn run_session(
         // Probe readable auxiliary collections; keep the survivors.
         let mut listeners: Vec<Listener> = Vec::new();
         let mut dropped = 0usize;
-        for path in aux_collection_paths(&api, spec.product_id) {
+        for path in aux_collection_paths(&api, ctrl.product_id()) {
             let listener = match Listener::open(&api, &path) {
                 Ok(l) => l,
                 Err(_) => {

@@ -87,6 +87,11 @@ type Result<T> = std::result::Result<T, Error>;
 pub struct Mouse {
     dev: HidDevice,
     spec: proto::DeviceSpec,
+    /// The USB product id the device actually enumerated as. Distinct from
+    /// [`DeviceSpec::product_id`], which is the spec's canonical id — a device
+    /// with aliases (the DeathAdder V4 Pro wired vs. wireless) reports one of
+    /// several. Anything that re-enumerates the bus *by id* must use this one.
+    product_id: u16,
 }
 
 impl Mouse {
@@ -117,14 +122,22 @@ impl Mouse {
             })
             .ok_or(Error::DeviceNotFound)?;
         let spec = proto::spec_for(info.product_id()).expect("filtered on a supported product id");
+        let product_id = info.product_id();
         let dev = info.open_device(api)?;
-        Ok(Mouse { dev, spec })
+        Ok(Mouse { dev, spec, product_id })
     }
 
     /// The matched device's [`DeviceSpec`] — name, transaction id, and which
     /// features (RGB, DPI buttons) the hardware actually has.
     pub fn spec(&self) -> proto::DeviceSpec {
         self.spec
+    }
+
+    /// The USB product id this device enumerated as — one of
+    /// [`DeviceSpec::product_ids`], and the id to enumerate its other HID
+    /// collections by.
+    pub fn product_id(&self) -> u16 {
+        self.product_id
     }
 
     /// Send one 90-byte report as feature report 0 and return the 90-byte response.
@@ -322,8 +335,9 @@ impl Mouse {
 /// Paths of every auxiliary (non-control) HID collection of the given device
 /// (by `product_id`) — i.e. every interface other than interface-0 mouse
 /// control. These are the candidate collections for the DPI-button vendor input
-/// reports; the caller probes which ones are actually readable. Pass the
-/// `product_id` from the opened [`Mouse`]'s [`Mouse::spec`].
+/// reports; the caller probes which ones are actually readable. Pass
+/// [`Mouse::product_id`] — the id the device enumerated as, not the spec's
+/// canonical id — so a device with aliases finds its own collections.
 pub fn aux_collection_paths(api: &HidApi, product_id: u16) -> Vec<CString> {
     api.device_list()
         .filter(|d| {
