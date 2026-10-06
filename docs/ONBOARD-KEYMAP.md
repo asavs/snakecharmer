@@ -4,9 +4,10 @@
 button bind, so Snakecharmer can write them itself and users can configure on-board binds
 without Synapse.
 
-**Status: capture stage.** The format is being decoded from captures of a DeathAdder V3
-and a DeathAdder Elite. Nothing here ships in the daemon yet, and none of the tools on this
-page write to a mouse. See [Findings](#findings).
+**Status: V3 decoded, Elite pending.** The DeathAdder V3's write (`0x02/0x0C`) and read
+(`0x02/0x8C`) are recorded under [Findings](#findings). The Elite capture, which tests
+whether the older generation shares the format, comes next. Nothing here ships in the
+daemon yet, and none of the tools on this page write to a mouse.
 
 ## The problem
 
@@ -222,7 +223,78 @@ recording is passive either way. Note it as data and carry on.
 
 ## Findings
 
-*None yet.* Add one block per session:
+### DeathAdder V3 (`1532:00B2`), Synapse 4, 1 on-board profile
+
+Captured on 2026-10-06 using the Synapse UI (AppEngine 4.0.827; exact Synapse
+version not checked). This records observed writes and their acknowledgements.
+The final physical check confirmed default input with Razer AppEngine stopped
+and hardware mode verified. These bytes are reference data, not an approved
+keymap write path.
+
+- **Write command:** class `0x02`, id `0x0C`, argument size 10, USB interface 0.
+  Transaction ids incremented from `0x07` through `0x11`; this capture does not
+  establish which transaction ids Snakecharmer should use.
+- **Argument layout:** offsets below are zero-based offsets in the 90-byte report;
+  arguments start at `[8]`.
+
+  | Report offset | Observed meaning or value |
+  |---|---|
+  | `[8]` | Always `01`, in writes and reads; purpose unconfirmed (OpenRazer uses `0x01` as VARSTORE, persistent storage, which would fit) |
+  | `[9]` | Button: `04` back, `05` forward (steps 01 vs 07). The launch read adds `01` left, `02` right, `03` wheel click, `09`/`0A` wheel up/down, and `60`, probably the underside DPI button |
+  | `[10]` | Always `00` in writes; purpose unconfirmed |
+  | `[11]` | Function category: `02` keyboard, `01` mouse, `00` disabled; `06` on button `60` in the launch read, meaning unknown |
+  | `[12]` | Payload length: `02` keyboard (modifier + usage), `01` mouse (one button number), `00` disabled. Fits every write and every launch-read reply |
+  | `[13]` | Keyboard modifier (`00` none, `01` left Ctrl, consistent with the HID modifier bitmask); mouse button number for mouse functions |
+  | `[14]` | Keyboard usage; zero for captured mouse/disabled functions |
+  | `[15..17]` | Always zero; purpose unconfirmed |
+
+- **Key encoding:** consistent with USB HID keyboard usages: `1 = 1E`, `2 = 1F`,
+  `A = 04`, `C = 06`. Steps 01-03 isolate `[14]`; step 04 sets `[13] = 01`
+  and `[14] = 06` for Ctrl+C. Other keys and modifiers are untested.
+- **Mouse functions / disabled / default:** step 05 sets `[11..14] = 01 01 03 00`
+  for middle click on the back button. Step 06 zeros `[11..17]` for disabled.
+  Default back is `[11..14] = 01 01 04 00` (step 10); default forward is
+  `01 01 05 00` (step 08). Wheel click was already default and Save was disabled
+  in step 09, so no wheel write was captured; the launch read gives it button
+  `03` with default `01 01 03`.
+- **Profile byte:** unconfirmed on this single-profile mouse. `[8] = 01` and
+  `[10] = 00` did not vary; neither can be called a profile selector from this capture.
+- **Read-back:** class `0x02`, id `0x8C`, the write's id with the high bit set, as with
+  DPI (`0x04/0x05` write, `0x04/0x85` read). Not in this session: the 11 GET replies
+  here only acknowledge the writes. Synapse sent it at launch, in an earlier capture
+  ([masked launch report](captures/V3-20261006-131912-launch-report.md)), once per
+  button with request `[8..10] = 01 <button> 00`, then again with `[10] = 01`. Each
+  reply carries the stored bind in the write layout: back `01 04 00 01 01 04` and
+  forward `01 05 00 01 01 05`, identical to the default writes in steps 10 and 08.
+- **Confirmed by:** [masked session report](captures/V3-20261006-135244-report.md),
+  11 writes and 11 matching success replies. UI assignments were checked after
+  each Save. The [after-session listener](captures/V3-20261006-135244-listener-after.txt)
+  recorded three back presses as `XBUTTON1`, three forward presses as `XBUTTON2`,
+  two wheel clicks as `MIDDLE`, normal left/right/scroll input, and no keyboard
+  events. The user reported exiting Synapse, but a subsequent read-only
+  [`charmctl status`](captures/V3-20261006-135244-status-after.txt) returned driver
+  mode (`0x03`). After the user reconnected the mouse with Synapse's window
+  closed, [status still returned driver mode](captures/V3-20261006-135244-status-reconnected.txt)
+  and Razer AppEngine background processes were still running. With the user's
+  explicit approval, AppEngine was stopped and the existing OpenRazer-derived
+  [`set-mode hardware` command](captures/V3-20261006-135244-mode-set-hardware.txt)
+  selected hardware mode with matching read-back. The
+  [final listener](captures/V3-20261006-135244-listener-hardware.txt) recorded
+  three presses each of `XBUTTON1`, `XBUTTON2`, and `MIDDLE`, 506 mouse packets
+  including movement, and no keyboard events. A
+  [status check](captures/V3-20261006-135244-status-hardware.txt) confirmed
+  hardware mode (`0x00`) during and after this test. Default inputs are therefore
+  verified in hardware mode; this does not prove persistence of nondefault binds.
+  A before-session listener output was not collected for this session.
+- **Open questions:** nondefault-bind persistence after a power cycle; what the read
+  request's `[10] = 01` pass selects (a HyperShift layer would fit); why read replies
+  carry `[10] = 01` for left, right and the wheel but `00` for the others; category
+  `06`; fixed and reserved bytes; additional modifiers; multi-profile selection; and a second
+  capture, including the Elite, before any write path ships. Synapse resent the
+  disabled back mapping while saving forward changes in steps 07 and 08, so
+  those windows contain two writes each.
+
+Add one block per session:
 
 ```markdown
 ### <Mouse> (`1532:____`), Synapse <version>, <n> on-board profile(s)
