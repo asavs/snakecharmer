@@ -291,6 +291,18 @@ itself is still never opened or written to.
 </details>
 
 <details>
+<summary><b>…I uninstalled Synapse, but a button still types a key?</b></summary>
+
+That bind lives in the mouse's on-board memory, not on the PC. Synapse can save remaps to
+the mouse itself, which then sends them with no software running, so uninstalling Synapse
+leaves them in place. Snakecharmer can't read or reset on-board binds yet; until it can,
+**reset the buttons to default in Synapse before uninstalling it**.
+[`reference/button_listener.ps1`](reference/button_listener.ps1) shows what each button
+really sends, and [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md) is the work on
+decoding it.
+</details>
+
+<details>
 <summary><b>…I configure a thumb-button remap? (the one global setting)</b></summary>
 
 The thumb remap uses a system-wide `WH_MOUSE_LL` hook, so a configured Back/Forward

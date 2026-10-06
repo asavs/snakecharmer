@@ -39,6 +39,9 @@ keystrokes you configure (default: Ctrl+C / Ctrl+V).
 | `dpi_button_daemon.py` | The listener/injector: enables driver mode, logs every vendor code it sees, and injects the mapped keystrokes. **Edit `ACTIONS` at the top** (`"copy"`, `"paste"`, `"key:9"`, `"key:f13"`, …). A good template for a self-logging listener on any device. |
 | `set_device_mode.py` | Manual mode switch: `python set_device_mode.py driver\|hardware` (no arg = read current, safe). |
 | `set_dpi.py` | Set sensitivity directly: `python set_dpi.py 1600`. |
+| `button_listener.ps1` | Logs what every mouse button and wheel notch sends, tagged with the USB device and interface. Finds binds left in on-board memory. Read-only. |
+| `capture_session.ps1` | Guided USBPcap capture of Synapse writing button binds, one change per step. See [`../docs/ONBOARD-KEYMAP.md`](../docs/ONBOARD-KEYMAP.md). |
+| `keymap_diff.py` | Pulls Razer reports out of those captures and diffs them step by step. Standard library only; `--self-test` checks it. |
 
 ## Running it (to experiment / crack a device)
 
