@@ -76,6 +76,18 @@ body:
         your mouse has no buttons behind the wheel.
       render: text
 
+  - type: textarea
+    id: onboard
+    attributes:
+      label: "Optional: on-board memory"
+      description: >
+        Does Synapse offer on-board profiles for this mouse, and how many? Then, with
+        Synapse quit, run `reference/button_listener.ps1`, press each thumb button and
+        the wheel, and paste what it prints. It only listens. A button that prints a
+        `KEY` line is a bind Synapse left in the mouse's memory; see
+        [`docs/ONBOARD-KEYMAP.md`](../blob/master/docs/ONBOARD-KEYMAP.md).
+      render: text
+
   - type: checkboxes
     id: ack
     attributes:

@@ -208,6 +208,12 @@ def analyze(session_dir, show_all=False):
     background = {command_key(ev["report"]) for sid in idle_ids for ev in by_step[sid]}
 
     lines = [f"# Keymap capture: {markers.get('mouse', '?')}", ""]
+    lines.append(f"Synapse {markers.get('synapse') or '(version not given)'}, "
+                 f"{markers.get('onboard_profiles', '?')} on-board profile(s), "
+                 f"started {markers.get('started', '?')}")
+    notes = [f"{s['id']}: {s['note']}" for s in steps if s.get("note")]
+    if notes:
+        lines.append("Notes: " + "; ".join(notes))
     lines.append(f"{len(events)} Razer reports across {len(captures)} capture file(s); "
                  f"{len(background)} distinct commands seen while idle are hidden"
                  + (" (shown: --all)" if show_all else "") + ".")

@@ -25,6 +25,7 @@ fact below came from — ideally the OpenRazer source, otherwise a USB capture.
 - [ ] Found the device in OpenRazer (`driver/razermouse_driver.c` / `razermouse_driver.h`), **or** captured its traffic with Wireshark + USBPcap and documented the reports.
 - **transaction_id:** `0x__`  <!-- 0x3F on the Elite, 0x1F on the V3 — grep the DEATHADDER_* cases -->
 - **Notes / quirks:** <!-- anything that isn't just "same as an existing device" -->
+- **On-board memory:** <!-- how many on-board profiles Synapse offers (1 if no picker, "none" if no on-board memory). Snakecharmer can't write on-board binds yet; recording this now means the device is ready when it can. See docs/ONBOARD-KEYMAP.md -->
 
 ## `DeviceSpec` fields
 

@@ -72,6 +72,14 @@ shared layer, and that is a different change.
    round-trip, including a value near the device's maximum. Do not mark a device verified
    on hardware because the tests passed; that column means a person plugged it in.
 
+## On-board memory
+
+Snakecharmer can't write on-board button binds yet; the format is being decoded from a
+USB capture of Synapse, in [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md). For a
+device port, just record the mouse's on-board profile count in the PR. Never send a
+keymap command to a mouse: until that doc records a confirmed format, keymap bytes are
+reference data, not commands.
+
 ## Acceptance
 
 ```
