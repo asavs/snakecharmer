@@ -74,11 +74,16 @@ shared layer, and that is a different change.
 
 ## On-board memory
 
-Snakecharmer can't write on-board button binds yet; the format is being decoded from a
-USB capture of Synapse, in [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md). For a
-device port, just record the mouse's on-board profile count in the PR. Never send a
-keymap command to a mouse: until that doc records a confirmed format, keymap bytes are
-reference data, not commands.
+Snakecharmer can't write on-board button binds yet; the format is being decoded from
+USB captures of Synapse, in [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md). For a
+device port, just record the mouse's on-board profile count in the PR.
+
+- **Reads are allowed** where that doc records them, sent exactly as Synapse sent them:
+  the same command, the same argument pattern, and only the button ids observed. Never
+  sweep ids or arguments to see what answers; that's fuzzing, and rule 1 forbids it.
+- **Writes are not**, until the doc records a confirmed format for that mouse and the
+  maintainer has approved a write path. Until then, keymap write bytes are reference
+  data, not commands.
 
 ## Acceptance
 

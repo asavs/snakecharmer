@@ -208,9 +208,10 @@ What an agent can do:
 
 What an agent must not do, on top of the rules in [`AGENTS.md`](../AGENTS.md):
 
-- **Send any keymap command to a mouse.** Not to test a hypothesis, not as a "read". Until
-  this page records a decoded, confirmed format and the maintainer has approved a write
-  path, keymap bytes are reference data, not commands.
+- **Send a keymap write to a mouse.** Not to test a hypothesis. Until this page records a
+  confirmed format for that mouse and the maintainer has approved a write path, write
+  bytes are reference data, not commands. A read recorded under [Findings](#findings) is
+  fine, sent exactly as Synapse sent it; never sweep button ids or arguments.
 - Ask for, upload, or commit the raw `.pcap` files. They contain the person's keyboard
   input. `report.md` is the shareable artifact.
 - Present a guess as a finding. If two hypotheses fit the diffs, record both and say which
