@@ -10,6 +10,8 @@ from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_dri
 |---|---|---|---|---|---|---|---|
 | DeathAdder Elite | `1532:005C` | `0x3F` | scroll wheel, logo | yes (`0x20`/`0x21`) | 100–16000 | 125/500/1000 | ✅ |
 | DeathAdder V3 (wired) | `1532:00B2` | `0x1F` | — | — | 100–30000 | 125/500/1000/2000/4000/8000 | ✅ |
+| DeathAdder V4 Pro (wired) | `1532:00BE` | `0x1F` | — | — | 100–45000 | 125/500/1000/2000/4000/8000 | — |
+| DeathAdder V4 Pro (wireless) | `1532:00BF` | `0x1F` | — | — | 100–45000 | 125/500/1000/2000/4000/8000 | — |
 
 **Column notes**
 

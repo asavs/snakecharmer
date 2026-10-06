@@ -28,7 +28,9 @@
 pub mod devices;
 pub mod diagram;
 
-pub use devices::{DEATHADDER_ELITE, DEATHADDER_V3, SUPPORTED};
+pub use devices::{
+    DEATHADDER_ELITE, DEATHADDER_V3, DEATHADDER_V4_PRO_WIRED, DEATHADDER_V4_PRO_WIRELESS, SUPPORTED,
+};
 use diagram::Diagram;
 
 /// USB vendor id for Razer.
@@ -630,6 +632,26 @@ mod tests {
         );
         assert!(!v.has_rgb(), "V3 has no lighting hardware");
         assert!(v.dpi_buttons.is_none(), "V3 has no wheel DPI buttons");
+    }
+
+    /// DeathAdder V4 Pro: shares the V3's transaction id and polling family,
+    /// with a 45000 ceiling. The dongle PID must differ only in id and name.
+    #[test]
+    fn deathadder_v4_pro_spec() {
+        let w = DEATHADDER_V4_PRO_WIRED;
+        let r = set_dpi_report(w.transaction_id, w.dpi_min, w.dpi_max, 1600, 1600).unwrap();
+        assert_eq!(r[1], 0x1F, "V4 Pro transaction id");
+        assert!(set_dpi_report(w.transaction_id, w.dpi_min, w.dpi_max, 45000, 45000).is_ok());
+        assert_eq!(
+            set_dpi_report(w.transaction_id, w.dpi_min, w.dpi_max, 45001, 45001),
+            Err(ProtoError::DpiOutOfRange(45001))
+        );
+        assert_eq!(w.polling, DEATHADDER_V3.polling, "same rate2 cases as the V3");
+        assert!(!w.has_rgb() && w.dpi_buttons.is_none());
+
+        let wl = DEATHADDER_V4_PRO_WIRELESS;
+        assert_eq!((w.product_id, wl.product_id), (0x00BE, 0x00BF));
+        assert_eq!(DeviceSpec { product_id: w.product_id, name: w.name, ..wl }, w);
     }
 
     #[test]
