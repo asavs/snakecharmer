@@ -241,6 +241,14 @@ impl Mouse {
         Ok(read)
     }
 
+    /// Read one button's bind from on-board memory ([`proto::keymap`]). A read
+    /// only: it changes nothing. Send it only for the button ids in the mouse's
+    /// [`proto::keymap::KeymapSpec`].
+    pub fn get_button_binding(&self, button: u8) -> Result<proto::keymap::Binding> {
+        let resp = self.send_command(&proto::keymap::read_binding_report(self.spec.transaction_id, button))?;
+        Ok(proto::keymap::parse_binding(&resp, button)?)
+    }
+
     // --- Chroma / RGB lighting ---------------------------------------------
     //
     // Each effect is applied to every zone in the spec's `rgb_zones`, in order.

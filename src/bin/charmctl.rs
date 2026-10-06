@@ -5,6 +5,7 @@
 //! Usage:
 //!   charmctl devices                        list the Razer mice plugged in, supported or not
 //!   charmctl status                         device mode + DPI + polling rate (read-only)
+//!   charmctl keymap                         button binds stored on the mouse (read-only)
 //!   charmctl set-dpi X [Y]                  set DPI
 //!   charmctl set-poll <hz>                  set polling rate (Hz)
 //!   charmctl set-mode driver|hardware       set device mode
@@ -26,6 +27,10 @@ use razer_proto::{DeviceMode, Rgb};
 const WISHLIST_URL: &str =
     "https://github.com/asavs/snakecharmer/blob/master/docs/DEVICE-WISHLIST.md";
 
+/// The on-board keymap research: what's decoded, for which mice.
+const KEYMAP_DOC_URL: &str =
+    "https://github.com/asavs/snakecharmer/blob/master/docs/ONBOARD-KEYMAP.md";
+
 fn mode_name(b: u8) -> String {
     match DeviceMode::from_byte(b) {
         Some(DeviceMode::Hardware) => "hardware (0x00)".into(),
@@ -42,6 +47,7 @@ fn main() {
     let result: Result<(), Box<dyn std::error::Error>> = match cmd {
         "devices" => devices(),
         "status" => status(),
+        "keymap" => keymap(),
         "set-dpi" => set_dpi(rest),
         "set-poll" => set_poll(rest),
         "set-mode" => set_mode(rest),
@@ -72,6 +78,7 @@ fn print_help() {
          USAGE:\n\
          \x20 charmctl devices                         list Razer mice plugged in, supported or not\n\
          \x20 charmctl status                          device mode + DPI + polling rate (read-only)\n\
+         \x20 charmctl keymap                          button binds stored on the mouse (read-only)\n\
          \x20 charmctl set-dpi X [Y]                   set DPI\n\
          \x20 charmctl set-poll <hz>                   set polling rate (Hz)\n\
          \x20 charmctl set-mode driver|hardware        set device mode\n\
@@ -128,6 +135,42 @@ fn status() -> Result<(), Box<dyn std::error::Error>> {
         spec.product_id,
         mode_name(mode)
     );
+    Ok(())
+}
+
+/// Print the binds stored in the mouse's on-board memory. Those apply with no
+/// software running, so a non-default one is usually a leftover from Synapse.
+fn keymap() -> Result<(), Box<dyn std::error::Error>> {
+    use razer_proto::keymap::{self, Binding};
+    let mouse = Mouse::open()?;
+    let spec = mouse.spec();
+    let Some(km) = keymap::spec_for(spec.product_id) else {
+        println!(
+            "Reading on-board binds isn't supported on the {} yet. See {KEYMAP_DOC_URL}",
+            spec.name
+        );
+        return Ok(());
+    };
+    println!("On-board binds on the {} (read-only):", spec.name);
+    let mut leftovers = 0;
+    for &(button, name) in km.buttons {
+        let bind = mouse.get_button_binding(button)?;
+        let tag = match Binding::default_for(button) {
+            Some(d) if d == bind => "  (default)",
+            Some(_) => {
+                leftovers += 1;
+                "  <- not default"
+            }
+            None => "",
+        };
+        println!("  {name:<12} {bind}{tag}");
+    }
+    if leftovers > 0 {
+        println!(
+            "
+{leftovers} button(s) carry a non-default bind stored on the mouse. It applies with no              software running, and Snakecharmer can't change it yet; reset it in Synapse.              See {KEYMAP_DOC_URL}"
+        );
+    }
     Ok(())
 }
 

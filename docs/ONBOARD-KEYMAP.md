@@ -52,9 +52,9 @@ same rule. The capture session collects profile data whenever the mouse has more
 
 1. **Capture and decode** (this page). Record Synapse making one change at a time, then
    diff the reports until every byte Snakecharmer needs is pinned down.
-2. **Read.** If Synapse reads the keymap back during a session, Snakecharmer can do the
-   same read: show the stored binds in its settings and warn about leftovers, writing
-   nothing.
+2. **Read.** Done for the DeathAdder V3: `charmctl keymap` sends the read Synapse sends
+   and prints each button's stored bind, flagging any that isn't the default. Showing it
+   in the settings window comes later.
 3. **Reset to defaults** by replaying exactly the bytes Synapse sent for each default.
 4. **Write binds from the config**, as an option alongside the hook-based thumb remap, and
    on-board profiles for mice that have them.

@@ -27,6 +27,7 @@
 
 pub mod devices;
 pub mod diagram;
+pub mod keymap;
 
 pub use devices::{DEATHADDER_ELITE, DEATHADDER_V3, SUPPORTED};
 use diagram::Diagram;
@@ -181,6 +182,8 @@ pub enum ProtoError {
     CommandEchoMismatch { sent: (u8, u8), got: (u8, u8) },
     /// A color string was not `#RRGGBB` / `RRGGBB`.
     BadColor(String),
+    /// A keymap read reply described a different button than the one asked for.
+    KeymapButtonMismatch { sent: u8, got: u8 },
 }
 
 impl core::fmt::Display for ProtoError {
@@ -201,6 +204,9 @@ impl core::fmt::Display for ProtoError {
                 sent.0, sent.1, got.0, got.1
             ),
             ProtoError::BadColor(s) => write!(f, "bad color {s:?} (want #RRGGBB)"),
+            ProtoError::KeymapButtonMismatch { sent, got } => {
+                write!(f, "keymap reply for button 0x{got:02x}, asked for 0x{sent:02x}")
+            }
         }
     }
 }

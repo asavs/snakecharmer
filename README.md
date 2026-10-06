@@ -191,6 +191,7 @@ producer memory.
 ```
 charmctl devices                         list Razer mice plugged in, supported or not
 charmctl status                          device mode + DPI + polling rate (read-only)
+charmctl keymap                          button binds stored on the mouse (read-only)
 charmctl set-dpi X [Y]                    set DPI
 charmctl set-poll <hz>                    set polling rate (Hz)
 charmctl set-mode driver|hardware         set device mode
@@ -295,11 +296,12 @@ itself is still never opened or written to.
 
 That bind lives in the mouse's on-board memory, not on the PC. Synapse can save remaps to
 the mouse itself, which then sends them with no software running, so uninstalling Synapse
-leaves them in place. Snakecharmer can't read or reset on-board binds yet; until it can,
-**reset the buttons to default in Synapse before uninstalling it**.
-[`reference/button_listener.ps1`](reference/button_listener.ps1) shows what each button
-really sends, and [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md) is the work on
-decoding it.
+leaves them in place. On the DeathAdder V3, `charmctl keymap` reads what's stored on each
+button and flags anything that isn't the default. Snakecharmer can't reset on-board binds
+yet; until it can, **reset the buttons to default in Synapse before uninstalling it**.
+For other mice, [`reference/button_listener.ps1`](reference/button_listener.ps1) shows
+what each button really sends, and [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md) is
+the work on decoding it.
 </details>
 
 <details>
