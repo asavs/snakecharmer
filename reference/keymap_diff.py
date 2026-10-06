@@ -175,8 +175,15 @@ def command_key(r):
     return (r[6], r[7], r[5], bytes(r[8:8 + r[5]]))
 
 
+# Replies that identify the physical unit. report.md is meant to be shared, so
+# their arguments are never printed: class 0x00 id 0x82 returns the serial number.
+REDACTED = {(0x00, 0x82): "serial number, redacted"}
+
+
 def fmt_cmd(r):
     args = r[8:8 + r[5]].hex(" ")
+    if (r[6], r[7]) in REDACTED and r[0] != 0x00:  # a reply, not the zeroed request
+        args = f"({REDACTED[(r[6], r[7])]})"
     return f"class 0x{r[6]:02X} id 0x{r[7]:02X} size {r[5]:2d} txn 0x{r[1]:02X} | {args}"
 
 
@@ -252,6 +259,8 @@ def analyze(session_dir, show_all=False):
             for (cls, cid, _, _), (r, _) in sets.items():
                 olds = [pr for (pc, pi, _, _), (pr, _) in prev.items() if (pc, pi) == (cls, cid)]
                 for old in olds:
+                    if (cls, cid) in REDACTED:
+                        continue
                     diffs = [i for i in range(8, 88) if old[i] != r[i]]
                     if diffs:
                         cells = ", ".join(f"[{i}] {old[i]:02X}->{r[i]:02X}" for i in diffs)
@@ -295,6 +304,7 @@ def self_test():
     key1 = _report(0x1F, 0x77, 0x0C, b"\x01\x04\x02\x1E\x00")
     key2 = _report(0x1F, 0x77, 0x0C, b"\x01\x04\x02\x1F\x00")
     resp = _report(0x1F, 0x00, 0x84, b"\x00\x00", status=0x02)
+    serial = _report(0x1F, 0x00, 0x82, b"PM0000TEST000000" + bytes(6), status=0x02)
     keyboard_noise = b"\x00" * 8
 
     t0 = 1_800_000_000.0
@@ -306,6 +316,8 @@ def self_test():
         (t0 + 11.01, _usbpcap(3, 1, 2, b"")),
         (t0 + 11.5, _usbpcap(4, 0, 0, _setup(SET_REPORT, 90) + idle)),
         (t0 + 12, struct.pack("<HQIHBHHBBI", 27, 5, 0, 9, 1, 1, 4, 0x81, 1, 8) + keyboard_noise),
+        (t0 + 12.5, _usbpcap(7, 0, 0, _setup(GET_REPORT, 90))),
+        (t0 + 12.51, _usbpcap(7, 1, 3, serial)),
         (t0 + 21, _usbpcap(6, 0, 0, _setup(SET_REPORT, 90))),
         (t0 + 21.001, _usbpcap(6, 0, 1, key2)),  # OUT data as a separate DATA record
     ]
@@ -337,11 +349,13 @@ def self_test():
         out = analyze(d)
 
     checks = [
-        ("finds 5 reports in both formats", "5 Razer reports across 2 capture file(s)" in out),
+        ("finds 6 reports in both formats", "6 Razer reports across 2 capture file(s)" in out),
         ("hides idle chatter", out.count("class 0x00 id 0x84") == 0),
         ("step 01 shows the new SET", "SET x1   class 0x77 id 0x0C size  5 txn 0x1F | 01 04 02 1e 00" in out),
         ("SET with separate DATA record", "| 01 04 02 1f 00" in out),
         ("diff isolates the changed byte", "01 -> 02  class 0x77 id 0x0C: [11] 1E->1F" in out),
+        ("redacts the serial number", "PM0000" not in out and "50 4d 30" not in out
+         and "(serial number, redacted)" in out),
         ("ignores non-Razer traffic", "4" not in out.split("(bus, address): ")[1].split("\n")[0]),
     ]
     for name, ok in checks:

@@ -102,7 +102,7 @@ PowerShell. About 20 minutes per mouse.
 
 **Privacy:** the raw `.pcap` files record all USB traffic during the session, including
 your keyboard. Keep them local. The session writes a `report.md` containing only the
-Razer control reports, which is the file to share.
+Razer control reports, with the mouse's serial number masked, which is the file to share.
 
 ### 1. Install
 
@@ -214,6 +214,11 @@ What an agent must not do, on top of the rules in [`AGENTS.md`](../AGENTS.md):
   input. `report.md` is the shareable artifact.
 - Present a guess as a finding. If two hypotheses fit the diffs, record both and say which
   extra step would tell them apart.
+
+What is **not** a reason to stop: a status other than `0x02` in Synapse's own traffic.
+`AGENTS.md` rule 3 governs commands *you* send. In a capture, a `0x05` (not supported)
+reply is Synapse probing for a feature the mouse lacks, which is ordinary, and the
+recording is passive either way. Note it as data and carry on.
 
 ## Findings
 
