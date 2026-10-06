@@ -192,7 +192,7 @@ def assign_steps(events, steps):
 
 def analyze(session_dir, show_all=False):
     session_dir = Path(session_dir)
-    markers = json.loads((session_dir / "markers.json").read_text(encoding="utf-8"))
+    markers = json.loads((session_dir / "markers.json").read_text(encoding="utf-8-sig"))  # PowerShell 5.1 writes a BOM
     steps = markers["steps"]
     captures = sorted(p for p in session_dir.iterdir() if p.suffix in (".pcap", ".pcapng"))
     if not captures:
