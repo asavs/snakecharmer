@@ -4,10 +4,12 @@
 button bind, so Snakecharmer can write them itself and users can configure on-board binds
 without Synapse.
 
-**Status: V3 decoded, Elite pending.** The DeathAdder V3's write (`0x02/0x0C`) and read
-(`0x02/0x8C`) are recorded under [Findings](#findings). The Elite capture, which tests
-whether the older generation shares the format, comes next. Nothing here ships in the
-daemon yet, and none of the tools on this page write to a mouse.
+**Status: V3 decoded; Elite tested with Synapse 4.** The DeathAdder V3's write
+(`0x02/0x0C`) and read (`0x02/0x8C`) are recorded under [Findings](#findings).
+The Elite session recorded only streamed lighting while button assignments were
+saved, supporting software remapping with this version. A Synapse 3 comparison
+is still pending. No keymap write path ships in the daemon; `charmctl keymap`
+reads only the recorded V3 entries.
 
 ## The problem
 
@@ -222,6 +224,10 @@ What is **not** a reason to stop: a status other than `0x02` in Synapse's own tr
 reply is Synapse probing for a feature the mouse lacks, which is ordinary, and the
 recording is passive either way. Note it as data and carry on.
 
+When saving evidence to `docs/captures/`, write UTF-8. Windows PowerShell's `>` writes
+UTF-16, which GitHub shows as unreadable text; pipe through `Out-File -Encoding utf8`
+instead.
+
 ## Findings
 
 ### DeathAdder V3 (`1532:00B2`), Synapse 4, 1 on-board profile
@@ -329,8 +335,68 @@ keymap write was sent.
    [remained stopped](captures/V3-20261007-persistence/appengine-final.txt).
 
 The underside entry stayed `undecoded (category 0x06: 06)` throughout. This
-test adds persistence evidence for the V3; the Elite capture and explicit
+test adds persistence evidence for the V3; the Elite comparison with Synapse 3 and explicit
 approval of a keymap write path are still required before writes ship.
+
+### DeathAdder Elite (`1532:005C`), Synapse 4.0.827, profile count unconfirmed
+
+Captured on 2026-10-07 using Synapse's UI. Version `4.0.827` was supplied by the
+user. The script's profile count was set to `1` as its fallback: Customize
+showed a software profile selector, but no on-board memory control or on-board
+profile picker. This is not evidence of one on-board profile.
+
+- **Observed USB traffic:** the [compact session report](captures/Elite-20261007-154904/report.md)
+  covers all 10,991 control submissions to the Elite on bus 1, address 4, USB
+  interface 0. Every submission was a 90-byte SET_REPORT (`0x21/0x09`, value
+  `0x0300`) carrying class `0x0F`, id `0x03`, streamed lighting. All 10,991
+  reports passed the Razer length/checksum filter. There were no class `0x02`
+  reports, GET replies, or other control setup requests in this recording,
+  including outside the marked windows.
+- **Saved changes:** back to `1`, `2`, `A`, Ctrl+C, middle click, and Disabled;
+  forward to `1`, then default; and back to default. Each of these nine Saves
+  was followed by a visible assignment check. Wheel click was already default
+  in step 09 and Save was disabled, so that step made no change.
+- **UI evidence:** Keyboard Function, Mouse Function, and Disable each showed
+  **Requires Razer Synapse**. The observations are recorded in the step notes.
+- **Write/read commands and argument layout:** no binding command was observed,
+  so no Elite keymap command or layout is confirmed. No V3 keymap request was
+  sent to the Elite.
+- **Post-session verification:** AppEngine was stopped using the user's existing
+  approval. [Status](captures/Elite-20261007-154904/status-before-hardware.txt)
+  still showed driver mode (`0x03`). The existing documented
+  [`set-mode hardware`](captures/Elite-20261007-154904/mode-hardware.txt) command
+  returned matching read-back. The [physical listener](captures/Elite-20261007-154904/listener-hardware.txt)
+  recorded four presses each of `XBUTTON1` and `XBUTTON2`, five `MIDDLE` presses,
+  scrolling, 1,513 raw mouse packets, and no keyboard events. The listener counts
+  every mouse packet; it does not record motion deltas or the cursor position,
+  so that count does not verify cursor movement.
+  [Final status](captures/Elite-20261007-154904/status-hardware.txt) confirmed
+  hardware mode (`0x00`), DPI 1800 x 1800, and polling 500 Hz; AppEngine
+  [remained stopped](captures/Elite-20261007-154904/appengine-stopped.txt).
+- **Interpretation:** the USB traffic and UI labels support software remapping
+  for this Elite with Synapse 4. They do not establish that the Elite has no
+  storage capability, or that other older Razer mice cannot carry stored binds.
+- **Open questions:** behavior with Synapse 3; whether a nondefault bind changes
+  physical input while Synapse runs and disappears after it exits or the mouse
+  is power-cycled. This session restored defaults before quitting Synapse, so
+  it did not perform that persistence test. No before-session physical listener
+  output was collected.
+- **Reported movement issue:** the user confirmed that moving the mouse did not
+  move the cursor during the beep-to-beep listener check only. No pointer
+  automation ran during that check. The user subsequently confirmed that the
+  cursor moves normally after the listener finished. The listener uses
+  `RIDEV_INPUTSINK`, calls the base window
+  procedure, and has no input-blocking or pointer-positioning code; the cause
+  remains unknown. Button/scroll events are established by the listener, but
+  cursor movement during the check is not. Device commands were stopped and the
+  issue reported under `AGENTS.md` rule 3; no further device commands were sent
+  during this investigation.
+- **Decoder limitation (since fixed):** the changing lighting payloads survived the
+  idle filter, and pairwise byte diffs of them produced a 90 MB report. The linked
+  compact report counts every command by step instead. `keymap_diff.py` now
+  summarizes any command with more than 8 distinct payloads in a step as a stream;
+  re-run on this session it gives a 3 KB report with one lighting line per step and
+  no class `0x02` anywhere, agreeing with the compact report.
 
 Add one block per session:
 

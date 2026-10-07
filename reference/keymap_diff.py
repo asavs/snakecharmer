@@ -187,6 +187,22 @@ def fmt_cmd(r):
     return f"class 0x{r[6]:02X} id 0x{r[7]:02X} size {r[5]:2d} txn 0x{r[1]:02X} | {args}"
 
 
+# More distinct payloads than this for one command within one step is a stream
+# (Synapse sends Chroma frames, class 0x0F id 0x03, thousands of times). Listing
+# and pairwise-diffing those buries the few writes a step is about.
+STREAM_LIMIT = 8
+
+
+def split_streams(table):
+    """Separate streamed commands from a step's table: (kept, {(class, id): (variants, count)})."""
+    groups = {}
+    for (cls, cid, _, _), (_, n) in table.items():
+        groups.setdefault((cls, cid), []).append(n)
+    streams = {g: (len(ns), sum(ns)) for g, ns in groups.items() if len(ns) > STREAM_LIMIT}
+    kept = OrderedDict((k, v) for k, v in table.items() if (k[0], k[1]) not in streams)
+    return kept, streams
+
+
 def assign_steps(events, steps):
     by_step = OrderedDict((s["id"], []) for s in steps)
     for ev in events:
@@ -239,16 +255,22 @@ def analyze(session_dir, show_all=False):
                 continue
             table = sets if ev["kind"] == "SET" else gets
             table.setdefault(k, [ev["report"], 0])[1] += 1
+        sets, set_streams = split_streams(sets)
+        gets, get_streams = split_streams(gets)
         step_cmds[s["id"]] = sets
         lines.append(f"## {s['id']}  {s['label']}")
         if s.get("note"):
             lines.append(f"note: {s['note']}")
-        if not sets and not gets:
+        if not (sets or gets or set_streams or get_streams):
             lines.append("  (nothing new)" if not s.get("idle") else "  (idle baseline)")
         for r, n in sets.values():
             lines.append(f"  SET x{n:<3} {fmt_cmd(r)}")
         for r, n in gets.values():
             lines.append(f"  GET x{n:<3} {fmt_cmd(r)}   <- response, status 0x{r[0]:02X}")
+        for kind, streams in (("SET", set_streams), ("GET", get_streams)):
+            for (cls, cid), (variants, total) in streams.items():
+                lines.append(f"  {kind} x{total:<3} class 0x{cls:02X} id 0x{cid:02X}: {variants} distinct "
+                             f"payloads, a stream such as lighting frames; not listed or diffed")
         lines.append("")
 
     lines.append("# Byte changes between consecutive steps (same class/id)")
@@ -316,6 +338,9 @@ def self_test():
         (t0 + 11.01, _usbpcap(3, 1, 2, b"")),
         (t0 + 11.5, _usbpcap(4, 0, 0, _setup(SET_REPORT, 90) + idle)),
         (t0 + 12, struct.pack("<HQIHBHHBBI", 27, 5, 0, 9, 1, 1, 4, 0x81, 1, 8) + keyboard_noise),
+        *[(t0 + 13 + i / 10, _usbpcap(100 + i, 0, 0, _setup(SET_REPORT, 90)
+                                      + _report(0x1F, 0x0F, 0x03, bytes([0, 0, i, 0xFF, i, 0]))))
+          for i in range(12)],  # a Chroma-style stream: 12 distinct frames
         (t0 + 12.5, _usbpcap(7, 0, 0, _setup(GET_REPORT, 90))),
         (t0 + 12.51, _usbpcap(7, 1, 3, serial)),
         (t0 + 21, _usbpcap(6, 0, 0, _setup(SET_REPORT, 90))),
@@ -349,13 +374,16 @@ def self_test():
         out = analyze(d)
 
     checks = [
-        ("finds 6 reports in both formats", "6 Razer reports across 2 capture file(s)" in out),
+        ("finds 18 reports in both formats", "18 Razer reports across 2 capture file(s)" in out),
         ("hides idle chatter", out.count("class 0x00 id 0x84") == 0),
         ("step 01 shows the new SET", "SET x1   class 0x77 id 0x0C size  5 txn 0x1F | 01 04 02 1e 00" in out),
         ("SET with separate DATA record", "| 01 04 02 1f 00" in out),
         ("diff isolates the changed byte", "01 -> 02  class 0x77 id 0x0C: [11] 1E->1F" in out),
         ("redacts the serial number", "PM0000" not in out and "50 4d 30" not in out
          and "(serial number, redacted)" in out),
+        ("summarizes a stream", "class 0x0F id 0x03: 12 distinct payloads" in out
+         and "| 00 00 05 ff 05 00" not in out),
+        ("never diffs a stream", "id 0x03:" not in out.split("# Byte changes")[1]),
         ("ignores non-Razer traffic", "4" not in out.split("(bus, address): ")[1].split("\n")[0]),
     ]
     for name, ok in checks:

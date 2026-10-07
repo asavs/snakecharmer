@@ -1,0 +1,1 @@
+mode = hardware (0x00)

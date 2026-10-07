@@ -1,0 +1,41 @@
+  7.66s  1532:005C IF00   mouse  XBUTTON2 (forward) down
+  8.97s  1532:005C IF00   mouse  XBUTTON1 (back) down
+ 10.16s  1532:005C IF00   mouse  XBUTTON2 (forward) down
+ 11.26s  1532:005C IF00   mouse  XBUTTON1 (back) down
+ 16.31s  1532:005C IF00   mouse  MIDDLE (wheel click) down
+ 17.31s  1532:005C IF00   mouse  MIDDLE (wheel click) down
+ 23.10s  1532:005C IF00   mouse  XBUTTON2 (forward) down
+ 23.39s  1532:005C IF00   mouse  XBUTTON1 (back) down
+ 23.69s  1532:005C IF00   mouse  XBUTTON2 (forward) down
+ 23.98s  1532:005C IF00   mouse  XBUTTON1 (back) down
+ 25.67s  1532:005C IF00   mouse  MIDDLE (wheel click) down
+ 26.30s  1532:005C IF00   mouse  MIDDLE (wheel click) down
+ 26.56s  1532:005C IF00   mouse  MIDDLE (wheel click) down
+ 27.12s  1532:005C IF00   mouse  wheel up (120)
+ 27.14s  1532:005C IF00   mouse  wheel up (120)
+ 27.16s  1532:005C IF00   mouse  wheel up (120)
+ 27.19s  1532:005C IF00   mouse  wheel up (120)
+ 27.30s  1532:005C IF00   mouse  wheel down (-120)
+ 27.32s  1532:005C IF00   mouse  wheel down (-120)
+ 27.33s  1532:005C IF00   mouse  wheel down (-120)
+ 27.34s  1532:005C IF00   mouse  wheel down (-120)
+ 27.36s  1532:005C IF00   mouse  wheel down (-120)
+ 27.45s  1532:005C IF00   mouse  wheel up (120)
+ 27.47s  1532:005C IF00   mouse  wheel up (120)
+ 27.53s  1532:005C IF00   mouse  wheel up (120)
+ 27.61s  1532:005C IF00   mouse  wheel down (-120)
+ 27.63s  1532:005C IF00   mouse  wheel down (-120)
+ 27.64s  1532:005C IF00   mouse  wheel down (-120)
+ 27.65s  1532:005C IF00   mouse  wheel down (-120)
+ 27.72s  1532:005C IF00   mouse  wheel up (120)
+ 27.74s  1532:005C IF00   mouse  wheel up (120)
+ 27.75s  1532:005C IF00   mouse  wheel up (120)
+ 27.79s  1532:005C IF00   mouse  wheel up (120)
+ 27.85s  1532:005C IF00   mouse  wheel down (-120)
+ 27.86s  1532:005C IF00   mouse  wheel down (-120)
+ 27.87s  1532:005C IF00   mouse  wheel down (-120)
+ 27.88s  1532:005C IF00   mouse  wheel down (-120)
+--- keystrokes from non-Razer devices (counted, not logged):
+  none
+--- raw mouse packets per device (movement included):
+  1532:005C IF00: 1513

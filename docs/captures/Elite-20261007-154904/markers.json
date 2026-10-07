@@ -1,0 +1,86 @@
+﻿{
+    "mouse":  "Elite",
+    "synapse":  "4.0.827 (as provided)",
+    "onboard_profiles":  1,
+    "started":  "2026-10-07T15:49:29.0889773-07:00",
+    "steps":  [
+                  {
+                      "id":  "00",
+                      "label":  "IDLE: Synapse open on the mouse\u0027s button page. Touch nothing.",
+                      "start":  1791413377.457,
+                      "end":  1791413392.577,
+                      "idle":  true
+                  },
+                  {
+                      "id":  "01",
+                      "label":  "Set the BACK thumb button to the keyboard key 1",
+                      "start":  1791413392.632,
+                      "end":  1791413467.212,
+                      "note":  "No on-board memory control or on-board profile picker visible on Customize; 1 is the script fallback, not a verified profile count. Keyboard Function explicitly says Requires Razer Synapse. Saved back to 1 and verified label."
+                  },
+                  {
+                      "id":  "02",
+                      "label":  "Set the BACK thumb button to the keyboard key 2",
+                      "start":  1791413467.217,
+                      "end":  1791413520.934
+                  },
+                  {
+                      "id":  "03",
+                      "label":  "Set the BACK thumb button to the keyboard key A",
+                      "start":  1791413520.937,
+                      "end":  1791413568.872
+                  },
+                  {
+                      "id":  "04",
+                      "label":  "Set the BACK thumb button to Ctrl + C",
+                      "start":  1791413568.875,
+                      "end":  1791413619.851
+                  },
+                  {
+                      "id":  "05",
+                      "label":  "Set the BACK thumb button to middle click (a mouse function, not a key)",
+                      "start":  1791413619.855,
+                      "end":  1791413696.942,
+                      "note":  "Mouse Function also shows Requires Razer Synapse. Saved back to Scroll Click (middle click) and verified label."
+                  },
+                  {
+                      "id":  "06",
+                      "label":  "Set the BACK thumb button to disabled (type a note if Synapse has no such option)",
+                      "start":  1791413696.946,
+                      "end":  1791413772.087,
+                      "note":  "Disable also shows Requires Razer Synapse. Saved and verified Disable label."
+                  },
+                  {
+                      "id":  "07",
+                      "label":  "Set the FORWARD thumb button to the keyboard key 1",
+                      "start":  1791413772.09,
+                      "end":  1791413823.041
+                  },
+                  {
+                      "id":  "08",
+                      "label":  "Set the FORWARD thumb button back to its default",
+                      "start":  1791413823.044,
+                      "end":  1791413867.703
+                  },
+                  {
+                      "id":  "09",
+                      "label":  "Set the WHEEL CLICK back to its default",
+                      "start":  1791413867.706,
+                      "end":  1791413894.582,
+                      "note":  "Wheel click already Default / Scroll Click; Save disabled; cancelled unchanged editor."
+                  },
+                  {
+                      "id":  "10",
+                      "label":  "Set the BACK thumb button back to its default",
+                      "start":  1791413894.584,
+                      "end":  1791413933.849
+                  },
+                  {
+                      "id":  "99",
+                      "label":  "IDLE: touch nothing.",
+                      "start":  1791413933.853,
+                      "end":  1791413941.936,
+                      "idle":  true
+                  }
+              ]
+}

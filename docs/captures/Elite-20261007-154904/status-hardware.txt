@@ -1,0 +1,1 @@
+device = DeathAdder Elite (PID 0x005C), mode = hardware (0x00), dpi = 1800 x 1800, polling = 500 Hz
