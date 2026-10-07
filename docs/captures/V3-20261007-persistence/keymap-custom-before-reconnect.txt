@@ -1,0 +1,11 @@
+On-board binds on the DeathAdder V3 (read-only):
+  left         left click  (default)
+  right        right click  (default)
+  wheel click  middle click  (default)
+  back         1  <- not default
+  forward      forward (mouse button 5)  (default)
+  wheel up     scroll up  (default)
+  wheel down   scroll down  (default)
+  underside    undecoded (category 0x06: 06)
+
+1 button(s) carry a non-default bind stored on the mouse. It applies with no              software running, and Snakecharmer can't change it yet; reset it in Synapse.              See https://github.com/asavs/snakecharmer/blob/master/docs/ONBOARD-KEYMAP.md

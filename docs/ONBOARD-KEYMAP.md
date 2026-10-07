@@ -287,13 +287,50 @@ keymap write path.
   hardware mode (`0x00`) during and after this test. Default inputs are therefore
   verified in hardware mode; this does not prove persistence of nondefault binds.
   A before-session listener output was not collected for this session.
-- **Open questions:** nondefault-bind persistence after a power cycle; what the read
+- **Open questions:** what the read
   request's `[10] = 01` pass selects (a HyperShift layer would fit); why read replies
   carry `[10] = 01` for left, right and the wheel but `00` for the others; category
   `06`; fixed and reserved bytes; additional modifiers; multi-profile selection; and a second
   capture, including the Elite, before any write path ships. Synapse resent the
   disabled back mapping while saving forward changes in steps 07 and 08, so
   those windows contain two writes each.
+
+#### V3 persistence check (2026-10-07)
+
+**Passed for back bound to key `1`.** Tested with `charmctl` from commit
+`abe2548`; all keymap reads used the recorded V3 button ids. No Snakecharmer
+keymap write was sent.
+
+1. The [baseline keymap](captures/V3-20261007-persistence/keymap-before.txt)
+   showed all seven decoded buttons at their defaults, and
+   [status](captures/V3-20261007-persistence/status-before.txt) showed hardware
+   mode, DPI 1600 x 1600, and polling 1000 Hz.
+2. Synapse's UI saved back to key `1`. The
+   [read before reconnecting](captures/V3-20261007-persistence/keymap-custom-before-reconnect.txt)
+   showed `back  1  <- not default`, with the other entries unchanged.
+3. AppEngine was stopped with the user's approval; its absence was checked
+   [before](captures/V3-20261007-persistence/appengine-before-reconnect.txt) and
+   [after](captures/V3-20261007-persistence/appengine-after-reconnect.txt)
+   the user unplugged the V3 for about five seconds and reconnected it, leaving
+   Synapse closed.
+4. Before reopening Synapse, [status after reconnecting](captures/V3-20261007-persistence/status-after-reconnect.txt)
+   showed hardware mode (`0x00`) and unchanged DPI/polling. The
+   [keymap after reconnecting](captures/V3-20261007-persistence/keymap-custom-after-reconnect.txt)
+   still showed back bound to `1`; its output matched the pre-reconnect read.
+   This confirms that this nondefault bind survives a power cycle and is
+   readable in hardware mode without AppEngine running. A physical key-output
+   check was not performed in this test.
+5. Reopening Synapse for cleanup restored the default back bind automatically,
+   confirmed by a [read after reopening](captures/V3-20261007-persistence/keymap-after-synapse-reopen.txt).
+   AppEngine was stopped again and the existing `set-mode hardware` command
+   returned matching read-back. The [final keymap](captures/V3-20261007-persistence/keymap-final.txt)
+   showed all seven decoded buttons at default; [final status](captures/V3-20261007-persistence/status-final.txt)
+   showed hardware mode, DPI 1600 x 1600, and polling 1000 Hz. AppEngine
+   [remained stopped](captures/V3-20261007-persistence/appengine-final.txt).
+
+The underside entry stayed `undecoded (category 0x06: 06)` throughout. This
+test adds persistence evidence for the V3; the Elite capture and explicit
+approval of a keymap write path are still required before writes ship.
 
 Add one block per session:
 

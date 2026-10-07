@@ -167,8 +167,9 @@ fn keymap() -> Result<(), Box<dyn std::error::Error>> {
     }
     if leftovers > 0 {
         println!(
-            "
-{leftovers} button(s) carry a non-default bind stored on the mouse. It applies with no              software running, and Snakecharmer can't change it yet; reset it in Synapse.              See {KEYMAP_DOC_URL}"
+            "\n{leftovers} button(s) carry a non-default bind stored on the mouse. It applies \
+             with no software running, and Snakecharmer can't change it yet; reset it in \
+             Synapse. See {KEYMAP_DOC_URL}"
         );
     }
     Ok(())

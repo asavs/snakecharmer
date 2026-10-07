@@ -1,0 +1,9 @@
+On-board binds on the DeathAdder V3 (read-only):
+  left         left click  (default)
+  right        right click  (default)
+  wheel click  middle click  (default)
+  back         back (mouse button 4)  (default)
+  forward      forward (mouse button 5)  (default)
+  wheel up     scroll up  (default)
+  wheel down   scroll down  (default)
+  underside    undecoded (category 0x06: 06)
