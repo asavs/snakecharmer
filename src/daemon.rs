@@ -835,6 +835,8 @@ fn run_session(
     // devices without lighting hardware — see `apply_startup_lighting`).
     apply_startup_lighting(&ctrl, cfg, log);
 
+    check_onboard_binds(&ctrl, log);
+
     // Driver mode and the DPI-button vendor-code listeners only apply to devices
     // that actually have the wheel DPI buttons. On a device without them there
     // is nothing to switch into driver mode for and nothing to listen for, so we
@@ -958,6 +960,41 @@ fn run_session(
         if let Err(error) = health.refresh_if_due() {
             log.log(&format!("WARN could not refresh PC Vitals capsule: {error}"));
         }
+    }
+}
+
+/// Once per attach: read the on-board button binds (read-only, only the ids in
+/// the mouse's keymap spec) and, if any are non-default, log them and offer the
+/// keymap doc in a notice. A read failure (e.g. Synapse streaming lighting
+/// commands and tripping an echo mismatch) is only logged. The notice runs on a
+/// throwaway thread and is shown once per distinct set of leftovers per run.
+fn check_onboard_binds(ctrl: &Mouse, log: &Logger) {
+    use crate::onboard;
+    let spec = ctrl.spec();
+    let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
+        return;
+    };
+    let binds = match onboard::read_binds(ctrl, km) {
+        Ok(b) => b,
+        Err(e) => {
+            log.log(&format!("WARN could not read on-board binds: {e}"));
+            return;
+        }
+    };
+    let left = onboard::leftovers(&binds);
+    if left.is_empty() {
+        log.log("On-board binds are all default.");
+        return;
+    }
+    let described = onboard::describe(&left);
+    log.log(&format!("WARN non-default binds stored on the mouse: {described}."));
+    if onboard::first_time(&described) {
+        let text = onboard::notice_text(spec.name, &described);
+        thread::spawn(move || {
+            if platform::alert_yes_no("Snakecharmer", &text) {
+                platform::open_url(onboard::KEYMAP_DOC_URL);
+            }
+        });
     }
 }
 

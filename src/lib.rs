@@ -8,3 +8,4 @@ pub mod daemon;
 pub mod health;
 pub mod lighting;
 pub mod logger;
+pub mod onboard;

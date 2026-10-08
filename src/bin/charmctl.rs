@@ -27,9 +27,7 @@ use razer_proto::{DeviceMode, Rgb};
 const WISHLIST_URL: &str =
     "https://github.com/asavs/snakecharmer/blob/master/docs/DEVICE-WISHLIST.md";
 
-/// The on-board keymap research: what's decoded, for which mice.
-const KEYMAP_DOC_URL: &str =
-    "https://github.com/asavs/snakecharmer/blob/master/docs/ONBOARD-KEYMAP.md";
+use snakecharmer::onboard::KEYMAP_DOC_URL;
 
 fn mode_name(b: u8) -> String {
     match DeviceMode::from_byte(b) {
@@ -141,7 +139,8 @@ fn status() -> Result<(), Box<dyn std::error::Error>> {
 /// Print the binds stored in the mouse's on-board memory. Those apply with no
 /// software running, so a non-default one is usually a leftover from Synapse.
 fn keymap() -> Result<(), Box<dyn std::error::Error>> {
-    use razer_proto::keymap::{self, Binding};
+    use razer_proto::keymap;
+    use snakecharmer::onboard;
     let mouse = Mouse::open()?;
     let spec = mouse.spec();
     let Some(km) = keymap::spec_for(spec.product_id) else {
@@ -152,19 +151,16 @@ fn keymap() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     };
     println!("On-board binds on the {} (read-only):", spec.name);
-    let mut leftovers = 0;
-    for &(button, name) in km.buttons {
-        let bind = mouse.get_button_binding(button)?;
-        let tag = match Binding::default_for(button) {
-            Some(d) if d == bind => "  (default)",
-            Some(_) => {
-                leftovers += 1;
-                "  <- not default"
-            }
+    let binds = onboard::read_binds(&mouse, km)?;
+    for b in &binds {
+        let tag = match b.is_default {
+            Some(true) => "  (default)",
+            Some(false) => "  <- not default",
             None => "",
         };
-        println!("  {name:<12} {bind}{tag}");
+        println!("  {:<12} {}{tag}", b.name, b.bind);
     }
+    let leftovers = onboard::leftovers(&binds).len();
     if leftovers > 0 {
         println!(
             "\n{leftovers} button(s) carry a non-default bind stored on the mouse. It applies \
