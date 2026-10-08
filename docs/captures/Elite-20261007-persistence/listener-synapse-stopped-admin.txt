@@ -1,0 +1,4 @@
+﻿--- keystrokes from non-Razer devices (counted, not logged):
+  none
+--- raw mouse packets per device (movement included):
+  none - mouse raw input never arrived

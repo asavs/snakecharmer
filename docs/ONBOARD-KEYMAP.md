@@ -398,6 +398,43 @@ profile picker. This is not evidence of one on-board profile.
   re-run on this session it gives a 3 KB report with one lighting line per step and
   no class `0x02` anywhere, agreeing with the compact report.
 
+#### Elite physical assignment check (2026-10-07)
+
+The [follow-up notes](captures/Elite-20261007-persistence/notes.md) test the
+effect of one saved assignment, rather than infer storage from USB traffic.
+
+1. With only the Elite connected and no Snakecharmer daemon running, Synapse 4
+   saved back to key `1` in ASA-Default. Its UI displayed `1` for that button.
+   The user reported `111` from three physical back-button presses while
+   Synapse ran; the agent did not inject keys into the test editor.
+2. All AppEngine processes were stopped and their absence checked. The saved
+   assignment was left unchanged in Synapse. The user reported no new `1`s and
+   normal cursor movement during a check without computer-use automation.
+3. Automated listener invocations, including an elevated one, captured no input
+   and are inconclusive. The identical listener run by the user from their own
+   PowerShell produced three
+   [`XBUTTON1` events from 1532:005C IF00](captures/Elite-20261007-persistence/listener-synapse-stopped-manual.txt),
+   with no keyboard events. AppEngine's absence was checked again afterward.
+4. The user was asked to unplug the Elite for five seconds, reconnect with
+   Synapse closed, and repeat the listener. The
+   [supplied reconnect log](captures/Elite-20261007-persistence/listener-after-reconnect-manual.txt)
+   again records three `1532:005C IF00 XBUTTON1` presses and no keyboard events.
+   AppEngine's absence was checked after this log was supplied. Unplug/replug
+   was a human-performed step; the listener itself cannot verify a power cycle.
+
+This confirms that this saved assignment depends on Synapse running in the
+tested setup, with default output also recorded in the requested reconnect
+check. Restoration of the saved software profile is pending. It does not
+establish all storage capabilities of the Elite or behavior under Synapse 3.
+
+An additional mode read during Synapse startup failed with an echo mismatch
+(`sent 00/84, got 0f/03`). Direct device commands were stopped; no forced mode
+change or further direct read was used in this follow-up. Mode after AppEngine
+stopped was therefore not measured. The cursor freeze recurred with computer
+use active and recovered after its runtime was reset; the exact cause remains
+unknown. The human-run and automated capture contexts also differ in an
+undiagnosed way.
+
 Add one block per session:
 
 ```markdown

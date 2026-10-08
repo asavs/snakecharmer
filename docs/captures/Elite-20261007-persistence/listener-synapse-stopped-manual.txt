@@ -1,0 +1,10 @@
+Human-run command, output supplied by the user:
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\asas\anti-synapse\reference\button_listener.ps1 -Seconds 30
+
+  1.93s  1532:005C IF00   mouse  XBUTTON1 (back) down
+  3.08s  1532:005C IF00   mouse  XBUTTON1 (back) down
+  4.28s  1532:005C IF00   mouse  XBUTTON1 (back) down
+--- keystrokes from non-Razer devices (counted, not logged):
+  none
+--- raw mouse packets per device (movement included):
+  1532:005C IF00: 1194
