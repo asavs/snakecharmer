@@ -1,34 +1,34 @@
 # Snakecharmer — Design Spec
 
 A native Windows replacement for Razer Synapse, scoped to the **Razer DeathAdder
-Elite** (USB `VID 0x1532 / PID 0x005C`). Everything Synapse did that's actually
-useful — button remapping, DPI, lighting — with none of the five-process, Chromium-
-in-the-background tax, answering only to the user.
+Elite** (USB `VID 0x1532 / PID 0x005C`). It keeps the parts of Synapse that are
+useful (button remapping, DPI, lighting) and drops the five processes and the
+background Chromium instance. It answers only to the user.
 
 > Born from the session where we removed Synapse (its `CefSharp` browser was the
 > single biggest CPU hog on the machine) and then reverse-engineered the mouse's HID
 > protocol to keep the one feature worth keeping. This is the finished version of that.
 
 ## Footprint targets (the whole point)
-Mirrors the [pc-vitals](../../pc-vitals/) ethos — an anti-bloat tool that hogs
-resources refutes itself.
+Same rule as [pc-vitals](../../pc-vitals/): an anti-bloat tool that hogs resources
+defeats its own purpose.
 
 - Static exe **≤ 2 MB** (`crt-static`, no runtime deps)
 - Steady-state RAM **< 10 MB**
-- **Negligible CPU** while idle — blocking HID reads, not poll loops
+- **Negligible CPU** while idle: blocking HID reads, no poll loops
 - Zero background browser, zero telemetry, local-only
 
 ## Capabilities (v1 — all four, per user decision)
-1. **DPI-button remap** — the two buttons behind the wheel emit private Razer vendor
-   codes (`0x20`/`0x21`) invisible to the OS; we catch them at the HID layer and inject
-   keystrokes.
-2. **DPI level** — set/lock sensitivity to any value, applied at login.
-3. **RGB lighting** — static / breathing / spectrum / off, for the mouse's two lit
-   zones (scroll wheel + logo).
-4. **Thumb-button remap** — the two side buttons are *standard* mouse buttons the OS
-   sees as Back/Forward; remapping them to keystrokes needs a low-level input hook
-   (`WH_MOUSE_LL`) that can suppress the original. This is the one genuinely harder
-   subsystem (it's what XMBC does).
+1. **DPI-button remap.** The two buttons behind the wheel emit private Razer vendor
+   codes (`0x20`/`0x21`) that the OS can't see. We catch them at the HID layer and
+   inject keystrokes.
+2. **DPI level.** Set and lock sensitivity to any value, applied at login.
+3. **RGB lighting.** Static, breathing, spectrum, or off, for the mouse's two lit
+   zones (scroll wheel and logo).
+4. **Thumb-button remap.** The two side buttons are *standard* mouse buttons the OS
+   sees as Back/Forward. Remapping them to keystrokes needs a low-level input hook
+   (`WH_MOUSE_LL`) that can suppress the original. This is the one harder subsystem
+   (it's what XMBC does).
 
 ## UI
 - **Tray icon** (`Shell_NotifyIcon`) with a right-click menu (quick DPI, lighting,
@@ -56,11 +56,11 @@ snakecharmer/
                         #   StartupTask when packaged)
 ```
 
-Candidate deps (keep the tree lean for the ≤2 MB target — audit each):
+Candidate deps (keep the tree lean for the ≤2 MB target, and audit each one):
 - HID: `hidapi` **or** raw `windows` crate HID APIs
 - Tray + window: evaluate `tray-icon` + `egui/eframe` vs. native `windows` crate
-  (`Shell_NotifyIcon` + a dialog). eframe is heavier but far faster to build; a native
-  Win32 window is the true-featherweight path. **Decide at Phase 3.**
+  (`Shell_NotifyIcon` + a dialog). eframe is heavier but much faster to build; a native
+  Win32 window is the lightest option. **Decide at Phase 3.**
 - Hook: `windows` crate `SetWindowsHookEx(WH_MOUSE_LL)`
 - Config: `serde` + `toml`
 
@@ -78,13 +78,13 @@ Get mode (read): 00  3F  00 00 00    02  00  84  00 00     (78x00)     86  00
 - **DPI set/get:** command_class `0x04`, ids `0x05`/`0x85` (see OpenRazer `razermouse_driver.c`).
 - **DPI buttons in driver mode:** 16-byte input report, ID `0x04`, on the keyboard-
   protocol interface, vendor codes `0x20` (up) / `0x21` (down).
-- **RGB (Chroma):** command_class `0x03` matrix effects — **to be confirmed** from
+- **RGB (Chroma):** command_class `0x03` matrix effects, **to be confirmed** from
   OpenRazer `razerchromacommon.c` for this device (static/breathing/spectrum/none).
 - Full protocol reference: [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razercommon.*`, `razerchromacommon.c`).
 
 ## Safety
 - Only documented Razer commands (OpenRazer-sourced). No firmware/bootloader/DFU. No
-  fuzzing feature reports — a bad write can wedge the user's **only** mouse.
+  fuzzing feature reports: a bad write can wedge the user's **only** mouse.
 - Never leave the mouse unable to left/right-click. Unplug/replug always restores
   factory behavior.
 

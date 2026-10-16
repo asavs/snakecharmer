@@ -1,36 +1,36 @@
 # Supported devices
 
-Every device Snakecharmer can drive, mirroring the `SUPPORTED` table in
-[`crates/razer-proto/src/lib.rs`](../crates/razer-proto/src/lib.rs) — that table is the
-source of truth; this page is its human-readable twin, and a test
-(`supported_devices_doc_matches_table`) fails CI if the two drift. All protocol knowledge is sourced
-from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_driver.c`).
+Every device Snakecharmer can drive. The source of truth is the `SUPPORTED` table in
+[`crates/razer-proto/src/lib.rs`](../crates/razer-proto/src/lib.rs); this page is the
+readable copy, and a test (`supported_devices_doc_matches_table`) fails CI if the two
+disagree. All protocol knowledge comes from
+[OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_driver.c`).
 
 | Model | USB id | txn | RGB zones | DPI buttons | DPI range | Polling (Hz) | Verified on hardware |
 |---|---|---|---|---|---|---|---|
-| DeathAdder Elite | `1532:005C` | `0x3F` | scroll wheel, logo | yes (`0x20`/`0x21`) | 100–16000 | 125/500/1000 | ✅ |
-| DeathAdder V3 (wired) | `1532:00B2` | `0x1F` | — | — | 100–30000 | 125/500/1000/2000/4000/8000 | ✅ |
+| DeathAdder Elite | `1532:005C` | `0x3F` | scroll wheel, logo | yes (`0x20`/`0x21`) | 100–16000 | 125/500/1000 | yes |
+| DeathAdder V3 (wired) | `1532:00B2` | `0x1F` | none | no | 100–30000 | 125/500/1000/2000/4000/8000 | yes |
 
-**Column notes**
+### Column notes
 
-- **txn** — the `transaction_id` byte stamped into every 90-byte control report.
-- **RGB zones** — the addressable lighting zones effects are applied to; "—" means the
-  model has no lighting hardware, and lighting commands are clean no-ops.
-- **DPI buttons** — whether the model has the wheel DPI buttons that emit private vendor
+- **txn:** the `transaction_id` byte stamped into every 90-byte control report.
+- **RGB zones:** the addressable lighting zones that effects apply to. "none" means the
+  model has no lighting hardware, and lighting commands do nothing.
+- **DPI buttons:** whether the model has the wheel DPI buttons that send private vendor
   codes in driver mode. Without them, driver mode and the button listeners are skipped
   entirely.
-- **Polling (Hz)** — the report rates the hardware accepts. Which command family the
-  device speaks (classic `razer_chroma_misc_set_polling_rate` vs the extended
-  `..._rate2` that reaches 8000 Hz) is spec data too (`DeviceSpec::polling`).
-- **Verified on hardware** — someone ran the daemon against the real device and confirmed
-  DPI set/read round-trips and correct feature gating, not just a table entry copied from
-  OpenRazer.
+- **Polling (Hz):** the report rates the hardware accepts. Which command family the
+  device uses (classic `razer_chroma_misc_set_polling_rate` or the extended
+  `..._rate2` that reaches 8000 Hz) is also spec data (`DeviceSpec::polling`).
+- **Verified on hardware:** someone ran the daemon against the real device and confirmed
+  that DPI set/read round-trips and that unsupported features are correctly skipped. A
+  table entry copied from OpenRazer doesn't count.
 
 ## On-board binds
 
-Separate from the table above: whether Snakecharmer can write button binds into the
-mouse's own memory (`charmctl keymap`, the config's `[onboard]` table). That needs a
-recorded keymap and a capture of Synapse writing it, see
+This is tracked separately from the table above: whether Snakecharmer can write button
+binds into the mouse's own memory (`charmctl keymap`, the config's `[onboard]` table).
+That needs a recorded keymap and a capture of Synapse writing it. See
 [`ONBOARD-KEYMAP.md`](ONBOARD-KEYMAP.md).
 
 - **DeathAdder V3 (wired):** read, reset and write for right, wheel click, back, forward,
@@ -40,19 +40,21 @@ recorded keymap and a capture of Synapse writing it, see
 
 ## Button maps
 
-Which physical control is which config key. A device may ship without one — the field is
-an `Option`, and when it's `None` the settings window lists the same controls as labeled
-rows instead of callouts on a picture — so this section covers the devices that have a
-diagram, not all of them. Each diagram is **data**, not artwork: it
-lives in the device's `DeviceSpec::diagram` as a small list of shapes, the settings
-window renders the connected device's copy natively (GDI+), and the SVGs below are
-generated from the same data (`cargo test -p razer-proto -- --ignored
-regenerate_diagram_svgs`). The drift-check test regenerates each SVG and fails if the
-committed asset differs, so the doc and the UI can't diverge. Drawing one for a new
-device — finding the official schematic, the legal rules, the shape DSL, the
-verification loop — is covered in [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md).
+Which physical control is which config key. A device may ship without a diagram: the
+field is an `Option`, and when it's `None` the settings window lists the same controls as
+labeled rows instead of callouts on a picture. So this section covers only the devices
+that have a diagram.
 
-Razer's official schematics (linked per device below) are used as a positional reference for button placement and body proportions. The outline and shape of the mouse are drawn as accurately as possible to the physical hardware, while avoiding any trademarked logos (the logo LED is drawn as an abstract circle with an 'S' curve). All diagram line work is original coordinate data.
+Each diagram is stored as data. It lives in the device's `DeviceSpec::diagram` as a small
+list of shapes, the settings window draws the connected device's copy natively (GDI+), and
+the SVGs below are generated from the same data (`cargo test -p razer-proto -- --ignored
+regenerate_diagram_svgs`). The drift-check test regenerates each SVG and fails if the
+committed asset differs, so the doc and the UI can't diverge.
+[`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md) covers drawing one for a new device:
+finding the official schematic, the legal rules, the shape DSL, and how to check your
+work.
+
+Razer's official schematics (linked for each device below) are the reference for button placement and body proportions. The mouse outline follows the physical hardware as closely as possible but leaves out trademarked logos (the logo LED is drawn as an abstract circle with an 'S' curve). All diagram line work is original coordinate data.
 
 ### DeathAdder Elite
 
@@ -63,10 +65,10 @@ Razer's official diagram: [DeathAdder Elite schematic](https://dl.razerzone.com/
 
 *Provenance:* protocol ported from OpenRazer by a Claude Fable 5 agent.
 
-The two thumb buttons (`XBUTTON1`/`XBUTTON2`) are standard Windows buttons — remapping
-them is opt-in and uses the global hook (see the README's safety FAQ). The two DPI
-buttons emit private vendor codes (`0x20`/`0x21`) in driver mode; rebinding them is
-free — nothing touches the pointer's motion path.
+The two thumb buttons (`XBUTTON1`/`XBUTTON2`) are standard Windows buttons. Remapping
+them is opt-in and uses the global hook (see the [README's safety FAQ](../README.md#safety)).
+The two DPI buttons send private vendor codes (`0x20`/`0x21`) in driver mode. Rebinding
+them costs nothing, because nothing touches the pointer's motion path.
 
 ### DeathAdder V3 (wired)
 
@@ -85,15 +87,15 @@ listeners are skipped entirely on this model).
 
 ## Not on the list?
 
-Your mouse is ignored, never written to — the daemon simply waits for a supported device
-to appear (see the Safety FAQ in the [README](../README.md#safety)).
+Snakecharmer ignores your mouse and never writes to it. The daemon waits for a supported
+device to appear (see the [README's safety FAQ](../README.md#safety)).
 
-[`DEVICE-WISHLIST.md`](DEVICE-WISHLIST.md) lists every Razer mouse OpenRazer already knows
-the protocol for — with its USB id, transaction id, DPI ceiling and lighting zones already
-filled in — and who cracked the ones that shipped. If yours is on it, most of the reading is
-done; claim it there.
+[`DEVICE-WISHLIST.md`](DEVICE-WISHLIST.md) lists every Razer mouse whose protocol OpenRazer
+already knows, with its USB id, transaction id, DPI ceiling and lighting zones filled in,
+and who cracked the ones that shipped. If yours is on it, most of the reading is done.
+Claim it there.
 
-Adding a device is designed to be a **one-file diff**: a `DeviceSpec` const, a line in
+Adding a device is meant to be a **one-file diff**: a `DeviceSpec` const, a line in
 `SUPPORTED`, a test, and a row here. Start with
 [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md), then open a PR with the
 [add-device template](../.github/PULL_REQUEST_TEMPLATE/add-device.md). If your device is

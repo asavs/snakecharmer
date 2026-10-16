@@ -10,8 +10,8 @@ body:
 
         Snakecharmer's protocol knowledge comes from
         [OpenRazer](https://github.com/openrazer/openrazer), which already documents
-        ~113 Razer mice. If yours is one of them — check
-        [`docs/DEVICE-WISHLIST.md`](../blob/master/docs/DEVICE-WISHLIST.md) — then its
+        ~113 Razer mice. If yours is one of them (check
+        [`docs/DEVICE-WISHLIST.md`](../blob/master/docs/DEVICE-WISHLIST.md)), its
         USB id, transaction id, DPI ceiling, lighting zones and polling family are
         already known and written down. Packet capture is only for devices that
         aren't in that list.
@@ -35,9 +35,9 @@ body:
       label: USB product id
       description: >
         Device Manager → your mouse → Details → Hardware Ids. You want the four hex
-        digits after `PID_`, e.g. `HID\VID_1532&PID_0043`. This matters more than it
-        sounds: several DeathAdders look identical on a desk and are different devices
-        to the software.
+        digits after `PID_`, e.g. `HID\VID_1532&PID_0043`. This matters: several
+        DeathAdders look identical on a desk but are different devices to the
+        software.
       placeholder: "0043"
     validations:
       required: true
@@ -48,7 +48,7 @@ body:
       label: What would you like to do?
       description: All three are welcome. Most people pick the first.
       options:
-        - I have the mouse and can run a couple of commands — someone else writes the code
+        - I have the mouse and can run a couple of commands; someone else writes the code
         - I want to add it myself (claim it)
         - I just want to register that I'd use it
     validations:

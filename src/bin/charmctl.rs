@@ -113,7 +113,7 @@ fn devices() -> Result<(), Box<dyn std::error::Error>> {
     if mice.iter().any(|m| !m.supported) {
         println!(
             "\nA mouse listed as not supported yet is usually a small job to add: its\n\
-             protocol is very likely already documented. What is known about it:\n\
+             protocol is very likely already documented. See what's already known about it:\n\
              \x20 {WISHLIST_URL}"
         );
     }
@@ -190,7 +190,7 @@ fn keymap(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some("set") => return Err("usage: keymap set <button> <bind>   e.g. keymap set back ctrl+c".into()),
-        Some(other) => return Err(format!("unknown keymap command {other:?} (want reset or set)").into()),
+        Some(other) => return Err(format!("unknown keymap command {other:?} (expected reset or set)").into()),
     }
     println!("On-board binds on the {}:", spec.name);
     let binds = onboard::read_binds(&mouse, km)?;

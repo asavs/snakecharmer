@@ -877,7 +877,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             if !dpi_in_diagram {
                 if let Some(b) = &init.dpi_buttons {
                     let _ = labeled_combo(
-                        "Front DPI button — nearer the scroll wheel:",
+                        "Front DPI button (nearer the scroll wheel):",
                         ID_CB_UP,
                         &b.up.labels,
                         b.up.index,

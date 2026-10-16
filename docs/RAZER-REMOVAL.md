@@ -113,7 +113,7 @@ Warnings:
 - **English Windows only.** The scripts parse `pnputil` (and the supplement parses
   `cmdkey`) text output by its English labels. On other display languages the audit reports
   a parse error and the residue script stops before removing any driver package.
-- The other "Razer" matches an audit should keep: the mouse's own hardware records (bound
+- Two other kinds of "Razer" match should stay: the mouse's own hardware records (bound
   to Microsoft drivers) and Snakecharmer.
 
 ## Results

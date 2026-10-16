@@ -2,99 +2,101 @@
 
 Every Razer mouse Snakecharmer *could* drive, and who cracked the ones it already does.
 
-The list isn't a wishlist in the "wouldn't it be nice" sense — it's the set of devices whose
-protocol is **already written down in an open-source reference**
-([OpenRazer](https://github.com/openrazer/openrazer)). That's the hard part of a crack, and
-it's done. What's left per device is the part
+Every device listed here has its protocol **already written down in an open-source
+reference** ([OpenRazer](https://github.com/openrazer/openrazer)). That's the hard part of a
+crack, and it's done. What's left per device is the part
 [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md) walks you through: confirm the channel
 with a read, fill in a `DeviceSpec`, draw the button map, verify on real hardware.
 
-Shipped devices live in [`SUPPORTED-DEVICES.md`](SUPPORTED-DEVICES.md) — that page is the
-list of mice this daemon actually talks to. This page is the board of everything else.
+Shipped devices are listed in [`SUPPORTED-DEVICES.md`](SUPPORTED-DEVICES.md), the mice this
+daemon actually talks to. This page covers everything else.
 
 ## Claiming one
 
-The whole flow is ordinary GitHub; nothing to ask permission for.
+The whole flow is ordinary GitHub. You don't need to ask permission.
 
 1. **Open an issue** with the
    [add-a-mouse form](https://github.com/asavs/snakecharmer/issues/new?template=device-request.yml)
-   and say you're working on it — or comment on an existing one, and it gets assigned to
-   you. This is the only step that exists to stop two people cracking the same mouse on
-   the same weekend. The form also works the other way round: if you have the hardware but
-   don't want to write any code, fill it in and someone else picks it up.
-2. **Crack it** — [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md) for the method, the
+   and say you're working on it, or comment on an existing one and it gets assigned to
+   you. This step exists only to stop two people cracking the same mouse on the same
+   weekend. The form also works the other way round: if you have the hardware but don't
+   want to write any code, fill it in and someone else can pick it up.
+2. **Crack it.** Use [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md) for the method, the
    [`reference/`](../reference/) Python toolkit for poking the device first, and
-   [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md) for the diagram. It is a genuinely good
-   job to hand an AI coding agent; two of the two devices here were done that way.
+   [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md) for the diagram. It's a good job to
+   hand an AI coding agent; both shipped devices were done that way.
 3. **Open a PR** with the [add-device template](../.github/PULL_REQUEST_TEMPLATE/add-device.md)
-   and `Closes #<your issue>`. Fill in the *Agent/model used* field — the track record of
-   which models can complete a crack end to end is useful to the next person.
-4. **On merge** the row's Status becomes ✅ cracked by you — your handle, your PR, and the
-   model you drove.
-   If you sourced protocol from a project that isn't already credited, add it to
-   [`NOTICE`](../NOTICE) in the same PR — that's a license obligation, not a courtesy.
+   and `Closes #<your issue>`. Fill in the *Agent/model used* field. A record of which
+   models can finish a crack end to end helps the next person.
+4. **On merge** the row's Status becomes ✅ cracked by you, with your handle, your PR, and
+   the model you drove.
+   If you took protocol details from a project that isn't already credited, add it to
+   [`NOTICE`](../NOTICE) in the same PR. The license requires it.
 
 An unclaimed row is fair game. A claim with no PR and no reply after about a month goes back
-to unclaimed; nobody is going to be precious about it.
+to unclaimed, with no hard feelings.
 
-**Labels**, so you can find the shape of work you want:
-[`device-request`](https://github.com/asavs/snakecharmer/labels/device-request) — a mouse
-somebody wants; [`good first issue`](https://github.com/asavs/snakecharmer/labels/good%20first%20issue) — small
-and self-contained; [`diagram`](https://github.com/asavs/snakecharmer/labels/diagram) — a
-working device that nobody has drawn yet, which needs **no hardware at all**;
-[`needs-hardware`](https://github.com/asavs/snakecharmer/labels/needs-hardware) — the code
-is written and it's waiting on someone who owns the mouse to press a button.
+**Labels** help you find the kind of work you want:
+
+- [`device-request`](https://github.com/asavs/snakecharmer/labels/device-request): a mouse
+  somebody wants.
+- [`good first issue`](https://github.com/asavs/snakecharmer/labels/good%20first%20issue):
+  small and self-contained.
+- [`diagram`](https://github.com/asavs/snakecharmer/labels/diagram): a working device that
+  nobody has drawn yet. Needs **no hardware at all**.
+- [`needs-hardware`](https://github.com/asavs/snakecharmer/labels/needs-hardware): the code
+  is written and is waiting for someone who owns the mouse to press a button.
 
 ## Adding your mouse with an AI assistant
 
-You do not need a particular tool or a paid model for this — the repo does the hard part.
-Paste this into whatever assistant you have, with your mouse's name filled in:
+You don't need a particular tool or a paid model; the repo does the hard part. Paste this
+into whatever assistant you have, with your mouse's name filled in:
 
 > Add support for my **<mouse>** to this repo (github.com/asavs/snakecharmer).
 >
 > 1. Find my model in `docs/DEVICE-WISHLIST.md`. It lists my USB id, transaction id, max
->    DPI, RGB zones and polling family. If it's listed, you need no packet capture — but
+>    DPI, RGB zones and polling family. If it's listed, you need no packet capture, but
 >    check each value against the OpenRazer source before using it.
 > 2. Copy the closest file in `crates/razer-proto/src/devices/`, change those values, set
 >    `diagram: None`, register it in `SUPPORTED`, and add a row to
 >    `docs/SUPPORTED-DEVICES.md`.
 > 3. Run `cargo test --workspace`.
 > 4. Follow the rules in `AGENTS.md`: only send commands read out of OpenRazer, read before
->    you write, and if anything reads back unexpected, stop and tell me rather than trying
+>    you write, and if anything reads back unexpected, stop and tell me instead of trying
 >    something else.
 >
 > Then tell me what to run to check it against the real mouse.
 
-[`AGENTS.md`](../AGENTS.md) is the full brief — every agent reads it, and it is where the
-safety rules and the acceptance commands live.
+[`AGENTS.md`](../AGENTS.md) is the full brief. Every agent reads it, and it holds the
+safety rules and the acceptance commands.
 
 ## Reading the table
 
 Each column is the answer to one field of the `DeviceSpec` you're going to write, taken
 straight from OpenRazer:
 
-- **USB id** — `VID:PID`. This is the whole identity of the device; the receiver and the
+- **USB id:** `VID:PID`. This is the whole identity of the device; the receiver and the
   wired body of the same wireless mouse have **different PIDs** and are separate rows,
   because they're separate `DeviceSpec`s.
-- **txn** — the `transaction_id` byte, from the per-device switch in
-  `razer_attr_write_dpi()`. `copy Elite` (`0x3F`) and `copy V3` (`0x1F`) mean a device
-  Snakecharmer has already spoken that dialect to; `new txn path` (`0xFF`) is the legacy
-  broadcast id, which works fine in OpenRazer but this daemon has never sent — expect to
-  verify it more carefully. `legacy byte-DPI` devices take DPI as single bytes through a
-  different command entirely and are the least like anything here.
-- **Max DPI** — `DPI_MAX` from OpenRazer's daemon device class. The minimum is 100 on every
+- **txn:** the `transaction_id` byte, from the per-device switch in
+  `razer_attr_write_dpi()`. `copy Elite` (`0x3F`) and `copy V3` (`0x1F`) mean Snakecharmer
+  already speaks that dialect to a shipped device. `new txn path` (`0xFF`) is the legacy
+  broadcast id, which works fine in OpenRazer but this daemon has never sent, so verify it
+  more carefully. `legacy byte-DPI` devices take DPI as single bytes through a different
+  command entirely and are the least like anything here.
+- **Max DPI:** `DPI_MAX` from OpenRazer's daemon device class. The minimum is 100 on every
   modern model, but check yours; the settings UI has to stay usable across the whole range.
-- **RGB zones** — which lighting zones the reference implements. `—` means no lighting, and
+- **RGB zones:** which lighting zones the reference implements. `—` means no lighting, and
   lighting commands become clean no-ops (like the V3).
-- **Polling** — which command family the device speaks: `Classic`
+- **Polling:** which command family the device speaks: `Classic`
   (`razer_chroma_misc_set_polling_rate`, tops out at 1000 Hz) or `Extended` (`..._rate2`,
   reaches 8000 Hz).
 
 Two fields you'll notice are *not* here, because no reference implementation has them:
 
-- **`dpi_buttons`** — the vendor codes the wheel DPI buttons emit in driver mode. You read
+- **`dpi_buttons`:** the vendor codes the wheel DPI buttons emit in driver mode. You read
   these off your own hardware with the listener; the Elite's are `0x20`/`0x21`.
-- **`diagram`** — the button map. Optional: `None` ships, and the settings window falls
+- **`diagram`:** the button map. Optional: `None` ships, and the settings window falls
   back to labeled control rows. Draw it later, or let someone else.
 
 The last column tracks status rather than hardware: `open`, 🔧 claimed by whoever took
@@ -102,9 +104,9 @@ it (linked to their issue), or ✅ cracked by whoever landed it, with their PR a
 they drove.
 
 **These cells are a starting hint, not a spec.** Read the OpenRazer source for your PID
-before you write anything — the driver has real asymmetries (the Viper V3 Pro's wired PID
-takes `Classic` polling while its wireless PID takes `Extended`), and a hint copied without
-checking is exactly the kind of thing the golden rule is about.
+before you write anything. The driver has real asymmetries (the Viper V3 Pro's wired PID
+takes `Classic` polling while its wireless PID takes `Extended`), and copying a hint without
+checking it is exactly what the golden rule forbids.
 
 <!-- BEGIN GENERATED TABLES -->
 
@@ -304,28 +306,28 @@ checking is exactly the kind of thing the golden rule is about.
 
 ## Not in the table?
 
-Then OpenRazer doesn't know it either, and the golden rule leaves you one honest route: a
-USB capture of Razer's own software talking to your device (Wireshark + USBPcap, guide §5),
+Then OpenRazer doesn't know it either, and the golden rule leaves you one route: a USB
+capture of Razer's own software talking to your device (Wireshark + USBPcap, guide §5),
 documented in the PR. Never guessed, never fuzzed. If you go to that trouble, consider
-sending the findings to OpenRazer too — everything on this page exists because someone did.
+sending the findings to OpenRazer too; everything on this page exists because someone did.
 
 Keyboards, headsets, and mats are out of scope for this repo today. The protocol layer isn't
-mouse-specific, so it's a "nobody has done it" rather than a "can't", but it's a bigger diff
-than the one-file kind described above.
+mouse-specific, so the gap is that nobody has done it, not that it can't be done. It's a
+bigger diff than the one-file kind described above, though.
 
 ## Onboard memory, and why it doesn't change the crack
 
-Razer mice fall into three storage tiers: no onboard memory (settings live only while the
-host software runs — DeathAdder Essential, Abyssus), a single onboard profile that mirrors
-whatever the software last set (most modern esports models — Viper V3 Pro, DeathAdder V3
+Razer mice fall into three storage tiers: no onboard memory (settings last only while the
+host software runs: DeathAdder Essential, Abyssus), a single onboard profile that mirrors
+whatever the software last set (most modern esports models: Viper V3 Pro, DeathAdder V3
 Pro, Orochi V2, Cobra), and five profiles in a `4+1` bank with a physical switch to cycle
 them (Basilisk V2/V3 Pro, Naga Pro / V2 Pro, Naga Left-Handed, Lancehead Wireless).
 
 Snakecharmer writes the **active state** (`NOSTORE`), the same as OpenRazer does for these
-devices — it doesn't write profile banks and doesn't read them back. So the tier doesn't
+devices. It doesn't write profile banks and doesn't read them back. So the tier doesn't
 change what you implement. It changes what a user sees when the daemon *isn't* running: on a
 zero-memory mouse everything reverts, on the others the last-applied DPI and polling rate
-survive in hardware. Worth a sentence in your PR either way.
+survive in hardware. It's worth saying which tier your mouse is in your PR.
 
 *(Tier assignments here are from Razer's published product documentation, not from a
 protocol source. Unlike everything in the table above, they are not verified against
@@ -333,10 +335,10 @@ OpenRazer or against hardware.)*
 
 ## Provenance
 
-The tables are generated from OpenRazer `master` — `driver/razermouse_driver.h` (PIDs),
-`driver/razermouse_driver.c` (transaction ids, polling families), and
-`daemon/openrazer_daemon/hardware/mouse.py` (model names, `DPI_MAX`, lighting zones) — by
-[`tools/wishlist-from-openrazer.py`](../tools/wishlist-from-openrazer.py). Rerun it to pick
+The tables are generated from OpenRazer `master` (`driver/razermouse_driver.h` for PIDs,
+`driver/razermouse_driver.c` for transaction ids and polling families, and
+`daemon/openrazer_daemon/hardware/mouse.py` for model names, `DPI_MAX`, and lighting zones)
+by [`tools/wishlist-from-openrazer.py`](../tools/wishlist-from-openrazer.py). Rerun it to pick
 up devices OpenRazer has added since:
 
 ```powershell

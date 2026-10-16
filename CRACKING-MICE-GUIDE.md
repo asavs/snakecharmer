@@ -1,46 +1,46 @@
-# Cracking a Gaming Mouse Without Its Vendor Software — A General Method
+# Cracking a gaming mouse without its vendor software: a general method
 
 > Reverse-engineering the USB-HID control protocol of **your own** mouse so you can
 > drive its features (button remap, DPI, RGB, polling) from a tiny userspace program
-> instead of the vendor's bloated suite. This is interoperability work, the same thing
-> the vendor's own software does every boot. It is **not** firmware modification.
+> instead of the vendor's bloated suite. This is interoperability work: it does what
+> the vendor's own software does at every boot. It is **not** firmware modification.
 >
-> Distilled from the end-to-end crack of a **Razer DeathAdder Elite** (VID `0x1532`,
-> PID `0x005C`) that replaced Razer Synapse. The Razer specifics appear as the worked
-> example; the *method* transfers to almost any configurable HID mouse.
+> Written up from the full crack of a **Razer DeathAdder Elite** (VID `0x1532`,
+> PID `0x005C`) that replaced Razer Synapse. The Razer details are the worked example;
+> the *method* works on almost any configurable HID mouse.
 
 ---
 
-## 0. The one mental model that makes this tractable
+## 0. The mental model: two devices in one
 
 A modern gaming mouse is **two devices in one piece of plastic**:
 
-1. A **boot/standard HID device** — the mouse the OS sees: X/Y movement, buttons 1–5,
-   wheel. Fully standard, works with no driver.
-2. A **vendor control channel** — an extra HID collection (or interface) that accepts
+1. A **boot/standard HID device**: the mouse the OS sees (X/Y movement, buttons 1–5,
+   wheel). Fully standard, works with no driver.
+2. A **vendor control channel**: an extra HID collection (or interface) that accepts
    **Feature reports**: a private command protocol the vendor app uses to set DPI, RGB,
    button maps, "device mode", etc. This is what you're cracking.
 
 "Cracking the mouse" = **finding that control channel and speaking its command protocol.**
 Nothing here touches firmware, bootloader, or DFU. Every command is reversible with an
-unplug/replug (vendor modes reset on power-cycle — that's *why* the vendor app re-sends
-them at every login).
+unplug/replug. Vendor modes reset on power-cycle, which is *why* the vendor app re-sends
+them at every login.
 
 ### The golden rule (why this is safe)
 **Only send commands you have read out of an open-source reference implementation.**
-Never fuzz, brute-force, or guess Feature reports — a wrong write to a vendor channel is
+Never fuzz, brute-force, or guess Feature reports. A wrong write to a vendor channel is
 the one way you *can* wedge the device. The whole method below is "find the documented
 command, confirm it, send exactly that."
 
 ---
 
-## 1. Reconnaissance — identify the device and its HID topology
+## 1. Reconnaissance: identify the device and its HID topology
 
 **Goal:** VID, PID, and the list of HID collections the mouse exposes, so you can find the
 control channel.
 
 ```bash
-pip install hidapi          # cross-platform HID access; the workhorse
+pip install hidapi          # cross-platform HID access
 ```
 
 ```python
@@ -55,7 +55,7 @@ for d in hid.enumerate():
 Find your VID/PID first: Windows Device Manager → mouse → Details → *Hardware Ids*
 (`HID\VID_1532&PID_005C…`), or `lsusb`/`ioreg` on Linux/mac.
 
-**Worked example — the DeathAdder Elite exposed 7 collections across 3 interfaces:**
+**Worked example: the DeathAdder Elite exposed 7 collections across 3 interfaces.**
 
 | interface | usage_page | usage | what it is |
 |-----------|-----------|-------|------------|
@@ -68,16 +68,16 @@ Find your VID/PID first: Windows Device Manager → mouse → Details → *Hardw
 **Heuristics for spotting the control channel** (which collection eats Feature reports):
 - Very often **interface 0**, the base mouse TLC (`usage_page 0x01`, `usage 0x02`).
 - The collection with a **vendor-defined usage page** (`0xFF00`–`0xFFFF`) if one exists.
-- On Windows the raw keyboard TLCs (`usage 0x06`) are **locked by the OS** — you can't
+- On Windows the raw keyboard TLCs (`usage 0x06`) are **locked by the OS**, so you can't
   open them for reading. Note them and skip them.
-- When unsure, don't poke — confirm by a **read-only** command in step 3.
+- When unsure, don't poke. Confirm with a **read-only** command in step 3.
 
 ---
 
 ## 2. Get the protocol from an open-source reference (do NOT invent it)
 
-This is the heart of the method and the safety guarantee. For every major brand there is a
-FOSS project that already reverse-engineered the protocol. Read its source, don't guess.
+This step is both the method and its safety guarantee. For every major brand there is a
+FOSS project that already reverse-engineered the protocol. Read its source; don't guess.
 
 | brand | reference project | where the commands live |
 |-------|-------------------|--------------------------|
@@ -86,7 +86,7 @@ FOSS project that already reverse-engineered the protocol. Read its source, don'
 | SteelSeries, others | **libratbag** | one `.c` driver per family under `src/` |
 | many | **libratbag** (umbrella) | the ratbag driver for your family |
 
-**Razer protocol, as extracted from OpenRazer** — a fixed **90-byte Feature report**:
+**Razer protocol, as read out of OpenRazer:** a fixed **90-byte Feature report**.
 
 ```
 offset  field            notes
@@ -123,9 +123,9 @@ Get mode (read): 00 3F 00 00 00    02 00 84  00 00     (78×00)  86  00
 `command_class 0x00 / id 0x04` = "set device mode"; arg `0x03` = driver mode, `0x00` =
 hardware/normal. `id 0x84` (0x04 | 0x80) is the read form.
 
-> **Per-model gotcha that will bite you:** the `transaction_id` differs by model. Razer's
-> `razer_attr_write_device_mode` is a big `switch` on PID. Find *your* PID's case. Using
-> the wrong transaction_id just makes the device ignore the report (status stays busy) —
+> **Per-model trap:** the `transaction_id` differs by model. Razer's
+> `razer_attr_write_device_mode` is a big `switch` on PID. Find *your* PID's case. With
+> the wrong transaction_id the device just ignores the report (status stays busy). That's
 > annoying, not dangerous, but it's the #1 reason "it does nothing."
 
 ---
@@ -146,11 +146,11 @@ resp = h.get_feature_report(0, 91)
 
 If you get `0x02` + plausible data, **you've found the control channel and proven the
 protocol** without changing anything. If you get garbage or an exception on every
-collection, revisit step 1 — you're talking to the wrong TLC (or it's an OS-locked
+collection, go back to step 1: you're talking to the wrong TLC (or an OS-locked
 keyboard TLC).
 
-Do the same read for DPI to double-confirm (it should read back a believable number like
-1800×1800). Two independent sane reads = high confidence before any write.
+Do the same read for DPI to confirm again (it should read back a believable number like
+1800×1800). Two independent sane reads give you high confidence before any write.
 
 ---
 
@@ -164,22 +164,22 @@ h.send_feature_report(bytes([0x00]) + SET_DRIVER_MODE_90)   # busy-retry: if sta
 **Verification checklist after the write (all were checked in the real crack):**
 - Read-back of mode returns the value you set (`0x03`). ✔
 - **All** collections still enumerate (device didn't drop off the bus). ✔
-- Left/right click + movement still work (you're using the mouse — trivially confirmed). ✔
+- Left/right click + movement still work (you're using the mouse, so this confirms itself). ✔
 - Unplug/replug returns it to stock (proves reversibility). ✔
 
 ---
 
-## 5. Find where the "hidden" buttons now surface — and catch them
+## 5. Find where the "hidden" buttons now surface, and catch them
 
-This is the part people miss. On the DeathAdder, "driver mode" does **not** make the DPI
+People miss this part. On the DeathAdder, "driver mode" does **not** turn the DPI
 buttons into "button 6/7" (Windows only has 5 mouse buttons, and the firmware never sends
-mouse-buttons for them). Instead, ground-truth from OpenRazer's `razer_raw_event`:
+mouse-button events for them). Instead, according to OpenRazer's `razer_raw_event`:
 
 > In driver mode the firmware stops consuming the DPI buttons for internal DPI switching
 > and instead emits a **16-byte Input report, report ID `0x04`, on the keyboard-protocol
 > interface**, carrying **vendor codes `0x20` (DPI-up) / `0x21` (DPI-down)**.
 
-So the buttons *do* become visible — just as a vendor input report on a different
+So the buttons *do* become visible, but as a vendor input report on a different
 collection, not as standard buttons. No standard remapper (X-Mouse etc.) can see them.
 The fix is a tiny **listener/injector daemon**:
 
@@ -188,12 +188,12 @@ The fix is a tiny **listener/injector daemon**:
 3. When a report matches `id 0x04` + a known vendor code, **inject** the keystroke/action
    you want (Copy, Paste, key 9/0, F13…) via `SendInput`/`keybd_event` (Win),
    `uinput` (Linux).
-4. **Log every code you see**, including unrecognized ones — so one real button press
+4. **Log every code you see**, including unrecognized ones, so one real button press
    tells you the exact mapping if it differs on your model.
 5. **Re-assert driver mode every ~60 s** (and on resume/replug), because power events
    reset it. This is exactly what the vendor daemon does.
 
-> Honest-uncertainty note from the original run: the agent could send/verify everything
+> A limit from the original run: the agent could send and verify everything
 > but **could not press the buttons itself**. The daemon was written to log any vendor
 > code received, so a single human press against the log file settled the final mapping.
 > (It did: Copy fired correctly.) **Build the press-to-action path to be self-diagnosing.**
@@ -212,7 +212,7 @@ session.
 
 ---
 
-## 7. Generalizing to *other* mice — the checklist
+## 7. Checklist for *other* mice
 
 Run this exact sequence for any new mouse:
 
@@ -228,19 +228,19 @@ Run this exact sequence for any new mouse:
    write a **self-logging listener** (step 5).
 8. **Persist** at login (step 6).
 9. **Button-map diagram:** draw the `DeviceSpec::diagram` shape data from the model's
-   official schematic — see [`docs/DRAWING-MICE-GUIDE.md`](docs/DRAWING-MICE-GUIDE.md)
+   official schematic. See [`docs/DRAWING-MICE-GUIDE.md`](docs/DRAWING-MICE-GUIDE.md)
    for the full workflow (finding the schematic, drawing guidelines, the DSL, verification).
 
-### Brand reality-check
+### How other brands differ
 - **Razer:** 90-byte Feature report, XOR CRC, per-model transaction_id. As above.
-- **Logitech:** completely different — **HID++** (short 7-byte / long 20-byte reports over
+- **Logitech:** completely different: **HID++** (short 7-byte / long 20-byte reports over
   a vendor collection, feature-index negotiation). Read Solaar/libratbag; none of the
   Razer byte layout applies, but *the method* (enumerate → read reference → confirm →
   send) is identical.
 - **SteelSeries / Corsair / others:** each has its own framing; libratbag is the first
   place to look. If **no** FOSS reference exists for your exact model, capture the vendor
   app's real traffic with **Wireshark + USBPcap** (Win) / `usbmon` (Linux) and match
-  packets to actions — but that is observation of documented-by-the-vendor behavior, still
+  packets to actions. That is observing what the vendor's own app sends, and it is still
   **not** fuzzing.
 
 ---
@@ -252,17 +252,17 @@ Run this exact sequence for any new mouse:
   implementation or observed from the vendor's own app.
 - ✅ **Read before you write.** Confirm the channel non-destructively first.
 - ✅ **Verify the device still fully works** (click, move, enumerate) after every write, and
-  confirm **unplug/replug restores stock** — your escape hatch.
+  confirm **unplug/replug restores stock**. That is your escape hatch.
 - ✅ If an effect is uncertain or a command's meaning isn't in the reference, **stop and
-  report**, don't experiment on your only mouse.
+  report**. Don't experiment on your only mouse.
 
 ---
 
-## Appendix — where the worked example lives
+## Appendix: where the worked example lives
 This repository *is* a worked example, at two levels:
-- **Runnable recon toolkit (Python):** [`reference/`](reference/) — `razer_common.py`
+- **Runnable recon toolkit (Python):** [`reference/`](reference/): `razer_common.py`
   (protocol + CRC), `dpi_button_daemon.py` (self-logging listener/injector),
-  `set_device_mode.py`, `set_dpi.py`. The whole method above, running, in ~150 lines.
+  `set_device_mode.py`, `set_dpi.py`. The whole method above runs in ~150 lines.
   **Start here to crack a new device.**
 - **Shipping implementation (Rust):** `crates/razer-proto` (pure protocol + unit tests
   asserting the exact driver-mode bytes/CRC against OpenRazer), `crates/razer-hid` (HID

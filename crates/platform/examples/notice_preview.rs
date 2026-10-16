@@ -10,11 +10,11 @@ fn main() {
     let open = platform::alert_yes_no(
         "Snakecharmer",
         &format!(
-            "Found {found} — not supported yet.\n\n\
+            "Found {found}, which isn't supported yet.\n\n\
              Its protocol is very likely already documented, so adding it \
-             is a small job — you may only need to report a couple of \
-             numbers off the device.\n\n\
-             Open the page that lists what is already known?"
+             is a small job. You may only need to report a couple of \
+             numbers from the device.\n\n\
+             Open the page that lists what's already known about it?"
         ),
     );
     println!("open = {open}");

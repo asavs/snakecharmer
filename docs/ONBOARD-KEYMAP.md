@@ -4,8 +4,8 @@
 button bind, so Snakecharmer can write them itself and users can configure on-board binds
 without Synapse.
 
-**Status: V3 read, reset and write from the config are implemented and verified on
-hardware; the Elite was tested with Synapse 4 and needs none of it.** The DeathAdder V3's
+**Status: on the V3, read, reset and write from the config are implemented and verified
+on hardware. The Elite was tested with Synapse 4 and needs none of it.** The DeathAdder V3's
 write (`0x02/0x0C`) and read (`0x02/0x8C`) are recorded under [Findings](#findings).
 `charmctl keymap` shows the stored binds, `charmctl keymap reset` puts non-default binds
 back to factory, `charmctl keymap set <button> <bind>` writes one, and the config's
@@ -15,9 +15,9 @@ click, back, forward, wheel up, wheel down) and replay the layouts Synapse was c
 sending. The first Snakecharmer write, with the physical check and the reset, is in
 [`captures/V3-20261016-snakecharmer-write/notes.md`](captures/V3-20261016-snakecharmer-write/notes.md).
 The Elite session recorded only streamed lighting while button assignments were
-saved, supporting software remapping with this version (Synapse 4 remaps it in software,
-so it has no leftover on-board binds; Snakecharmer's hook remap covers it). A Synapse 3
-comparison is still pending.
+saved, which points to software remapping in this version. Synapse 4 remaps the Elite in
+software, so it has no leftover on-board binds, and Snakecharmer's hook remap covers it.
+A Synapse 3 comparison is still pending.
 
 | V3 button | Captured read | Captured write to that button |
 |---|---|---|
@@ -26,9 +26,9 @@ comparison is still pending.
 | Left | Yes | No; left unchanged |
 | Underside | Yes; category remains undecoded | No |
 
-A reset of every button is not possible from these captures: left and underside
-have no captured write, so Snakecharmer never writes them. The original step 09 produced no wheel-click write
-because its assignment was already Default. The additional pass deliberately
+These captures can't reset every button: left and underside have no captured
+write, so Snakecharmer never writes them. The original step 09 produced no
+wheel-click write because its assignment was already Default. The additional pass
 changed each of the four missing controls before restoring it, recording eight
 writes with matching success replies. All eight used `[10] = 00`; that byte's
 meaning in read replies remains unresolved. See the [additional V3 findings](#additional-v3-button-writes-2026-10-16).
@@ -138,6 +138,7 @@ Ordinary users should not need to repeat this research for supported features.
 On the DeathAdder V3, `charmctl keymap reset`, `charmctl keymap set` and the `[onboard]`
 config table are the verified feature; use them directly. Another model needs the
 capture described here first.
+
 ## What a capture has to answer
 
 The session's steps come from what Snakecharmer's config will need to express:
@@ -155,8 +156,8 @@ The session's steps come from what Snakecharmer's config will need to express:
 
 ## Running a capture session
 
-For the maintainer's decode, or one of the cases above. Hand it to a coding agent if you
-like; see [For agents](#for-agents). Either way, a person has to do the clicking.
+This is for the maintainer's decode, or one of the cases above. You can hand it to a
+coding agent (see [For agents](#for-agents)), but a person has to do the clicking.
 
 You need the mouse, Synapse, Python 3 (standard library only) and an administrator
 PowerShell. About 20 minutes per mouse.
@@ -284,7 +285,7 @@ What an agent can do:
 What an agent must not do, on top of the rules in [`AGENTS.md`](../AGENTS.md):
 
 - **Send a keymap write to a mouse** other than through the shipped V3 path
-  (`Mouse::set_button_binding`, buttons in `KeymapSpec::writable`). Not to test a
+  (`Mouse::set_button_binding`, buttons in `KeymapSpec::writable`), not even to test a
   hypothesis. Until this page records a confirmed format for that mouse and button and the
   maintainer has approved it, write bytes are reference data, not commands. Never write
   left or an undecoded category. A read recorded under [Findings](#findings) is fine, sent

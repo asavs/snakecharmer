@@ -1,13 +1,13 @@
 # AGENTS.md
 
-Brief for any coding agent working in this repo — Claude Code, Codex, opencode, Cursor,
+Brief for any coding agent working in this repo: Claude Code, Codex, opencode, Cursor,
 Copilot, or a chat window someone is pasting into. Nothing here is model-specific, and the
 main job people bring here does not need a frontier model.
 
 ## What this is
 
-Snakecharmer is a Windows daemon that configures Razer mice over USB HID — DPI, polling
-rate, RGB, button remapping — as a replacement for Razer Synapse. It is Rust, Windows-only,
+Snakecharmer is a Windows daemon that configures Razer mice over USB HID (DPI, polling
+rate, RGB, button remapping) as a replacement for Razer Synapse. It is Rust, Windows-only,
 and deliberately small: one static ~600 KB exe, under 10 MB idle.
 
 All protocol knowledge comes from [OpenRazer](https://github.com/openrazer/openrazer). This
@@ -23,7 +23,8 @@ the one way to actually break someone's hardware.
    vendor's own software. Never fuzz, guess, brute-force, or "try" a byte to see what it
    does.
 2. **Read before you write.** Confirm a channel with the read form of a command first.
-3. **STOP and report** — do not retry with different bytes, do not work around it — if:
+3. **STOP and report** if any of these happen. Do not retry with different bytes, and do
+   not work around it:
    - a response's status byte is not `0x02`,
    - a read-back does not match what you set,
    - a command's meaning is not in the reference,
@@ -49,25 +50,25 @@ Unsafe code stays confined to `crates/platform`.
 ## The common task: add support for a mouse
 
 This is a **one-file diff** and should stay one. If you find yourself editing `razer-hid` or
-the daemon, stop and say so in the PR — it means something generic is missing from the
+the daemon, stop and say so in the PR. It means something generic is missing from the
 shared layer, and that is a different change.
 
 1. **Look up the device in [`docs/DEVICE-WISHLIST.md`](docs/DEVICE-WISHLIST.md).** It lists
    every Razer mouse OpenRazer already documents, with its USB id, transaction id, DPI
    ceiling, lighting zones and polling family. If it is there, **no packet capture is
-   needed** — the reading is done. Verify each value against the OpenRazer source anyway;
+   needed**; the reading is done. Verify each value against the OpenRazer source anyway;
    the table is a hint, and the driver has real asymmetries.
 2. **Copy the closest file in `crates/razer-proto/src/devices/`** and change the values.
    `deathadder_elite.rs` for a `0x3F` device with lighting; `deathadder_v3.rs` for a `0x1F`
    device without.
 3. **Set `diagram: None`** unless you are also drawing one. It is an `Option` and `None`
-   ships — the settings window falls back to labeled control rows and the device is fully
+   ships. The settings window falls back to labeled control rows and the device is fully
    functional. Drawing is a separate contribution; see
    [`docs/DRAWING-MICE-GUIDE.md`](docs/DRAWING-MICE-GUIDE.md).
 4. **Register it** in `SUPPORTED`, add a per-device test, and add the row to
-   [`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md) — a test fails if the doc and the
+   [`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md). A test fails if the doc and the
    table disagree.
-5. **Verify on hardware** — this part needs the human who owns the mouse. Ask them to run
+5. **Verify on hardware.** This part needs the human who owns the mouse. Ask them to run
    the daemon and confirm the log line, then `charmctl set-dpi <n>` and `charmctl status`
    round-trip, including a value near the device's maximum. Do not mark a device verified
    on hardware because the tests passed; that column means a person plugged it in.
@@ -101,7 +102,7 @@ cargo build --release
 ```
 
 A change is not done until those are green. Tests for protocol code assert **exact bytes**
-against the OpenRazer reference — see the `*_matches_openrazer` tests for the pattern.
+against the OpenRazer reference. See the `*_matches_openrazer` tests for the pattern.
 
 ## Conventions
 
@@ -109,13 +110,13 @@ against the OpenRazer reference — see the `*_matches_openrazer` tests for the 
   layout decision is what it is, usually citing OpenRazer or physical hardware behavior.
 - Weigh every new dependency against the size and idle-cost targets in
   [`docs/SPEC.md`](docs/SPEC.md).
-- Protocol code derived from a GPL project must be credited in [`NOTICE`](NOTICE) —
-  that is a license obligation.
+- Protocol code derived from a GPL project must be credited in [`NOTICE`](NOTICE).
+  That is a license obligation.
 - This repo is GPL-2.0-or-later.
 
 ## Ask a human when
 
 - A command's behavior is not documented in a reference implementation.
-- A device does something the tests can't check — anything requiring a button press, a
+- A device does something the tests can't check: anything requiring a button press, a
   plug/unplug, or a look at a rendered window.
 - The change would grow beyond one device file.
