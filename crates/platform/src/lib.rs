@@ -94,6 +94,75 @@ pub fn vk_function(n: u8) -> Option<u16> {
     }
 }
 
+/// The name of a key, as the on-board bind parser (`razer_proto::keymap`)
+/// spells it, for a virtual-key code: what the settings window's key recorder
+/// writes into a bind box. Punctuation follows the US layout, which is how the
+/// mouse's HID usages are defined. `None` for modifiers and keys with no name.
+pub fn key_name(vk: u16) -> Option<String> {
+    let named = match vk {
+        0x41..=0x5A | 0x30..=0x39 => return Some((vk as u8 as char).to_string()),
+        0x70..=0x87 => return Some(format!("F{}", vk - 0x70 + 1)),
+        0x60..=0x69 => return Some(format!("Num{}", vk - 0x60)),
+        0x08 => "Backspace",
+        0x09 => "Tab",
+        0x0D => "Enter",
+        0x13 => "Pause",
+        0x14 => "CapsLock",
+        0x1B => "Esc",
+        0x20 => "Space",
+        0x21 => "PageUp",
+        0x22 => "PageDown",
+        0x23 => "End",
+        0x24 => "Home",
+        0x25 => "Left",
+        0x26 => "Up",
+        0x27 => "Right",
+        0x28 => "Down",
+        0x2C => "PrintScreen",
+        0x2D => "Insert",
+        0x2E => "Delete",
+        0x5D => "Menu",
+        0x6A => "NumMultiply",
+        0x6B => "NumAdd",
+        0x6D => "NumSubtract",
+        0x6E => "NumDecimal",
+        0x6F => "NumDivide",
+        0x90 => "NumLock",
+        0x91 => "ScrollLock",
+        0xBA => ";",
+        0xBB => "=",
+        0xBC => ",",
+        0xBD => "-",
+        0xBE => ".",
+        0xBF => "/",
+        0xC0 => "`",
+        0xDB => "[",
+        0xDC => "\\",
+        0xDD => "]",
+        0xDE => "'",
+        _ => return None,
+    };
+    Some(named.to_string())
+}
+
+/// Whether `vk` is a modifier (Shift, Ctrl, Alt, Win, either side).
+pub fn is_modifier(vk: u16) -> bool {
+    matches!(vk, 0x10..=0x12 | 0x5B | 0x5C | 0xA0..=0xA5)
+}
+
+/// "Ctrl+Shift+T": a chord in the bind parser's spelling and the order the
+/// mouse's binds display in. `None` when `vk` has no [`key_name`].
+pub fn chord_name(vk: u16, ctrl: bool, shift: bool, alt: bool, win: bool) -> Option<String> {
+    let key = key_name(vk)?;
+    let mut s = String::new();
+    for (on, name) in [(ctrl, "Ctrl+"), (shift, "Shift+"), (alt, "Alt+"), (win, "Win+")] {
+        if on {
+            s.push_str(name);
+        }
+    }
+    Some(s + &key)
+}
+
 fn key_input(vk: u16, key_up: bool) -> INPUT {
     INPUT {
         r#type: INPUT_KEYBOARD,

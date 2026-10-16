@@ -657,6 +657,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             }
             let text = to_wide(&b.text);
             SetWindowTextW(cb, text.as_ptr());
+            subclass_recorder(cb);
             cb
         };
         let mut onboard_edits: Vec<(u8, HWND, String)> = Vec::new();
@@ -981,6 +982,58 @@ unsafe extern "system" fn swatch_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, l
             TrackMouseEvent(&mut tme);
         }
         WM_MOUSELEAVE => set_hovered(false),
+        _ => {}
+    }
+    let orig: WNDPROC = std::mem::transmute(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    CallWindowProcW(orig, hwnd, msg, wparam, lparam)
+}
+
+/// Make an on-board combo's edit field a key recorder ([`recorder_wndproc`]),
+/// stashing its original WNDPROC the same way as [`subclass_swatch`].
+unsafe fn subclass_recorder(combo: HWND) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowExW, SetWindowLongPtrW, GWLP_USERDATA};
+    let class = to_wide("Edit");
+    let edit = FindWindowExW(combo, std::ptr::null_mut(), class.as_ptr(), std::ptr::null());
+    if edit.is_null() {
+        return;
+    }
+    let orig = SetWindowLongPtrW(edit, GWLP_WNDPROC, recorder_wndproc as *const () as isize);
+    SetWindowLongPtrW(edit, GWLP_USERDATA, orig);
+}
+
+/// The key recorder: in an on-board bind box, pressing a key or chord writes
+/// its name ("Ctrl+Shift+T") and applies it at once, instead of typing. Bare
+/// modifiers wait for the key they modify; Alt+F4 still closes the window.
+/// Everything else goes to the original EDIT WNDPROC.
+unsafe extern "system" fn recorder_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetKeyState;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, GWLP_USERDATA, WM_CHAR, WM_KEYDOWN, WM_SYSCHAR, WM_SYSKEYDOWN,
+    };
+    let down = |vk: i32| GetKeyState(vk) < 0;
+    match msg {
+        WM_KEYDOWN | WM_SYSKEYDOWN => {
+            let vk = wparam as u16;
+            let alt = msg == WM_SYSKEYDOWN || down(0x12);
+            if !(alt && vk == 0x73) {
+                if !crate::is_modifier(vk) {
+                    let win = down(0x5B) || down(0x5C);
+                    if let Some(name) = crate::chord_name(vk, down(0x11), down(0x10), alt, win) {
+                        let text = to_wide(&name);
+                        SetWindowTextW(hwnd, text.as_ptr());
+                        let combo = GetParent(hwnd);
+                        if let Some(st) = state_mut(GetParent(combo)) {
+                            if let Some(k) = st.onboard_edits.iter().position(|(_, h, _)| *h == combo) {
+                                apply_onboard(st, k, name);
+                            }
+                        }
+                    }
+                }
+                return 0;
+            }
+        }
+        // The recorder writes the name; the characters a key would type don't.
+        WM_CHAR | WM_SYSCHAR => return 0,
         _ => {}
     }
     let orig: WNDPROC = std::mem::transmute(GetWindowLongPtrW(hwnd, GWLP_USERDATA));

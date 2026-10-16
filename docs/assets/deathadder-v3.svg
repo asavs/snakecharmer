@@ -68,4 +68,5 @@
   <text class="sub" x="122" y="255" text-anchor="end">binds are stored on the mouse</text>
   <text class="sub" x="122" y="271" text-anchor="end">and work without Snakecharmer</text>
   <text class="sub" x="122" y="287" text-anchor="end">(no hook, zero overhead)</text>
+  <text class="sub" x="122" y="303" text-anchor="end">click a box, press any key</text>
 </svg>

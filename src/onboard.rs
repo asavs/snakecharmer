@@ -406,6 +406,23 @@ mod tests {
     }
 
     #[test]
+    fn every_recorded_key_is_a_bind() {
+        // The settings window's recorder (platform) and the bind parser
+        // (razer-proto) keep separate key tables; they must agree.
+        let mut named = 0;
+        for vk in 0..=0xFFu16 {
+            let Some(name) = platform::key_name(vk) else { continue };
+            named += 1;
+            assert!(parse_bind(&name, 0x04).is_ok(), "vk 0x{vk:02x} records {name:?}");
+            let chord = platform::chord_name(vk, true, true, true, true).unwrap();
+            assert!(parse_bind(&chord, 0x04).is_ok(), "{chord:?}");
+        }
+        assert!(named > 90, "{named} keys");
+        assert_eq!(platform::chord_name(0x54, true, true, false, false).as_deref(), Some("Ctrl+Shift+T"));
+        assert_eq!(platform::key_name(0x10), None, "a bare modifier records nothing");
+    }
+
+    #[test]
     fn thumb_remaps_move_on_board() {
         use crate::config::Config;
         let mut cfg = Config { thumb_back: "copy".into(), thumb_forward: "key:f13".into(), ..Config::default() };
@@ -417,12 +434,12 @@ mod tests {
         assert!(migrate_thumbs(v3(), &mut cfg).is_empty(), "runs once");
 
         // An existing [onboard] entry wins; a remap the mouse can't store stays.
-        let mut cfg = Config { thumb_back: "cut".into(), thumb_forward: "key:/".into(), ..Config::default() };
+        let mut cfg = Config { thumb_back: "cut".into(), thumb_forward: "key:é".into(), ..Config::default() };
         cfg.onboard.insert("back".into(), "f5".into());
         let notes = migrate_thumbs(v3(), &mut cfg);
         assert_eq!(cfg.onboard.get("back").map(String::as_str), Some("f5"));
         assert_eq!(cfg.thumb_back, "none");
-        assert_eq!(cfg.thumb_forward, "key:/", "kept in software: {notes:?}");
+        assert_eq!(cfg.thumb_forward, "key:é", "kept in software: {notes:?}");
         assert!(!cfg.onboard.contains_key("forward"));
     }
 

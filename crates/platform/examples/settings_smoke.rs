@@ -275,6 +275,7 @@ fn diagram_minimal() -> Diagram {
             Shape::Text { role: Role::Note, at: (122, 255), anchor: Anchor::End, text: "binds are stored on the mouse".into() },
             Shape::Text { role: Role::Note, at: (122, 271), anchor: Anchor::End, text: "and work without Snakecharmer".into() },
             Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(no hook, zero overhead)".into() },
+            Shape::Text { role: Role::Note, at: (122, 303), anchor: Anchor::End, text: "click a box, press any key".into() },
         ],
     }
 }

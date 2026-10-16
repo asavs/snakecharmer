@@ -255,20 +255,24 @@ fn mouse_function_name(m: u8) -> String {
     }
 }
 
-/// HID keyboard usage (USB HID Usage Tables, page 0x07) to a key name. Only
-/// keys named here can be written.
+/// HID keyboard usage (USB HID Usage Tables, page 0x07) to a key name: every
+/// key on a standard US keyboard. Only keys named here can be written. The
+/// names are what the settings window's key recorder produces
+/// (`platform::key_name`), so none contains a `+`.
 fn usage_name(u: u8) -> Option<String> {
     Some(match u {
         0x04..=0x1D => ((b'A' + (u - 0x04)) as char).to_string(),
         0x1E..=0x26 => ((b'1' + (u - 0x1E)) as char).to_string(),
         0x27 => "0".into(),
         0x3A..=0x45 => format!("F{}", u - 0x3A + 1),
+        0x59..=0x61 => format!("Num{}", u - 0x59 + 1),
+        0x62 => "Num0".into(),
         0x68..=0x73 => format!("F{}", u - 0x68 + 13),
         _ => NAMED_KEYS.iter().find(|(c, _)| *c == u)?.1.into(),
     })
 }
 
-const NAMED_KEYS: [(u8, &str); 20] = [
+const NAMED_KEYS: [(u8, &str); 41] = [
     (0x28, "Enter"),
     (0x29, "Esc"),
     (0x2A, "Backspace"),
@@ -278,7 +282,17 @@ const NAMED_KEYS: [(u8, &str); 20] = [
     (0x2E, "="),
     (0x2F, "["),
     (0x30, "]"),
+    (0x31, "\\"),
     (0x33, ";"),
+    (0x34, "'"),
+    (0x35, "`"),
+    (0x36, ","),
+    (0x37, "."),
+    (0x38, "/"),
+    (0x39, "CapsLock"),
+    (0x46, "PrintScreen"),
+    (0x47, "ScrollLock"),
+    (0x48, "Pause"),
     (0x49, "Insert"),
     (0x4A, "Home"),
     (0x4B, "PageUp"),
@@ -289,10 +303,26 @@ const NAMED_KEYS: [(u8, &str); 20] = [
     (0x50, "Left"),
     (0x51, "Down"),
     (0x52, "Up"),
+    (0x53, "NumLock"),
+    (0x54, "NumDivide"),
+    (0x55, "NumMultiply"),
+    (0x56, "NumSubtract"),
+    (0x57, "NumAdd"),
+    (0x58, "NumEnter"),
+    (0x63, "NumDecimal"),
+    (0x65, "Menu"),
+    // Synonyms people type; the first spelling above is what's displayed.
+    (0x29, "Escape"),
+    (0x4C, "Del"),
+    (0x46, "PrtSc"),
 ];
 
 fn usage_for(name: &str) -> Option<u8> {
-    (0x04..=0x73).find(|&u| usage_name(u).is_some_and(|k| k.eq_ignore_ascii_case(name)))
+    NAMED_KEYS
+        .iter()
+        .find(|(_, n)| n.eq_ignore_ascii_case(name))
+        .map(|&(u, _)| u)
+        .or_else(|| (0x04..=0x73).find(|&u| usage_name(u).is_some_and(|k| k.eq_ignore_ascii_case(name))))
 }
 
 #[cfg(test)]
@@ -430,6 +460,22 @@ mod tests {
         ] {
             assert_eq!(parse_bind(&b.to_string(), 0x04), Ok(b.clone()), "{b} round-trips");
         }
+    }
+
+    #[test]
+    fn every_named_key_round_trips() {
+        // Each usage with a name parses back to itself, alone and in a chord.
+        for u in 0x04..=0x73u8 {
+            let Some(name) = usage_name(u) else { continue };
+            assert!(!name.contains('+'), "{name} would split as a chord");
+            assert_eq!(parse_bind(&name, 0x04), Ok(Binding::Key { modifiers: 0, usage: u }), "{name}");
+            let chord = format!("Ctrl+Shift+{name}");
+            assert_eq!(parse_bind(&chord, 0x04), Ok(Binding::Key { modifiers: 0x03, usage: u }), "{chord}");
+        }
+        assert_eq!(parse_bind("escape", 0x04), parse_bind("esc", 0x04));
+        assert_eq!(parse_bind("num7", 0x04), Ok(Binding::Key { modifiers: 0, usage: 0x5F }));
+        assert_eq!(parse_bind("/", 0x04), Ok(Binding::Key { modifiers: 0, usage: 0x38 }));
+        assert_eq!(Binding::Key { modifiers: 0, usage: 0x29 }.to_string(), "Esc", "first spelling displays");
     }
 
     #[test]
