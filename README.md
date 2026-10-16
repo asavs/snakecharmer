@@ -1,3 +1,353 @@
+# Snakecharmer
+
+> The Windows counterpart to **[OpenRazer](https://openrazer.github.io/)**. A lightweight replacement for [Razer Synapse](https://www.razer.com/synapse), featuring the essential settings and additionally button remapping!
+
+```
+=====================================================================
+                 T H E   S N A K E   C H A R M E R
+                        ~ of the Nile Delta ~
+=====================================================================
+
+           \  |  /
+         `.  \|/  .'                                    *
+       --- (  O  ) ---            .
+         .'  /|\  `.                        __
+           /  |  \               __        /  \
+                                /  \      /    \        __
+                     __        /    \    /      \      /  \
+                    /  \      /      \  /        \    /    \
+         __________/____\____/________\/__________\__/______\____
+          . : ' .  ' : . ' . :  : ' . : ' .  : ' . : ' .  ' :
+
+
+                  _.-==-._                          ♪
+                 ((_.--._))                       o  ♫
+                 ( ~o  o~ )                    ~  ♪         ___
+                  \  __  /                  ~  ♫          .'   `.
+                .-.\    /.-.                             ( (o o) )
+               /   |;  ;|   \                             \ \_/ /
+              |    |;  ;|    |                          ___;   ;
+              |   /;    ;\   |                         (__     ;
+               \ | ========<>=== ~ o ~                    \    ;
+                \|  ;    ;  |/                           .'   ;
+                 |  ;    ;  |                           ;   .'
+                /   `-..-'   \                          ;   ;
+               |   _|    |_   |                     ____;   ;____
+              _|__(_)____(_)__|_                   (_____________)
+             (__________________)                   \___________/
+                                          
+
+=====================================================================
+   He plays, the cobra sways -- an old agreement between them,
+   older than the pyramids on the horizon.
+=====================================================================
+```
+## Why
+
+Synapse runs a pile of background processes, one of them a full Chromium instance, to send
+what are ultimately a handful of HID feature reports. Snakecharmer talks to the mouse
+directly over Win32 HID and then gets out of the way.
+
+| | Razer Synapse | Snakecharmer | Δ |
+|---|---|---|---:|
+| Processes | Razer Synapse 3<br>Razer Central<br>Razer Synapse Service Process<br>Razer Synapse Service<br>RazerCentralService<br>embedded Chromium browser (CefSharp) | `snakecharmer.exe`<br><sub>`crt-static`, no runtime deps</sub> | **6 → 1** |
+| Kernel drivers | `RZCONTROL` + `RZVIRTUAL` virtual device drivers<br><sub>observed still registered after uninstalling Synapse</sub> | none — userland HID only | **2 → 0** |
+| On-disk size | 500 MB<br><sub>Razer's published minimum</sub> | 0.61 MB (measured)<br><sub>single static exe</sub> | **~820×** |
+| Idle RAM | ~558 MB (measured) | 17 MB (measured)<br><sub>2.5 MB private working set</sub> | **~32×** |
+| Idle CPU | ≈ 1 CPU·h/day  | ≈ 0.06 CPU·h/day (measured)<br><sub>blocking HID reads, no poll loop</sub> | **~17×** |
+| Telemetry | yes | none, local-only | — |
+
+Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI setting. Yikes man
+
+## Features
+
+- **DPI level** — set and lock sensitivity; re-asserted at login and periodically.
+- **Polling rate** — set and lock the report rate (up to 8000 Hz on devices that
+  support it), from the settings window, the config, or `charmctl set-poll`; the
+  dropdown offers exactly the connected device's supported rates.
+- **DPI-button remap** — the two buttons behind the wheel emit private Razer vendor codes
+  (`0x20`/`0x21`) the OS can't see. Snakecharmer catches them at the HID layer and turns
+  them into keystrokes (default: copy / paste).
+- **Thumb-button remap** (opt-in) — the side Back/Forward buttons remapped to keystrokes
+  via a low-level `WH_MOUSE_LL` hook that suppresses the original. The hook exists only
+  while a remap is configured; at the default (`none`/`none`) no hook is installed at
+  all, so the pointer's motion path is untouched. Note: games accept MB4/MB5 natively,
+  so most people don't need this.
+- **On-board binds** (DeathAdder V3) — write a button's bind into the mouse's own memory,
+  so it works with Snakecharmer closed, in games that block injected input, and on other
+  PCs. See [On-board binds](#on-board-binds).
+- **RGB lighting** — static, breathing, spectrum, or off, per zone: the wheel and
+  logo can carry different effects and colors (settings window), or one pick for
+  both (tray menu).
+- **System tray** with quick DPI, lighting, a Start with Windows toggle, reload, and
+  quit, plus a native settings window (no admin, windowless until opened).
+
+## Scope
+
+A short, deliberate list of devices — see
+[`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md) for the current table. Each
+device is described by a small `DeviceSpec`, so adding another mouse is a one-file diff
+and a contained job — a good one to hand an AI coding agent. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md), [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md)
+for the protocol, and [`docs/DRAWING-MICE-GUIDE.md`](docs/DRAWING-MICE-GUIDE.md) for the
+device's button-map diagram. [`docs/DEVICE-WISHLIST.md`](docs/DEVICE-WISHLIST.md) lists the
+mice that are up for grabs, with the protocol facts OpenRazer already knows about each, and
+a prompt you can paste into any AI assistant to do it — [`AGENTS.md`](AGENTS.md) is the
+brief they work from, and it isn't specific to any one tool or model.
+
+### One target, and it's Razer
+
+The essential settings and nothing else: DPI, polling rate, button rebinds, and lighting
+as a *setting* — pick a color or a basic effect, it's applied, the program goes quiet.
+Snakecharmer does not animate your lighting, sync it to anything, or run a macro engine,
+and it never will. All three need something permanently hot,
+which is the exact cost this exists to avoid.
+
+The people who do those things do them well, so the redirect *is* the answer:
+
+| If you want | Use |
+|---|---|
+| RGB synced to your games, across brands | [SignalRGB](https://signalrgb.com/) |
+| Lighting on many devices, free | [OpenRGB](https://openrgb.org/) |
+| Per-application button profiles | [X-Mouse Button Control](https://www.highrez.co.uk/downloads/xmousebuttoncontrol.htm) |
+| Macros | [AutoHotkey](https://www.autohotkey.com/) |
+| Linux | [OpenRazer](https://openrazer.github.io/) + [Polychromatic](https://polychromatic.app/) |
+| macOS | [razer-macos](https://github.com/1kc/razer-macos) |
+| Razer *and* Logitech in one tool | [libratbag](https://github.com/libratbag/libratbag) + [Piper](https://github.com/libratbag/piper) |
+| To install nothing at all | [usemice](https://github.com/robbieplata/usemice) |
+
+Running Snakecharmer *alongside* one of them is fine and sometimes ideal — it takes the
+DPI buttons X-Mouse can't see, X-Mouse does the per-app logic Snakecharmer doesn't have.
+[`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md) is the full map, including the cases where
+the honest answer is "not this."
+
+## Requirements
+
+- Windows 10/11
+- A [supported Razer mouse](docs/SUPPORTED-DEVICES.md)
+- To build from source: [Rust](https://rustup.rs/) 1.97+ — or just grab a prebuilt
+  `snakecharmer.exe` from the Releases page
+- Optional: Python 3, only if you're using the `reference/` toolkit to crack a new device
+
+## Build
+
+```powershell
+cargo build --release
+```
+
+Produces `target\release\snakecharmer.exe` (the windowless daemon) and
+`target\release\charmctl.exe` (the console control CLI).
+
+## Start with Windows
+
+On first run the daemon registers itself to start at login — a per-user value named
+`Snakecharmer` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (no admin, no
+installer). Toggle it with the tray menu's **Start with Windows** checkbox; turn it off
+and it stays off. The same registration is what lists the app in Task Manager → Startup
+apps, and the tray checkbox reads the real registry state, so disabling it in either
+place keeps both in agreement.
+
+Upgrading from a build that used `scripts\install-autostart.ps1`? Delete the leftover
+`Snakecharmer.vbs` (or any hand-made `Snakecharmer.lnk`) from your Startup folder
+(`Win+R` → `shell:startup`), or the daemon launches twice at login — harmless, the
+second instance exits on the single-instance mutex, but it clutters the log.
+
+## Configuration
+
+Config lives at `%LOCALAPPDATA%\Snakecharmer\config.toml`, written with defaults on first
+run and editable from the settings window. Defaults:
+
+```toml
+dpi = 1800
+dpi_up = "copy"           # front DPI button
+dpi_down = "paste"        # rear DPI button
+thumb_back = "none"       # "none" = keep native Back
+thumb_forward = "none"    # "none" = keep native Forward
+lighting = "keep"         # keep | static | breathing | spectrum | off (all zones)
+color = "#00ff00"
+reassert_interval_secs = 60
+# polling_rate = 1000    # Hz, per-device (see docs/SUPPORTED-DEVICES.md); omit = leave as-is
+
+# Optional per-zone overrides (zones: "wheel", "logo"); unset fields fall back
+# to the device-wide lighting/color above. The settings window writes these.
+# [zones.logo]
+# lighting = "breathing"
+# color = "#ff0000"
+
+# Optional on-board binds, written to the mouse itself (DeathAdder V3 only).
+# [onboard]
+# back = "ctrl+c"
+# wheel_click = "default"
+```
+
+### On-board binds
+
+Some mice can store a button's bind in their own memory, and then send it with no software
+running. On the DeathAdder V3, Snakecharmer can write those binds, from the config or with
+`charmctl keymap set`. It also reads what's stored and can put leftover binds (from
+Synapse, say) back to factory.
+
+```toml
+[onboard]
+back = "ctrl+c"           # button name = bind
+wheel_click = "f5"
+forward = "default"       # put it back to factory
+```
+
+- **Buttons:** `right`, `wheel_click`, `back`, `forward`, `wheel_up`, `wheel_down`. Left
+  and the underside DPI button are never written. A button you don't list keeps whatever it
+  stores.
+- **Binds:** `default`, `disabled`, a mouse function (`middle click`), or a key or chord
+  (`a`, `1`, `f5`, `enter`, `pageup`, `ctrl+c`, `ctrl+shift+t`, `copy`, `paste`, `cut`).
+- **When it's written:** on attach, only when different from what the mouse stores, and
+  checked by read-back. The mouse keeps it, so it works with Snakecharmer closed.
+- **Leftovers:** on attach the daemon reads the stored binds. If it finds non-default ones
+  that `[onboard]` doesn't cover, it shows a notice offering to reset them.
+- **Thumb remaps:** on a mouse that stores binds, the settings window edits back and forward
+  on-board instead of in software. An existing `thumb_back` / `thumb_forward` remap is moved
+  into `[onboard]` on first connect (logged); one the mouse can't store stays in software.
+
+Every write replays the layout Synapse was captured sending
+([capture](docs/captures/V3-20261006-135244-report.md),
+[more buttons](docs/captures/V3-20261016-additional-buttons/)); the first write from
+Snakecharmer itself was checked on hardware
+([notes](docs/captures/V3-20261016-snakecharmer-write/notes.md)). Other mice need their own
+capture first; see [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md).
+
+### PC Vitals health capsule
+
+Snakecharmer publishes a small event-driven operational capsule at
+`%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`. It updates when the daemon
+starts, connects, loses or recovers a device session, changes polling configuration, or
+quits. A 45-minute lease refresh piggybacks on the existing session wait loop, so it adds
+no polling thread and performs no extra device I/O. The capsule contains bounded counters, typed incident
+codes, retry delay, configured polling rate, and a machine-salted opaque device ID. It
+contains no paths, usernames, commands, window titles, raw logs, hardware serials, or
+user input, and it cannot grant PC Vitals authority to change health severity, recommend
+a restart, or execute an action. Recovered incident episodes are retained for at most 24
+hours and keep immutable IDs and start times; the public capsule is output, not trusted
+producer memory.
+
+## `charmctl` — command-line control
+
+```
+charmctl devices                         list Razer mice plugged in, supported or not
+charmctl status                          device mode + DPI + polling rate (read-only)
+charmctl keymap                          button binds stored on the mouse
+charmctl keymap reset                    put non-default binds back to factory (V3)
+charmctl keymap set <button> <bind>      write a bind to the mouse, e.g. back ctrl+c (V3)
+charmctl set-dpi X [Y]                    set DPI
+charmctl set-poll <hz>                    set polling rate (Hz)
+charmctl set-mode driver|hardware         set device mode
+charmctl set-color <#RRGGBB>              static color (both zones)
+charmctl set-effect static [#RRGGBB]      static color effect
+charmctl set-effect breathing [#RRGGBB]   breathing effect
+charmctl set-effect spectrum              spectrum cycling
+charmctl set-effect off                   lighting off
+charmctl self-test                        test keystroke injection (F13)
+charmctl where                            print config/log paths
+```
+
+## Architecture
+
+```
+snakecharmer/
+├─ crates/
+│  ├─ razer-proto/   # pure protocol: report builder, CRC, mode/DPI/RGB commands (no I/O)
+│  ├─ razer-hid/     # device open/enumerate, feature reports, input-report listener
+│  └─ platform/      # Win32: single-instance, keystroke injection, WH_MOUSE_LL hook
+├─ src/              # daemon, tray, native settings window, config, lighting
+└─ reference/        # runnable Python recon toolkit — worked example for cracking new devices
+```
+
+See [`docs/SPEC.md`](docs/SPEC.md) for the full design and the protocol notes.
+
+## Upcoming
+
+Candidate features, filtered for compatibility with the zero-overhead ethos (see
+[`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md) for where these came from). Roughly in
+order of plausibility; none are promises:
+
+- **More devices** — the protocol crate is built for it; crack your own mouse with
+  [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md) and send a PR.
+- **Lift-off distance / surface calibration** — protocol exists in OpenRazer; needs
+  careful verification since it touches sensor behavior.
+- **Per-application profiles** — possible, but adds a foreground-window watcher; only
+  lands if it provably keeps idle cost at ~0.
+- **Firmware-level protocol research on owned hardware** — the natural extension of the
+  cracking guide (see [`docs/how-deep-could-you-go.md`](docs/how-deep-could-you-go.md)):
+  documenting a device's protocol at the source to speed up support for the next mouse.
+  Research track, not a shipping feature.
+
+Non-goals, so you don't wait for them: game-synced RGB, audio visualizers, cloud
+profiles, accounts, telemetry — and **DPI stages**: you get used to one pointer speed
+and keep it, and those two buttons are far more useful rebound to something you
+actually do. Reclaiming them is why this project exists. If you need the rest, see the
+[alternatives](docs/ALTERNATIVES.md) — some are genuinely good.
+
+## Relationship to OpenRazer & license
+
+Snakecharmer's protocol knowledge — the report layout, command classes, CRC, transaction
+IDs, and Chroma effect encodings — comes from
+**[OpenRazer](https://github.com/openrazer/openrazer)** (`driver/razercommon.*`,
+`razerchromacommon.c`, `razermouse_driver.c`). OpenRazer did the hard reverse-engineering;
+Snakecharmer ports the DeathAdder Elite slice of it to Windows.
+
+That makes Snakecharmer a derivative work of OpenRazer, so it carries the same copyleft:
+the **GNU General Public License v2.0 or later**. See [`LICENSE`](LICENSE) and
+[`NOTICE`](NOTICE).
+
+Thank you very much to the OpenRazer maintainers! <3
+
+## Safety
+
+Only documented Razer commands (sourced from OpenRazer). No firmware, bootloader, or DFU,
+and no fuzzing of feature reports — a bad write can wedge your only mouse. The mouse never
+loses left/right click, and unplug/replug always restores factory behavior.
+
+Staying in userland with documented commands is a design choice, not a limitation — for
+the full argument (and the ladder of what "going deeper" would actually mean), see
+[`docs/how-deep-could-you-go.md`](docs/how-deep-could-you-go.md).
+
+### What happens if…
+
+<details>
+<summary><b>…I unplug the mouse while Snakecharmer is running?</b></summary>
+
+The session ends and the daemon retries every 3 seconds. When a supported mouse comes
+back (the same one or a different supported model), it reconnects and re-applies your
+DPI, driver mode, and lighting automatically. Nothing to restart.
+</details>
+
+<details>
+<summary><b>…I run it with a Naga, a keyboard, or any other Razer device?</b></summary>
+
+Nothing is ever written to it. Snakecharmer only opens devices whose USB product id is
+in its [supported-devices table](docs/SUPPORTED-DEVICES.md); anything else, Razer or
+not — including DeathAdder versions not yet in the table — is never touched. The daemon
+just waits in its 3-second retry loop for a supported mouse to appear.
+
+It will *name* an unsupported mouse, though. Opening Settings with one plugged in says
+which device it found and offers to open the
+[device wishlist](docs/DEVICE-WISHLIST.md), because adding it is usually a small job —
+its protocol is very likely already documented. That comes from reading the USB
+descriptors the OS already has (`charmctl devices` prints the same thing); the device
+itself is still never opened or written to.
+</details>
+
+<details>
+<summary><b>…I uninstalled Synapse, but a button still types a key?</b></summary>
+
+That bind lives in the mouse's on-board memory, not on the PC. Synapse can save remaps to
+the mouse itself, which then sends them with no software running, so uninstalling Synapse
+leaves them in place. On the DeathAdder V3, `charmctl keymap` reads what's stored on each
+button and flags anything that isn't the default, and `charmctl keymap reset` puts them
+back to factory; the daemon also offers that reset when it finds leftovers on attach. On
+other mice that store binds on-board, Snakecharmer can't reset them yet, so **reset the
+buttons to default in Synapse before uninstalling it**.
+[`reference/button_listener.ps1`](reference/button_listener.ps1) shows what each button
+really sends, and [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md) is the work on
+decoding it. The DeathAdder Elite is not affected: Synapse 4 remaps it in software.
 </details>
 
 <details>
