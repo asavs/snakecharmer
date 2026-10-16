@@ -86,6 +86,10 @@ pub enum CalloutSlot {
     /// [`SettingsInit::lighting`](crate::settings::SettingsInit::lighting).
     /// Reserves a wider rect than the plain dropdown slots.
     Lighting(u8),
+    /// An on-board bind control (editable dropdown); the payload is the
+    /// button id of a [`SettingsInit::onboard`](crate::settings::SettingsInit::onboard)
+    /// entry.
+    Button(u8),
 }
 
 /// Width of the dropdown a callout reserves space for (design units). Wide

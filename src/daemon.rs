@@ -36,9 +36,9 @@ pub enum MenuAction {
     SetZoneEffectKind(u8, String),
     /// Set one lighting zone's color (zone = a `razer_proto::led` id).
     SetZoneColor(u8, Rgb),
-    /// Stage one on-board bind from the settings window (button name, bind
-    /// text; blank = drop the entry) and write it to the mouse if valid.
-    SetOnboard(String, String),
+    /// Stage one on-board bind from the settings window (keymap button id,
+    /// bind text; blank = drop the entry) and write it to the mouse if valid.
+    SetOnboard(u8, String),
     Save,
     OpenSettings,
     SettingsClosed,
@@ -198,6 +198,7 @@ fn to_platform_diagram(d: &razer_proto::diagram::Diagram) -> platform::diagram::
                     rd::CalloutSlot::ThumbForward => pd::CalloutSlot::ThumbForward,
                     rd::CalloutSlot::Wheel => pd::CalloutSlot::Wheel,
                     rd::CalloutSlot::Lighting(z) => pd::CalloutSlot::Lighting(z),
+                    rd::CalloutSlot::Button(b) => pd::CalloutSlot::Button(b),
                 };
                 // The window's dropdowns are self-identifying (index 0 names
                 // the button — see combo_options), so the callout captions
@@ -259,13 +260,20 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
             }
         })
         .collect();
-    // On-board bind fields exist only for mice with a recorded keymap; one
-    // per writable button, seeded from [onboard]. The names map row index
-    // back to a button when the window reports a row.
-    let onboard_rows = razer_proto::keymap::spec_for(spec.product_id)
-        .map(|km| crate::onboard::editable_rows(km, &cfg.onboard));
-    let onboard_names: Vec<&'static str> =
-        onboard_rows.iter().flatten().map(|(name, _)| *name).collect();
+    // On-board bind controls exist only for mice with a recorded keymap: one
+    // per writable button, mounted at its CalloutSlot::Button on the diagram
+    // and opening on its [onboard] entry. They replace the thumb dropdowns.
+    let onboard = razer_proto::keymap::spec_for(spec.product_id).map(|km| {
+        crate::onboard::controls(km, &cfg.onboard)
+            .into_iter()
+            .map(|c| platform::settings::OnboardButton {
+                id: c.button,
+                label: onboard_label(c.name),
+                presets: c.presets,
+                text: c.text,
+            })
+            .collect()
+    });
     let init = platform::settings::SettingsInit {
         device_name: spec.name.to_string(),
         diagram: spec.diagram.as_ref().map(to_platform_diagram),
@@ -284,12 +292,7 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
         // entry, mounted disabled by the window. No config key, no events.
         wheel: ActionCombo { labels: vec!["Middle click (default)".to_string()], index: 0 },
         lighting,
-        onboard: onboard_rows.map(|rows| platform::settings::OnboardInit {
-            rows: rows
-                .into_iter()
-                .map(|(name, text)| platform::settings::OnboardRow { label: onboard_label(name), text })
-                .collect(),
-        }),
+        onboard,
     };
     let tx = tx.clone();
     thread::spawn(move || {
@@ -339,9 +342,10 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
                     .rgb_zones
                     .get(zi)
                     .map(|&zone| MenuAction::SetZoneColor(zone, Rgb::new(r, g, b))),
-                SE::Onboard(i, text) => onboard_names
-                    .get(i)
-                    .map(|name| MenuAction::SetOnboard(name.to_string(), text)),
+                SE::Onboard(button, text) => Some(MenuAction::SetOnboard(
+                    button,
+                    crate::onboard::choice_to_bind(button, &text),
+                )),
                 SE::Save => Some(MenuAction::Save),
             };
             if let Some(c) = cmd {
@@ -1233,14 +1237,17 @@ fn handle_menu(
             save_config(cfg, log);
             log.log(&format!("Settings: {name} color -> {hex}."));
         }
-        MenuAction::SetOnboard(name, value) => {
+        MenuAction::SetOnboard(button, value) => {
             // A rejected entry is reported and never stored; a failed write
             // keeps the (valid) entry so the next attach retries it.
             let spec = ctrl.spec();
             let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
                 return Ok(false);
             };
-            let problem = match crate::onboard::set_entry(km, &mut cfg.onboard, &name, &value) {
+            let Some(&(_, name)) = km.buttons.iter().find(|(b, _)| *b == button) else {
+                return Ok(false);
+            };
+            let problem = match crate::onboard::set_entry(km, &mut cfg.onboard, name, &value) {
                 Ok(None) => {
                     log.log(&format!("Settings: on-board {name} left alone."));
                     None

@@ -80,6 +80,10 @@ pub enum CalloutSlot {
     /// index into `DeviceSpec::rgb_zones` (= the settings window's lighting
     /// rows), so diagrams stay generic over zone count.
     Lighting(u8),
+    /// A button whose bind is stored in the mouse's own memory: the settings
+    /// window mounts its on-board bind control here. Carries the keymap button
+    /// id (`crate::keymap`), so it only appears on mice with a recorded keymap.
+    Button(u8),
 }
 
 /// A drawing primitive. Everything is const-constructible so diagrams live

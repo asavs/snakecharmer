@@ -14,8 +14,7 @@
 
 use platform::diagram::{Anchor, CalloutSlot, Diagram, Role, Shape};
 use platform::settings::{
-    self, ActionCombo, DpiButtonsInit, LightingZoneInit, OnboardInit, OnboardRow, SettingsEvent,
-    SettingsInit,
+    self, ActionCombo, DpiButtonsInit, LightingZoneInit, OnboardButton, SettingsEvent, SettingsInit,
 };
 
 /// A caption-less callout, as the daemon emits them for the window (the
@@ -231,8 +230,14 @@ fn diagram_minimal() -> Diagram {
             Shape::Polyline { role: Role::Detail, points: vec![(218, 106), (237, 106)] },
             Shape::Polyline { role: Role::Detail, points: vec![(218, 114), (237, 114)] },
             Shape::Polyline { role: Role::Detail, points: vec![(219, 122), (236, 122)] },
+            Shape::Polyline { role: Role::Lead, points: vec![(236, 70), (262, 40), (332, 40)] },
+            callout(CalloutSlot::Button(0x09), (348, 37), Anchor::Start),
             Shape::Polyline { role: Role::Lead, points: vec![(243, 98), (332, 98)] },
-            callout(CalloutSlot::Wheel, (348, 95), Anchor::Start),
+            callout(CalloutSlot::Button(0x03), (348, 95), Anchor::Start),
+            Shape::Polyline { role: Role::Lead, points: vec![(236, 126), (262, 150), (332, 150)] },
+            callout(CalloutSlot::Button(0x0A), (348, 147), Anchor::Start),
+            Shape::Polyline { role: Role::Lead, points: vec![(290, 200), (332, 200)] },
+            callout(CalloutSlot::Button(0x02), (348, 197), Anchor::Start),
             // thumb buttons (drawn as bumps sticking out of the left outline)
             Shape::Path {
                 role: Role::AccentB,
@@ -264,13 +269,12 @@ fn diagram_minimal() -> Diagram {
             Shape::Polyline { role: Role::Detail, points: vec![(138, 204), (147, 202)] },
             Shape::Polyline { role: Role::Lead, points: vec![(138, 166), (126, 166)] },
             Shape::Polyline { role: Role::Lead, points: vec![(136, 225), (126, 225)] },
-            callout(CalloutSlot::ThumbForward, (122, 162), Anchor::End),
-            callout(CalloutSlot::ThumbBack, (122, 221), Anchor::End),
-            // hook cost, right at the point of decision (under the thumb
-            // dropdowns) — benefit first, then the cost detail
-            Shape::Text { role: Role::Note, at: (122, 255), anchor: Anchor::End, text: "default = no hook, zero cost".into() },
-            Shape::Text { role: Role::Note, at: (122, 271), anchor: Anchor::End, text: "remaps use a global mouse hook".into() },
-            Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(~µs per mouse event)".into() },
+            callout(CalloutSlot::Button(0x05), (122, 162), Anchor::End),
+            callout(CalloutSlot::Button(0x04), (122, 221), Anchor::End),
+            // what these controls do, right at the point of decision
+            Shape::Text { role: Role::Note, at: (122, 255), anchor: Anchor::End, text: "binds are stored on the mouse".into() },
+            Shape::Text { role: Role::Note, at: (122, 271), anchor: Anchor::End, text: "and work without Snakecharmer".into() },
+            Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(written on Save, no hook)".into() },
         ],
     }
 }
@@ -332,12 +336,26 @@ fn main() {
             thumb_forward: combo("\u{2192} Forward (default)", 0),
             wheel: ActionCombo { labels: strings(&["Middle click (default)"]), index: 0 },
             lighting: vec![],
-            onboard: Some(OnboardInit {
-                rows: ["Right", "Wheel click", "Back", "Forward", "Wheel up", "Wheel down"]
-                    .iter()
-                    .map(|l| OnboardRow { label: l.to_string(), text: String::new() })
-                    .collect(),
-            }),
+            // V3-like: every writable button is an on-board control at its
+            // CalloutSlot::Button, so the thumb dropdowns above aren't mounted.
+            onboard: Some(
+                [
+                    (0x02, "Right", "Right click (default)", "Right click (default)"),
+                    (0x03, "Wheel click", "Middle click (default)", "Copy (Ctrl+C)"),
+                    (0x04, "Back", "Back (default)", "f5"),
+                    (0x05, "Forward", "Forward (default)", "Forward (default)"),
+                    (0x09, "Wheel up", "Scroll up (default)", "Scroll up (default)"),
+                    (0x0A, "Wheel down", "Scroll down (default)", "Scroll down (default)"),
+                ]
+                .into_iter()
+                .map(|(id, label, default, text)| OnboardButton {
+                    id,
+                    label: label.to_string(),
+                    presets: strings(&[default, "Middle click", "Copy (Ctrl+C)", "Paste (Ctrl+V)", "Disabled"]),
+                    text: text.to_string(),
+                })
+                .collect(),
+            ),
         }
     } else {
         // An Elite-like device: everything on.

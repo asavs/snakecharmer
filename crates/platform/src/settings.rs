@@ -50,10 +50,9 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRect, CallWindowProcW, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow,
-    DispatchMessageW, GetMessageW, GetParent, LoadCursorW, RegisterClassW, SendMessageW,
-    GetWindowTextW, SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow,
-    TranslateMessage, WS_BORDER,
-    CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
+    DispatchMessageW, GetMessageW, GetParent, GetWindowTextW, LoadCursorW, RegisterClassW,
+    SendMessageW, SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage,
+    CBS_AUTOHSCROLL, CBS_DROPDOWN, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
     HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DRAWITEM, WM_HSCROLL,
     WM_MOUSEMOVE, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WNDPROC, WS_CHILD, WS_OVERLAPPED,
@@ -95,7 +94,6 @@ const BS_PUSHBUTTON: u32 = 0x0000_0000;
 const BS_OWNERDRAW: u32 = 0x0000_000B;
 const CBN_SELCHANGE: u16 = 1;
 const BN_CLICKED: u16 = 0;
-const ES_AUTOHSCROLL: u32 = 0x0000_0080;
 
 // Control ids.
 const ID_TB_DPI: u16 = 101;
@@ -109,9 +107,9 @@ const ID_CB_WHEEL: u16 = 114;
 const ID_BTN_DPI_MINUS: u16 = 115;
 const ID_BTN_DPI_PLUS: u16 = 116;
 const ID_BTN_SAVE: u16 = 109;
-// On-board bind edit fields: id = base + row index (up to MAX_ONBOARD rows).
+// On-board bind combos: id = base + index (up to MAX_ONBOARD buttons).
 const MAX_ONBOARD: u16 = 16;
-const ID_ED_ONBOARD_BASE: u16 = 300;
+const ID_CB_ONBOARD_BASE: u16 = 300;
 // Per-zone lighting controls: id = base + zone index (up to MAX_ZONES zones).
 const MAX_ZONES: u16 = 16;
 const ID_CB_EFFECT_BASE: u16 = 200;
@@ -172,16 +170,6 @@ const SLIDER_W: i32 = 240;
 const POLL_COMBO_W: i32 = 140;
 /// Minimum client width (the centered rows must fit without a diagram).
 const MIN_CLIENT_W: i32 = 430;
-/// Height of the on-board explainer above the bind fields (three lines: at
-/// `MIN_CLIENT_W` the sentence wraps to that many).
-const ONBOARD_NOTE_H: i32 = 3 * LBL_H;
-/// Widths of one on-board bind cell (caption + edit) and the gap between the
-/// two columns the cells are laid out in.
-const OB_LBL_W: i32 = 74;
-const OB_EDIT_W: i32 = 110;
-const OB_COL_GAP: i32 = 14;
-/// Vertical gap between on-board bind rows.
-const OB_ROW_GAP: i32 = 6;
 
 /// One remappable-button dropdown: its list entries and the selected index.
 /// Convention: index 0 is the button's *identity/default* entry (e.g.
@@ -235,42 +223,44 @@ pub struct SettingsInit {
     pub wheel: ActionCombo,
     /// One lighting row per zone, in device order (empty = no lighting).
     pub lighting: Vec<LightingZoneInit>,
-    /// On-board bind fields; `None` = this mouse has no recorded keymap and
-    /// the section is not created.
-    pub onboard: Option<OnboardInit>,
+    /// Buttons whose bind is stored on the mouse; `None` = this mouse has no
+    /// recorded keymap. On a mouse that has one, these replace the thumb-button
+    /// dropdowns.
+    pub onboard: Option<Vec<OnboardButton>>,
 }
 
-/// One on-board bind field: the button's caption and the bind text it starts
-/// with (empty = nothing configured, leave the mouse alone).
-pub struct OnboardRow {
+/// One button whose bind is stored in the mouse's own memory: an editable
+/// dropdown mounted at the diagram's [`CalloutSlot::Button`] with this `id`.
+/// Like [`ActionCombo`], `presets[0]` names the button and its factory bind,
+/// so the control identifies itself; other binds can be typed (`ctrl+c`).
+/// The window only carries text; the app validates it.
+pub struct OnboardButton {
+    /// The keymap button id, matching the diagram's `CalloutSlot::Button`.
+    pub id: u8,
+    /// Caption for the labeled-row fallback (no diagram slot), e.g. "Back".
     pub label: String,
+    pub presets: Vec<String>,
+    /// What the control shows on open.
     pub text: String,
 }
 
-/// The on-board bind editor: one text field per writable button. The window
-/// only carries text; the app validates it (see [`SettingsEvent::Onboard`]).
-pub struct OnboardInit {
-    pub rows: Vec<OnboardRow>,
-}
-
-/// Which on-board rows to report when Save is clicked: every non-empty row
-/// (so a bad entry is re-reported rather than silently kept) and any row
-/// edited back to empty (so the app can drop it). Untouched empty rows stay
-/// quiet. `initial` and `now` are parallel; text is compared trimmed.
-fn onboard_rows_to_send(initial: &[String], now: &[String]) -> Vec<usize> {
+/// The on-board controls to report when Save is clicked: only the ones whose
+/// text changed since the window opened (compared trimmed), so opening and
+/// saving never writes to the mouse.
+fn onboard_changed(initial: &[String], now: &[String]) -> Vec<usize> {
     now.iter()
+        .zip(initial)
         .enumerate()
-        .filter(|(i, n)| {
-            !n.trim().is_empty() || initial.get(*i).is_some_and(|b| !b.trim().is_empty())
-        })
-        .map(|(i, _)| i)
+        .filter(|(_, (n, i))| n.trim() != i.trim())
+        .map(|(k, _)| k)
         .collect()
 }
 
 /// Events emitted by the window on live changes / button presses.
 /// Lighting events carry the zone's index into [`SettingsInit::lighting`].
-/// `Onboard(row, text)` is sent only on Save, just before [`Self::Save`]: the
-/// row's index into [`OnboardInit::rows`] and its trimmed text.
+/// `Onboard(id, text)` is sent only on Save, just before [`Self::Save`], for
+/// each on-board control the user changed: the button id and its trimmed text.
+/// They aren't live because each one writes to the mouse's memory.
 #[derive(Debug, Clone)]
 pub enum SettingsEvent {
     Dpi(u16),
@@ -281,7 +271,7 @@ pub enum SettingsEvent {
     ThumbForward(usize),
     Effect(usize, usize),
     Color(usize, u8, u8, u8),
-    Onboard(usize, String),
+    Onboard(u8, String),
     Save,
 }
 
@@ -310,8 +300,8 @@ struct WindowState {
     lbl_dpi: HWND,
     /// One entry per lighting zone (empty when the device has no lighting).
     swatches: Vec<Swatch>,
-    /// The on-board bind edit fields with the text each started with.
-    onboard_edits: Vec<(HWND, String)>,
+    /// The on-board controls: button id, the combo, and the text it opened with.
+    onboard_edits: Vec<(u8, HWND, String)>,
     /// Owned UI font (Segoe UI 9 pt) shared by all controls.
     ui_font: HFONT,
     /// Runtime-drawn titlebar/taskbar icon (freed on `WM_DESTROY`); null if
@@ -433,6 +423,14 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             && slot_rect(CalloutSlot::DpiDown).is_some();
         let thumb_in_diagram = slot_rect(CalloutSlot::ThumbBack).is_some()
             && slot_rect(CalloutSlot::ThumbForward).is_some();
+        // On-board buttons ride the diagram only when every one has a slot
+        // there, like lighting. On a mouse with them, back and forward are
+        // on-board buttons, so the thumb dropdowns (and their hook) give way.
+        let onboard: &[OnboardButton] = init.onboard.as_deref().unwrap_or_default();
+        let onboard = &onboard[..onboard.len().min(MAX_ONBOARD as usize)];
+        let onboard_in_diagram = !onboard.is_empty()
+            && onboard.iter().all(|b| slot_rect(CalloutSlot::Button(b.id)).is_some());
+        let show_thumbs = init.onboard.is_none();
         // Lighting rides the diagram only when EVERY zone has a slot there;
         // a partial set falls back to top-cluster rows so no zone vanishes.
         let lighting_in_diagram = !init.lighting.is_empty()
@@ -449,28 +447,20 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         if init.dpi_buttons.is_some() && !dpi_in_diagram {
             fb_h += 2 * fb_row; // up + down fallback rows
         }
-        if !thumb_in_diagram {
+        if show_thumbs && !thumb_in_diagram {
             fb_h += 2 * fb_row + 4 + HOOK_NOTE_H; // thumb rows + hook note tucked under
+        }
+        if !onboard.is_empty() && !onboard_in_diagram {
+            fb_h += onboard.len() as i32 * fb_row;
         }
         if fb_h > 0 {
             fb_h += GROUP_GAP;
         }
-        // On-board binds: an explainer plus the fields in two columns.
-        let onboard_rows = init
-            .onboard
-            .as_ref()
-            .map_or(0, |o| o.rows.len().min(MAX_ONBOARD as usize) as i32);
-        let onboard_h = if onboard_rows == 0 {
-            0
-        } else {
-            let grid = (onboard_rows + 1) / 2;
-            GROUP_GAP + ONBOARD_NOTE_H + 4 + grid * ROW2_H + (grid - 1) * OB_ROW_GAP
-        };
         let mut top_h = ROW1_H + GROUP_GAP + ROW2_H; // DPI slider + polling
         if !lighting_in_diagram {
             top_h += init.lighting.len() as i32 * (GROUP_GAP + ROW2_H); // one row per zone
         }
-        top_h += fb_h + onboard_h;
+        top_h += fb_h;
         let bottom_h = BOTTOM_H + 6 + 16; // button row + gap + hint line below it
         // Content-driven height: the diagram sits one DIAGRAM_VGAP below the
         // top cluster and one above the bottom bar — even, generous breathing
@@ -655,6 +645,20 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             SendMessageW(cb, CB_SETCURSEL, sel, 0);
             cb
         };
+        // An editable dropdown for an on-board button: the presets plus free
+        // text, opening on the button's current text.
+        let make_onboard = |k: usize, b: &OnboardButton, x: i32, cy: i32, w: i32| -> HWND {
+            let style = (CBS_DROPDOWN | CBS_AUTOHSCROLL) as u32 | WS_TABSTOP;
+            let cb = mk("COMBOBOX", "", style, ID_CB_ONBOARD_BASE + k as u16, x, cy, w, COMBO_H + COMBO_DROP);
+            for item in &b.presets {
+                let wtxt = to_wide(item);
+                SendMessageW(cb, CB_ADDSTRING, 0, wtxt.as_ptr() as LPARAM);
+            }
+            let text = to_wide(&b.text);
+            SetWindowTextW(cb, text.as_ptr());
+            cb
+        };
+        let mut onboard_edits: Vec<(u8, HWND, String)> = Vec::new();
 
         // Polling row, centered (lighting gets its own centered row below —
         // both are device-wide like DPI, so they live in the top cluster;
@@ -737,7 +741,15 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                     );
                 }
             }
-            if !thumb_in_diagram {
+            if !onboard_in_diagram {
+                for (k, b) in onboard.iter().enumerate() {
+                    let _ = mk("STATIC", &format!("{} (stored on the mouse):", b.label), 0, 0, fx, y, COL_W, LBL_H);
+                    y += LBL_H + LBL_GAP;
+                    onboard_edits.push((b.id, make_onboard(k, b, fx, y, COL_W), b.text.clone()));
+                    y += COMBO_H + GROUP_GAP;
+                }
+            }
+            if show_thumbs && !thumb_in_diagram {
                 let _ = labeled_combo(
                     "Back thumb button:",
                     ID_CB_THUMB_BACK,
@@ -769,47 +781,6 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             }
         }
 
-        // On-board binds: one short label saying what they are, then a text
-        // field per writable button. Text only; the app validates on Save.
-        let mut onboard_edits: Vec<(HWND, String)> = Vec::new();
-        if let (Some(ob), true) = (&init.onboard, onboard_h > 0) {
-            y += GROUP_GAP;
-            let _ = mk(
-                "STATIC",
-                "On-board binds are stored in the mouse and work even when Snakecharmer \
-                 isn't running. A key bound here replaces the thumb-button remap for that \
-                 button. Written to the mouse on Save; blank = leave alone. E.g. ctrl+c, \
-                 middle click, disabled, default.",
-                SS_CENTER,
-                0,
-                MARGIN,
-                y,
-                client_w - 2 * MARGIN,
-                ONBOARD_NOTE_H,
-            );
-            y += ONBOARD_NOTE_H + 4;
-            let cell_w = OB_LBL_W + 4 + OB_EDIT_W;
-            let grid_w = 2 * cell_w + OB_COL_GAP;
-            let gx = (client_w - grid_w) / 2;
-            for (i, row) in ob.rows.iter().take(MAX_ONBOARD as usize).enumerate() {
-                let (col, line) = ((i % 2) as i32, (i / 2) as i32);
-                let cx = gx + col * (cell_w + OB_COL_GAP);
-                let cy = y + line * (ROW2_H + OB_ROW_GAP);
-                let _ = mk("STATIC", &format!("{}:", row.label), 0, 0, cx, cy + 4, OB_LBL_W, LBL_H);
-                let ed = mk(
-                    "EDIT",
-                    &row.text,
-                    WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,
-                    ID_ED_ONBOARD_BASE + i as u16,
-                    cx + OB_LBL_W + 4,
-                    cy,
-                    OB_EDIT_W,
-                    ROW2_H,
-                );
-                onboard_edits.push((ed, row.text.clone()));
-            }
-            y += onboard_h - GROUP_GAP - ONBOARD_NOTE_H - 4;
-        }
         let _ = y; // cursor now == MARGIN + top_h; the pane starts below it
 
         // In-diagram dropdowns, mounted in the callouts' reserved rects and
@@ -831,9 +802,20 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                     place(ID_CB_DOWN, CalloutSlot::DpiDown, &b.down);
                 }
             }
-            if thumb_in_diagram {
+            if show_thumbs && thumb_in_diagram {
                 place(ID_CB_THUMB_BACK, CalloutSlot::ThumbBack, &init.thumb_back);
                 place(ID_CB_THUMB_FWD, CalloutSlot::ThumbForward, &init.thumb_forward);
+            }
+            // On-board buttons, each at its own button's callout.
+            if onboard_in_diagram {
+                for (k, b) in onboard.iter().enumerate() {
+                    if let Some((cx, cy, cw, _)) = slot_rect(CalloutSlot::Button(b.id)) {
+                        let px = pane_origin.0 + (((cx - bx0) as f32) * scale).round() as i32;
+                        let py = pane_origin.1 + (((cy - by0) as f32) * scale).round() as i32;
+                        let pw = ((cw as f32) * scale).round() as i32;
+                        onboard_edits.push((b.id, make_onboard(k, b, px, py, pw), b.text.clone()));
+                    }
+                }
             }
             // The wheel dropdown is a scaffold: mounted at the wheel callout but
             // DISABLED (identity-only), so it previews a future middle-click
@@ -1126,11 +1108,12 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                         // Report the on-board fields first so the app has
                         // validated and staged them before it writes the file.
                         let initial: Vec<String> =
-                            st.onboard_edits.iter().map(|(_, t)| t.clone()).collect();
+                            st.onboard_edits.iter().map(|(_, _, t)| t.clone()).collect();
                         let now: Vec<String> =
-                            st.onboard_edits.iter().map(|(h, _)| window_text(*h)).collect();
-                        for i in onboard_rows_to_send(&initial, &now) {
-                            (st.on_event)(SettingsEvent::Onboard(i, now[i].trim().to_string()));
+                            st.onboard_edits.iter().map(|(_, h, _)| window_text(*h)).collect();
+                        for k in onboard_changed(&initial, &now) {
+                            let id = st.onboard_edits[k].0;
+                            (st.on_event)(SettingsEvent::Onboard(id, now[k].trim().to_string()));
                         }
                         (st.on_event)(SettingsEvent::Save)
                     }
@@ -1227,12 +1210,11 @@ mod tests {
     }
 
     #[test]
-    fn onboard_save_reports_filled_and_cleared_rows_only() {
-        // Untouched blanks stay quiet; filled rows are re-reported every
-        // Save; a row cleared since open is reported (as empty) to drop it.
-        let initial = v(&["", "ctrl+c", "", "disabled"]);
-        let now = v(&["", "ctrl+c", "  a ", ""]);
-        assert_eq!(onboard_rows_to_send(&initial, &now), vec![1, 2, 3]);
-        assert!(onboard_rows_to_send(&v(&["", ""]), &v(&["", "  "])).is_empty());
+    fn onboard_save_reports_changed_controls_only() {
+        // Untouched controls stay quiet, so open + Save writes nothing; an
+        // edit, a new pick, and a control cleared since open are reported.
+        let initial = v(&["Back (default)", "ctrl+c", "Forward (default)", "disabled"]);
+        let now = v(&["Back (default)", " ctrl+c ", "Copy (Ctrl+C)", ""]);
+        assert_eq!(onboard_changed(&initial, &now), vec![2, 3]);
     }
 }

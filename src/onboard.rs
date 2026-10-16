@@ -111,22 +111,84 @@ pub fn parse_config(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Result
     if errors.is_empty() { Ok(wanted) } else { Err(errors.join("; ")) }
 }
 
-/// The writable buttons in display order, each with the config entry that
-/// resolves to it (empty when `[onboard]` leaves it alone). What the settings
-/// window shows: only buttons `km` can write are editable.
-pub fn editable_rows(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Vec<(&'static str, String)> {
+/// One writable button as the settings window shows it: an editable dropdown
+/// whose first entry names the button and its factory bind.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Control {
+    pub button: u8,
+    pub name: &'static str,
+    pub presets: Vec<String>,
+    /// What it opens on: the preset matching the `[onboard]` entry, the entry
+    /// itself if none does, or the default entry when the button is unmanaged.
+    pub text: String,
+}
+
+/// Choices offered under the default entry, as (label, bind).
+const PRESETS: [(&str, &str); 8] = [
+    ("Left click", "left click"),
+    ("Middle click", "middle click"),
+    ("Back", "back"),
+    ("Forward", "forward"),
+    ("Copy (Ctrl+C)", "copy"),
+    ("Paste (Ctrl+V)", "paste"),
+    ("Cut (Ctrl+X)", "cut"),
+    ("Disabled", "disabled"),
+];
+
+/// "Back (default)": the entry that names the button and puts it back.
+fn default_label(button: u8) -> String {
+    let factory = Binding::default_for(button).map(|b| b.to_string()).unwrap_or_default();
+    // "back (mouse button 4)" -> "Back"
+    let short = factory.split(" (").next().unwrap_or_default();
+    let mut c = short.chars();
+    let short: String = c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default();
+    format!("{short} (default)")
+}
+
+/// The presets for `button`, skipping the one its default already covers.
+fn presets(button: u8) -> Vec<(String, &'static str)> {
+    let factory = Binding::default_for(button);
+    std::iter::once((default_label(button), "default"))
+        .chain(
+            PRESETS
+                .iter()
+                .filter(|(_, bind)| parse_bind(bind, button).ok() != factory)
+                .map(|&(label, bind)| (label.to_string(), bind)),
+        )
+        .collect()
+}
+
+/// The writable buttons in display order, for the settings window.
+pub fn controls(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Vec<Control> {
     km.buttons
         .iter()
         .filter(|&&(button, _)| km.is_writable(button))
         .map(|&(button, name)| {
-            let text = table
-                .iter()
-                .find(|(k, _)| km.button(k).map(|(b, _)| b) == Some(button))
-                .map(|(_, v)| v.clone())
-                .unwrap_or_default();
-            (name, text)
+            let presets = presets(button);
+            let entry = table.iter().find(|(k, _)| km.button(k).map(|(b, _)| b) == Some(button));
+            let text = match entry {
+                None => presets[0].0.clone(),
+                Some((_, v)) => {
+                    let bind = parse_bind(v, button).ok();
+                    presets
+                        .iter()
+                        .find(|(_, p)| bind.is_some() && parse_bind(p, button).ok() == bind)
+                        .map_or_else(|| v.clone(), |(label, _)| label.clone())
+                }
+            };
+            Control { button, name, presets: presets.into_iter().map(|(l, _)| l).collect(), text }
         })
         .collect()
+}
+
+/// What the user picked or typed in a control, as a bind for `set_entry`: a
+/// preset label becomes its bind, anything else is taken as typed.
+pub fn choice_to_bind(button: u8, text: &str) -> String {
+    let text = text.trim();
+    presets(button)
+        .into_iter()
+        .find(|(label, _)| label == text)
+        .map_or_else(|| text.to_string(), |(_, bind)| bind.to_string())
 }
 
 /// Stage one settings-window entry into `table`: blank removes the button's
@@ -274,14 +336,32 @@ mod tests {
     }
 
     #[test]
-    fn editable_rows_are_the_writable_buttons_with_their_config_text() {
+    fn controls_are_the_writable_buttons_opening_on_their_config() {
         let table: BTreeMap<String, String> =
-            [("wheel-click", "default"), ("left", "a")].map(|(k, v)| (k.into(), v.into())).into();
-        let rows = editable_rows(v3(), &table);
-        let names: Vec<&str> = rows.iter().map(|r| r.0).collect();
+            [("wheel-click", "ctrl+c"), ("back", "f5"), ("left", "a")].map(|(k, v)| (k.into(), v.into())).into();
+        let c = controls(v3(), &table);
+        let names: Vec<&str> = c.iter().map(|c| c.name).collect();
         assert_eq!(names, ["right", "wheel click", "back", "forward", "wheel up", "wheel down"]);
-        assert_eq!(rows[1].1, "default");
-        assert!(rows[0].1.is_empty());
+        assert_eq!(c[0].text, "Right click (default)", "unmanaged opens on the default entry");
+        assert_eq!(c[1].text, "Copy (Ctrl+C)", "an entry a preset covers shows the preset");
+        assert_eq!(c[2].text, "f5", "anything else shows as typed");
+        assert_eq!(c[2].presets[0], "Back (default)");
+        assert!(!c[2].presets.contains(&"Back".to_string()), "no duplicate of the default");
+        assert_eq!(c[4].presets[0], "Scroll up (default)");
+    }
+
+    #[test]
+    fn choices_map_back_to_binds() {
+        assert_eq!(choice_to_bind(0x04, "Back (default)"), "default");
+        assert_eq!(choice_to_bind(0x04, "Copy (Ctrl+C)"), "copy");
+        assert_eq!(choice_to_bind(0x03, " ctrl+shift+t "), "ctrl+shift+t");
+        assert_eq!(choice_to_bind(0x03, ""), "");
+        // Every preset is a bind the parser accepts, on every writable button.
+        for &b in v3().writable {
+            for (label, _) in presets(b) {
+                assert!(parse_bind(&choice_to_bind(b, &label), b).is_ok(), "{label} on 0x{b:02x}");
+            }
+        }
     }
 
     #[test]

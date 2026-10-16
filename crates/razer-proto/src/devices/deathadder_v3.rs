@@ -100,9 +100,22 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
             Shape::Polyline { role: Role::Detail, points: &[(218, 106), (237, 106)] },
             Shape::Polyline { role: Role::Detail, points: &[(218, 114), (237, 114)] },
             Shape::Polyline { role: Role::Detail, points: &[(219, 122), (236, 122)] },
+            // Every button with a captured keymap write gets a Button callout:
+            // the window mounts its on-board bind control there. Wheel up,
+            // click and down fan out from the top, middle and bottom of the
+            // wheel; right leaves through the lower right plate.
+            Shape::Polyline { role: Role::Lead, points: &[(236, 70), (262, 40), (332, 40)] },
+            Shape::Callout { slot: CalloutSlot::Button(0x09), at: (348, 37), anchor: Anchor::Start,
+                label: "wheel up", note: "scroll up", note_role: Role::Note },
             Shape::Polyline { role: Role::Lead, points: &[(243, 98), (332, 98)] },
-            Shape::Callout { slot: CalloutSlot::Wheel, at: (348, 95), anchor: Anchor::Start,
-                label: "scroll wheel — middle click", note: "", note_role: Role::Note },
+            Shape::Callout { slot: CalloutSlot::Button(0x03), at: (348, 95), anchor: Anchor::Start,
+                label: "wheel click", note: "middle click", note_role: Role::Note },
+            Shape::Polyline { role: Role::Lead, points: &[(236, 126), (262, 150), (332, 150)] },
+            Shape::Callout { slot: CalloutSlot::Button(0x0A), at: (348, 147), anchor: Anchor::Start,
+                label: "wheel down", note: "scroll down", note_role: Role::Note },
+            Shape::Polyline { role: Role::Lead, points: &[(290, 200), (332, 200)] },
+            Shape::Callout { slot: CalloutSlot::Button(0x02), at: (348, 197), anchor: Anchor::Start,
+                label: "right", note: "right click", note_role: Role::Note },
             // thumb buttons (drawn as bumps sticking out of the left outline)
             Shape::Path { role: Role::Button, start: (141, 139), closed: true, curves: &[
                 ((144, 138), (147, 140), (148, 144)),
@@ -124,15 +137,15 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
             Shape::Polyline { role: Role::Detail, points: &[(138, 204), (147, 202)] },
             Shape::Polyline { role: Role::Lead, points: &[(138, 166), (126, 166)] },
             Shape::Polyline { role: Role::Lead, points: &[(136, 225), (126, 225)] },
-            Shape::Callout { slot: CalloutSlot::ThumbForward, at: (122, 162), anchor: Anchor::End,
+            Shape::Callout { slot: CalloutSlot::Button(0x05), at: (122, 162), anchor: Anchor::End,
                 label: "\"forward\"", note: "XBUTTON2", note_role: Role::Note },
-            Shape::Callout { slot: CalloutSlot::ThumbBack, at: (122, 221), anchor: Anchor::End,
+            Shape::Callout { slot: CalloutSlot::Button(0x04), at: (122, 221), anchor: Anchor::End,
                 label: "\"back\"", note: "XBUTTON1", note_role: Role::Note },
-            // hook cost, right at the point of decision (under the thumb
-            // callouts) — benefit first, then the cost detail
-            Shape::Text { role: Role::Note, at: (122, 255), anchor: Anchor::End, text: "default = no hook, zero cost" },
-            Shape::Text { role: Role::Note, at: (122, 271), anchor: Anchor::End, text: "remaps use a global mouse hook" },
-            Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(~µs per mouse event)" },
+            // what these controls do, right at the point of decision: the V3
+            // stores binds itself, so there is no hook and no software cost
+            Shape::Text { role: Role::Note, at: (122, 255), anchor: Anchor::End, text: "binds are stored on the mouse" },
+            Shape::Text { role: Role::Note, at: (122, 271), anchor: Anchor::End, text: "and work without Snakecharmer" },
+            Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(written on Save, no hook)" },
         ],
     }),
 };
