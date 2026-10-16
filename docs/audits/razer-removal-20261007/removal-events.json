@@ -1,0 +1,374 @@
+[
+    {
+        "Time": "2026-10-07T20:12:27.3077607-07:00",
+        "Kind": "service",
+        "Target": "Razer Elevation Service",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:27.3885226-07:00",
+        "Kind": "service",
+        "Target": "Razer Game Manager Service 3",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:27.5191347-07:00",
+        "Kind": "driver",
+        "Target": "oem97.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:27.5962068-07:00",
+        "Kind": "driver",
+        "Target": "oem84.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:27.6717292-07:00",
+        "Kind": "driver",
+        "Target": "oem95.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:27.7514211-07:00",
+        "Kind": "driver",
+        "Target": "oem76.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:27.8272117-07:00",
+        "Kind": "driver",
+        "Target": "oem98.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:27.9042017-07:00",
+        "Kind": "driver",
+        "Target": "oem85.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:27.9788568-07:00",
+        "Kind": "driver",
+        "Target": "oem99.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:28.0555079-07:00",
+        "Kind": "driver",
+        "Target": "oem86.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:28.4095119-07:00",
+        "Kind": "driver",
+        "Target": "oem87.inf",
+        "Result": "exit 0; Microsoft PnP Utility\n\nDriver package uninstalled.\nDriver package deleted successfully."
+    },
+    {
+        "Time": "2026-10-07T20:12:28.6198297-07:00",
+        "Kind": "driver",
+        "Target": "oem89.inf",
+        "Result": "exit 0; Microsoft PnP Utility\n\nDriver package uninstalled.\nDriver package deleted successfully."
+    },
+    {
+        "Time": "2026-10-07T20:12:30.6767757-07:00",
+        "Kind": "driver",
+        "Target": "oem70.inf",
+        "Result": "exit 0; Microsoft PnP Utility\n\nDriver package uninstalled.\nDriver package deleted successfully."
+    },
+    {
+        "Time": "2026-10-07T20:12:30.7531012-07:00",
+        "Kind": "driver",
+        "Target": "oem2.inf",
+        "Result": "already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:31.0336081-07:00",
+        "Kind": "orphan driver service",
+        "Target": "RzCommon",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:31.2456711-07:00",
+        "Kind": "orphan driver service",
+        "Target": "RzDev_005c",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:31.4389016-07:00",
+        "Kind": "orphan driver service",
+        "Target": "RzDev_00b2",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:31.6315965-07:00",
+        "Kind": "orphan driver service",
+        "Target": "RzDev_0a24",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:31.6479778-07:00",
+        "Kind": "startup value",
+        "Target": "HKCU Run/RazerAppEngine",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.6390557-07:00",
+        "Kind": "firewall rule",
+        "Target": "{7561CB7B-EE97-4B7B-94E6-D62EEAE2E98B}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.6541783-07:00",
+        "Kind": "vendor registry root",
+        "Target": "HKLM:\\SOFTWARE\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.6587010-07:00",
+        "Kind": "vendor registry root",
+        "Target": "HKLM:\\SOFTWARE\\RAZERWUD",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.6712145-07:00",
+        "Kind": "vendor registry root",
+        "Target": "HKLM:\\SOFTWARE\\WOW6432Node\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.6837293-07:00",
+        "Kind": "vendor registry root",
+        "Target": "HKCU:\\SOFTWARE\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.7149208-07:00",
+        "Kind": "COM interface",
+        "Target": "HKLM:\\SOFTWARE\\Classes\\Interface\\{BFE24D59-6568-4179-8AE5-D9D53869A3E3}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.7220754-07:00",
+        "Kind": "COM interface",
+        "Target": "HKLM:\\SOFTWARE\\Classes\\Interface\\{C6237515-DD5F-4ACC-B6F0-F45569ADF965}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.7459709-07:00",
+        "Kind": "COM AppID",
+        "Target": "HKLM:\\SOFTWARE\\Classes\\AppID\\{9C877A5A-7FE0-4E2B-9735-60420DE27084}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.7539709-07:00",
+        "Kind": "COM interface",
+        "Target": "HKLM:\\SOFTWARE\\WOW6432Node\\Classes\\Interface\\{BFE24D59-6568-4179-8AE5-D9D53869A3E3}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.7661052-07:00",
+        "Kind": "COM interface",
+        "Target": "HKLM:\\SOFTWARE\\WOW6432Node\\Classes\\Interface\\{C6237515-DD5F-4ACC-B6F0-F45569ADF965}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.8033838-07:00",
+        "Kind": "COM AppID",
+        "Target": "HKLM:\\SOFTWARE\\WOW6432Node\\Classes\\AppID\\{9C877A5A-7FE0-4E2B-9735-60420DE27084}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.8214277-07:00",
+        "Kind": "COM class",
+        "Target": "HKLM:\\SOFTWARE\\Classes\\CLSID\\{0EDEAF3C-D36E-4E7E-9467-900B977DC4FF}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.8389569-07:00",
+        "Kind": "COM type library",
+        "Target": "HKLM:\\SOFTWARE\\Classes\\TypeLib\\{F24A9E29-FC07-4277-9BBE-8315A7735BF0}",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.8667457-07:00",
+        "Kind": "directory",
+        "Target": "C:\\Program Files\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.8867699-07:00",
+        "Kind": "directory",
+        "Target": "C:\\Program Files (x86)\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.9063530-07:00",
+        "Kind": "directory",
+        "Target": "C:\\ProgramData\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.9785972-07:00",
+        "Kind": "directory",
+        "Target": "C:\\Windows\\Installer\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.9845262-07:00",
+        "Kind": "directory",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:32.9987885-07:00",
+        "Kind": "directory",
+        "Target": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Razer",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:33.0264014-07:00",
+        "Kind": "co-installer file",
+        "Target": "C:\\Windows\\System32\\RazerS2S3CoinstallerEx.dll",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:33.0301024-07:00",
+        "Kind": "co-installer file",
+        "Target": "C:\\Windows\\System32\\RazerS3CoinstallerEx.dll",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:33.3354281-07:00",
+        "Kind": "orphan driver file",
+        "Target": "C:\\Windows\\System32\\drivers\\RzCommon.sys",
+        "Result": "Access to the path is denied."
+    },
+    {
+        "Time": "2026-10-07T20:12:33.5523793-07:00",
+        "Kind": "orphan driver file",
+        "Target": "C:\\Windows\\System32\\drivers\\RzDev_005c.sys",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:33.7672251-07:00",
+        "Kind": "orphan driver file",
+        "Target": "C:\\Windows\\System32\\drivers\\RzDev_00b2.sys",
+        "Result": "Access to the path is denied."
+    },
+    {
+        "Time": "2026-10-07T20:12:33.9830429-07:00",
+        "Kind": "orphan driver file",
+        "Target": "C:\\Windows\\System32\\drivers\\RzDev_0a24.sys",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.0431480-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_10224_0.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.0471476-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_10224_1.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.0599307-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_10224_3.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.0719563-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_20320_0.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.0844744-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_20320_1.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.0975044-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_20320_3.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.1130667-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_20804_0.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.1460198-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_20804_1.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.1606365-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_21248_0.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.1732877-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_21248_1.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.1863141-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_21248_2.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.1983821-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_21248_3.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.2115154-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_21248_5.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.2225326-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_24460_0.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.2356073-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_24460_1.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.2545657-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_24460_2.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.2717985-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_24460_3.png",
+        "Result": "removed/already absent"
+    },
+    {
+        "Time": "2026-10-07T20:12:34.2813161-07:00",
+        "Kind": "temporary file",
+        "Target": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture_24460_5.png",
+        "Result": "removed/already absent"
+    }
+]

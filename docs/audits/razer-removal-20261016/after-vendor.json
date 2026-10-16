@@ -1,0 +1,1202 @@
+{
+    "Timestamp": "2026-10-16T15:08:19.6978507-07:00",
+    "Uninstall": [],
+    "Services": [],
+    "SystemDrivers": [
+        {
+            "Name": "RzDev_005c",
+            "DisplayName": "Razer 005c Service",
+            "State": "Stopped",
+            "StartMode": "Manual",
+            "PathName": "C:\\WINDOWS\\system32\\drivers\\RzDev_005c.sys"
+        },
+        {
+            "Name": "RzCommon",
+            "DisplayName": "Razer Control Service",
+            "State": "Stopped",
+            "StartMode": "Manual",
+            "PathName": "C:\\WINDOWS\\system32\\drivers\\RzCommon.sys"
+        },
+        {
+            "Name": "RzDev_00b2",
+            "DisplayName": "Razer 00b2 Service",
+            "State": "Stopped",
+            "StartMode": "Manual",
+            "PathName": "C:\\WINDOWS\\system32\\drivers\\RzDev_00b2.sys"
+        }
+    ],
+    "DriverPackages": [
+        {
+            "Driver": "oem2.inf",
+            "OriginalFileName": "rz005cdev.inf",
+            "ProviderName": "Razer Inc",
+            "ClassName": "HIDClass",
+            "Version": "01/02/2017 6.2.9200.16547",
+            "Signer": "Microsoft Windows Hardware Compatibility Publisher"
+        },
+        {
+            "Driver": "oem98.inf",
+            "OriginalFileName": "rz00b2dev.inf",
+            "ProviderName": "Razer Inc",
+            "ClassName": "HIDClass",
+            "Version": "01/02/2017 6.2.9200.16547",
+            "Signer": "Microsoft Windows Hardware Compatibility Publisher"
+        }
+    ],
+    "Devices": [
+        {
+            "Model": "1532:005C",
+            "Name": "Razer DeathAdder Elite",
+            "Class": "Mouse",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem86.inf",
+            "Provider": "Razer Inc",
+            "Service": "mouhid",
+            "UpperFilters": [
+                "RzDev_005c"
+            ],
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Composite Device",
+            "Class": "USB",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "usb.inf",
+            "Provider": "Microsoft",
+            "Service": "usbccgp",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem84.inf",
+            "Provider": "Razer Inc",
+            "Service": "RzDev_005c",
+            "UpperFilters": [
+                "mshidkmdf"
+            ],
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant mouse",
+            "Class": "Mouse",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "msmouse.inf",
+            "Provider": "Microsoft",
+            "Service": "mouhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant mouse",
+            "Class": "Mouse",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "msmouse.inf",
+            "Provider": "Microsoft",
+            "Service": "mouhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "Razer DeathAdder Elite",
+            "Class": "Keyboard",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem85.inf",
+            "Provider": "Razer Inc",
+            "Service": "kbdhid",
+            "UpperFilters": [
+                "RzDev_005c"
+            ],
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "Razer Control Device",
+            "Class": "Razer Device",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem70.inf",
+            "Provider": "Razer Inc",
+            "Service": "RzCommon",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "Razer Control Device",
+            "Class": "Razer Device",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem70.inf",
+            "Provider": "Razer Inc",
+            "Service": "RzCommon",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem89.inf",
+            "Provider": "Razer Inc",
+            "Service": "RzDev_00b2",
+            "UpperFilters": [
+                "mshidkmdf"
+            ],
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem89.inf",
+            "Provider": "Razer Inc",
+            "Service": "RzDev_00b2",
+            "UpperFilters": [
+                "mshidkmdf"
+            ],
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "USB Composite Device",
+            "Class": "USB",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "usb.inf",
+            "Provider": "Microsoft",
+            "Service": "usbccgp",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "USB Composite Device",
+            "Class": "USB",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "usb.inf",
+            "Provider": "Microsoft",
+            "Service": "usbccgp",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant mouse",
+            "Class": "Mouse",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "msmouse.inf",
+            "Provider": "Microsoft",
+            "Service": "mouhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant consumer control device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "hidserv.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID Keyboard Device",
+            "Class": "Keyboard",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "keyboard.inf",
+            "Provider": "Microsoft",
+            "Service": "kbdhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Composite Device",
+            "Class": "USB",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "usb.inf",
+            "Provider": "Microsoft",
+            "Service": "usbccgp",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Composite Device",
+            "Class": "USB",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "usb.inf",
+            "Provider": "Microsoft",
+            "Service": "usbccgp",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant mouse",
+            "Class": "Mouse",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "msmouse.inf",
+            "Provider": "Microsoft",
+            "Service": "mouhid",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "Razer DeathAdder V3",
+            "Class": "HIDClass",
+            "Status": "OK",
+            "Present": true,
+            "Inf": "oem98.inf",
+            "Provider": "Razer Inc",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "USB Input Device",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "Razer DeathAdder Elite",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem76.inf",
+            "Provider": "Razer Inc",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": [
+                "RzDev_005c"
+            ]
+        },
+        {
+            "Model": "1532:005C",
+            "Name": "Razer DeathAdder Elite",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "oem2.inf",
+            "Provider": "Razer Inc",
+            "Service": "HidUsb",
+            "UpperFilters": null,
+            "LowerFilters": null
+        },
+        {
+            "Model": "1532:00B2",
+            "Name": "HID-compliant system controller",
+            "Class": "HIDClass",
+            "Status": "Unknown",
+            "Present": false,
+            "Inf": "input.inf",
+            "Provider": "Microsoft",
+            "Service": null,
+            "UpperFilters": null,
+            "LowerFilters": null
+        }
+    ],
+    "Tasks": [
+        {
+            "TaskPath": "\\",
+            "TaskName": "Razer Upgrade Elevation Service",
+            "State": 3,
+            "Executables": "\"C:\\Program Files\\Razer\\RazerAppEngine\\app-4.0.827\\CommonDLL\\RzPowerTool.exe\""
+        }
+    ],
+    "Startup": [
+        {
+            "Key": "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "Name": "CleanUp RzS2S3Wizard",
+            "Command": "C:\\Program Files (x86)\\Razer\\RzS3WizardS2S3\\RzInstallerDeletionS2S3.vbs"
+        }
+    ],
+    "ClassFilters": [],
+    "RegistryRoots": [
+        {
+            "Key": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Razer",
+            "SubKeyCount": 1,
+            "ValueCount": 0
+        },
+        {
+            "Key": "HKEY_LOCAL_MACHINE\\SOFTWARE\\RAZERWUD",
+            "SubKeyCount": 2,
+            "ValueCount": 0
+        },
+        {
+            "Key": "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Razer",
+            "SubKeyCount": 1,
+            "ValueCount": 0
+        },
+        {
+            "Key": "HKEY_CURRENT_USER\\SOFTWARE\\Razer",
+            "SubKeyCount": 0,
+            "ValueCount": 0
+        },
+        {
+            "Key": "HKEY_USERS\\.DEFAULT\\Software\\Razer",
+            "SubKeyCount": 3,
+            "ValueCount": 0
+        },
+        {
+            "Key": "HKEY_USERS\\<user SID>\\Software\\Razer",
+            "SubKeyCount": 0,
+            "ValueCount": 0
+        },
+        {
+            "Key": "HKEY_USERS\\S-1-5-18\\Software\\Razer",
+            "SubKeyCount": 3,
+            "ValueCount": 0
+        }
+    ],
+    "Appx": [],
+    "Firewall": [],
+    "WmiConsumers": [],
+    "Processes": [
+        {
+            "Name": "RazerInstaller.exe",
+            "ProcessId": 22120,
+            "ExecutablePath": "C:\\Windows\\Installer\\Razer\\Installer2\\App\\RazerInstaller.exe"
+        }
+    ],
+    "SystemFiles": [
+        {
+            "Path": "C:\\Windows\\System32\\RazerS2S3CoinstallerEx.dll",
+            "Company": "Razer Inc",
+            "Bytes": 161920
+        },
+        {
+            "Path": "C:\\Windows\\System32\\RazerS3CoinstallerEx.dll",
+            "Company": "Razer Inc",
+            "Bytes": 161920
+        },
+        {
+            "Path": "C:\\Windows\\System32\\drivers\\RzCommon.sys",
+            "Company": "Razer Inc",
+            "Bytes": 64880
+        },
+        {
+            "Path": "C:\\Windows\\System32\\drivers\\RzDev_005c.sys",
+            "Company": "Razer Inc",
+            "Bytes": 56136
+        },
+        {
+            "Path": "C:\\Windows\\System32\\drivers\\RzDev_00b2.sys",
+            "Company": "Razer Inc",
+            "Bytes": 63224
+        }
+    ],
+    "OwnedRegistrationKeys": [
+        "HKLM:\\SOFTWARE\\Classes\\CLSID\\{0EDEAF3C-D36E-4E7E-9467-900B977DC4FF}",
+        "HKLM:\\SOFTWARE\\Classes\\TypeLib\\{F24A9E29-FC07-4277-9BBE-8315A7735BF0}",
+        "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{1750F915-5639-497C-966C-3A65ACECFCB6}",
+        "HKLM:\\SOFTWARE\\Classes\\AppID\\{9C877A5A-7FE0-4E2B-9735-60420DE27084}",
+        "HKLM:\\SOFTWARE\\Classes\\Interface\\{BFE24D59-6568-4179-8AE5-D9D53869A3E3}",
+        "HKLM:\\SOFTWARE\\Classes\\Interface\\{C6237515-DD5F-4ACC-B6F0-F45569ADF965}",
+        "HKLM:\\SOFTWARE\\WOW6432Node\\Classes\\AppID\\{9C877A5A-7FE0-4E2B-9735-60420DE27084}",
+        "HKLM:\\SOFTWARE\\WOW6432Node\\Classes\\Interface\\{BFE24D59-6568-4179-8AE5-D9D53869A3E3}",
+        "HKLM:\\SOFTWARE\\WOW6432Node\\Classes\\Interface\\{C6237515-DD5F-4ACC-B6F0-F45569ADF965}"
+    ],
+    "Paths": [
+        {
+            "Path": "C:\\Program Files\\Razer",
+            "Files": 1,
+            "Bytes": 4520752,
+            "Children": [
+                "RazerAppEngine Upgrade Setup"
+            ]
+        },
+        {
+            "Path": "C:\\Program Files (x86)\\Razer",
+            "Files": 4,
+            "Bytes": 25348085,
+            "Children": [
+                "Razer Services",
+                "RzS2S3WizardPkg",
+                "RzS3WizardPkg",
+                "RzS3WizardS2S3"
+            ]
+        },
+        {
+            "Path": "C:\\ProgramData\\Razer",
+            "Files": 3,
+            "Bytes": 283224,
+            "Children": [
+                "Installer",
+                "Installer2",
+                "Synapse3"
+            ]
+        },
+        {
+            "Path": "C:\\Windows\\Installer\\Razer",
+            "Files": 282,
+            "Bytes": 240760767,
+            "Children": [
+                "Installer",
+                "Installer2",
+                "Razer Synapse",
+                "Razer Synapse Log",
+                "RazerAppEngine cpuz Log",
+                "RazerAppEngine Log",
+                "RazerAppEngine Upgrade Log"
+            ]
+        },
+        {
+            "Path": "%USERPROFILE%\\AppData\\Local\\Razer",
+            "Files": 0,
+            "Bytes": null,
+            "Children": [
+                "RazerAppEngine"
+            ]
+        },
+        {
+            "Path": "C:\\Windows\\SysWOW64\\config\\systemprofile\\AppData\\Local\\Razer",
+            "Files": 5,
+            "Bytes": 661704,
+            "Children": [
+                "RazerAppEngine"
+            ]
+        }
+    ],
+    "NamedEntries": [
+        {
+            "FullName": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Razer",
+            "Mode": "d-----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\snakecharmer-synapse-reinstall-20261007",
+            "Mode": "d-----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\snakecharmer-synapse-reinstall-20261016",
+            "Mode": "d-----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture0.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture1.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture10.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture11.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture12.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture13.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture19.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture2.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture3.png",
+            "Mode": "-a----"
+        },
+        {
+            "FullName": "%USERPROFILE%\\AppData\\Local\\Temp\\RazerTempPicture9.png",
+            "Mode": "-a----"
+        }
+    ],
+    "StartupFolders": [],
+    "PendingRazerFileOperations": [
+        {
+            "Source": "*1\\??\\C:\\Program Files\\Razer\\razer_elevation_service",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Windows\\Installer\\Razer\\RazerAppEngine",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*2\\??\\C:\\Program Files\\Razer\\RazerAppEngine",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Windows\\Installer\\Razer\\RazerAppEngine",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Program Files\\Razer\\razer_elevation_service",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*2\\??\\C:\\Program Files\\Razer\\RazerAppEngine",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Program Files\\Razer\\RazerAppEngine Upgrade Setup",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Windows\\Installer\\Razer\\RazerAppEngine Upgrade",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*2\\??\\C:\\Program Files\\Razer\\RazerAppEngine\\Tools",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Windows\\Installer\\Razer\\RazerAppEngine Upgrade",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Program Files\\Razer\\RazerAppEngine Upgrade Setup",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*2\\??\\C:\\Program Files\\Razer\\RazerAppEngine\\Tools",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Windows\\Installer\\Razer\\Razer Synapse",
+            "Destination": "",
+            "Deletion": true
+        },
+        {
+            "Source": "*1\\??\\C:\\Windows\\Installer\\Razer\\Razer Synapse",
+            "Destination": "",
+            "Deletion": true
+        }
+    ],
+    "Errors": []
+}

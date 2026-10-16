@@ -1,0 +1,22 @@
+[
+    {
+        "Path": "C:\\Windows\\System32\\drivers\\RzCommon.sys",
+        "PreviousOwner": "NT SERVICE\\TrustedInstaller",
+        "Company": "Razer Inc",
+        "SHA256": "64B72EF9CE409BB17D31096C119B68C4A6A02AB35B7535D763157A4E1A587E59",
+        "DriverServiceAbsent": true,
+        "DriverNotEnumerated": true,
+        "Removed": true,
+        "CompanyEvidence": "before.json SystemFiles; ownership also checked before deletion"
+    },
+    {
+        "Path": "C:\\Windows\\System32\\drivers\\RzDev_00b2.sys",
+        "PreviousOwner": "NT SERVICE\\TrustedInstaller",
+        "Company": "Razer Inc",
+        "SHA256": "B35D9F6E63F835DF9AC748B140B7780CB1A7A8EC9B5A4C4E92744D592B8118D2",
+        "DriverServiceAbsent": true,
+        "DriverNotEnumerated": true,
+        "Removed": true,
+        "CompanyEvidence": "before.json SystemFiles; ownership also checked before deletion"
+    }
+]

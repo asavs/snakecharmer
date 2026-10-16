@@ -1,0 +1,65 @@
+[
+    {
+        "Name": "Razer DeathAdder Elite",
+        "Class": "Mouse",
+        "Inf": "oem86.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          HID\\VID_1532&PID_005C&MI_00\\<instance>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "HID-compliant consumer control device",
+        "Class": "HIDClass",
+        "Inf": "oem84.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          RZVIRTUAL\\VID_1532&PID_005C&MI_00&Col03\\<instance>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder Elite",
+        "Class": "Keyboard",
+        "Inf": "oem85.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          HID\\VID_1532&PID_005C&MI_01&Col01\\<instance>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer Control Device",
+        "Class": "Razer Device",
+        "Inf": "oem70.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          RZCONTROL\\VID_1532&PID_005C&MI_00\\<instance>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer Control Device",
+        "Class": "Razer Device",
+        "Inf": "oem70.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          RZCONTROL\\VID_1532&PID_00B2&MI_00\\<instance>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "HID-compliant consumer control device",
+        "Class": "HIDClass",
+        "Inf": "oem89.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          RZVIRTUAL\\VID_1532&PID_00B2&MI_00&Col03\\<instance>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "HID-compliant consumer control device",
+        "Class": "HIDClass",
+        "Inf": "oem89.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          RZVIRTUAL\\VID_1532&PID_00B2&MI_00&Col03\\<instance>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder Elite",
+        "Class": "HIDClass",
+        "Inf": "oem76.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          USB\\VID_1532&PID_005C&MI_01\\<instance>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder Elite",
+        "Class": "HIDClass",
+        "Inf": "oem2.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          USB\\VID_1532&PID_005C&MI_00\\<instance>\nDevice removed successfully.\n"
+    }
+]

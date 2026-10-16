@@ -348,6 +348,10 @@ buttons to default in Synapse before uninstalling it**.
 [`reference/button_listener.ps1`](reference/button_listener.ps1) shows what each button
 really sends, and [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md) is the work on
 decoding it. The DeathAdder Elite is not affected: Synapse 4 remaps it in software.
+
+For the PC software, the [Synapse removal audit](docs/RAZER-REMOVAL.md) records
+the services, driver filters, installer caches, COM registrations, and other
+residue found on the research machine, including what its uninstaller left behind.
 </details>
 
 <details>

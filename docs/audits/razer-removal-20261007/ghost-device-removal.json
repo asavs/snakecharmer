@@ -1,0 +1,114 @@
+[
+    {
+        "Name": "HID Keyboard Device",
+        "Class": "Keyboard",
+        "Inf": "oem85.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder V3",
+        "Class": "Mouse",
+        "Inf": "oem95.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder V3",
+        "Class": "Mouse",
+        "Inf": "oem86.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "HID-compliant consumer control device",
+        "Class": "HIDClass",
+        "Inf": "oem97.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "HID-compliant consumer control device",
+        "Class": "HIDClass",
+        "Inf": "oem84.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "HID-compliant consumer control device",
+        "Class": "HIDClass",
+        "Inf": "oem85.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer Control Device",
+        "Class": "Razer Device",
+        "Inf": "oem2.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer Control Device",
+        "Class": "Razer Device",
+        "Inf": "oem76.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder Elite",
+        "Class": "HIDClass",
+        "Inf": "oem87.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder V3",
+        "Class": "HIDClass",
+        "Inf": "oem84.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer Control Device",
+        "Class": "Razer Device",
+        "Inf": "oem2.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "HID Keyboard Device",
+        "Class": "Keyboard",
+        "Inf": "oem86.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder V3",
+        "Class": "HIDClass",
+        "Inf": "oem89.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder V3",
+        "Class": "HIDClass",
+        "Inf": "oem76.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder V3",
+        "Class": "HIDClass",
+        "Inf": "oem89.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    },
+    {
+        "Name": "Razer DeathAdder Elite",
+        "Class": "HIDClass",
+        "Inf": "oem87.inf",
+        "ExitCode": 0,
+        "Result": "Microsoft PnP Utility\n\nRemoving device:          <device instance redacted>\nDevice removed successfully.\n"
+    }
+]

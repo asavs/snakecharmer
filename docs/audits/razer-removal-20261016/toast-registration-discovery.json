@@ -1,0 +1,35 @@
+[
+    {
+        "Key": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Classes\\AppID\\{90b626f9-3e0d-efca-4b8d-16ddf2b1f1f4}",
+        "Values": {
+            "RunAs": "Interactive User"
+        }
+    },
+    {
+        "Key": "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Classes\\AppID\\{90b626f9-3e0d-efca-4b8d-16ddf2b1f1f4}",
+        "Values": {
+            "RunAs": "Interactive User"
+        }
+    },
+    {
+        "Key": "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Classes\\CLSID\\{90b626f9-3e0d-efca-4b8d-16ddf2b1f1f4}",
+        "Values": {
+            "AppId": "{90b626f9-3e0d-efca-4b8d-16ddf2b1f1f4}"
+        }
+    },
+    {
+        "Key": "HKEY_CURRENT_USER\\SOFTWARE\\Classes\\AppUserModelId\\{F38BF404-1D43-42F2-9305-67DE0B28FC23}/Installer/Razer/Installer2/App/RazerInstaller.exe",
+        "Values": {
+            "CustomActivator": "{90b626f9-3e0d-efca-4b8d-16ddf2b1f1f4}",
+            "IconBackgroundColor": "FFDDDDDD",
+            "IconUri": "%USERPROFILE%\\AppData\\Local\\ToastNotificationManagerCompat\\Apps\\90B626F9-3E0D-EFCA-4B8D-16DDF2B1F1F4\\Icon.png",
+            "Has7.0.1Fix": 1,
+            "HasSentNotification": 1,
+            "DisplayName": "Razer Installer"
+        }
+    },
+    {
+        "Key": "HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings\\{F38BF404-1D43-42F2-9305-67DE0B28FC23}/Installer/Razer/Installer2/App/RazerInstaller.exe",
+        "Values": {}
+    }
+]

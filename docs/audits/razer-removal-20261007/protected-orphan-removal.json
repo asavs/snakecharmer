@@ -1,0 +1,14 @@
+[
+    {
+        "Path": "C:\\Windows\\System32\\drivers\\RzCommon.sys",
+        "Ownership": "\nSUCCESS: The file (or folder): \"C:\\Windows\\System32\\drivers\\RzCommon.sys\" now owned by the administrators group.",
+        "Acl": "processed file: C:\\Windows\\System32\\drivers\\RzCommon.sys\nSuccessfully processed 1 files; Failed processing 0 files",
+        "Removed": true
+    },
+    {
+        "Path": "C:\\Windows\\System32\\drivers\\RzDev_00b2.sys",
+        "Ownership": "\nSUCCESS: The file (or folder): \"C:\\Windows\\System32\\drivers\\RzDev_00b2.sys\" now owned by the administrators group.",
+        "Acl": "processed file: C:\\Windows\\System32\\drivers\\RzDev_00b2.sys\nSuccessfully processed 1 files; Failed processing 0 files",
+        "Removed": true
+    }
+]

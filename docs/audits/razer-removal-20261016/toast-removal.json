@@ -1,0 +1,7 @@
+[
+    "Removed the ownership-verified Razer Installer AppUserModelId key.",
+    "Removed the matching orphaned installer notification settings key.",
+    "Removed HKLM:\\SOFTWARE\\Classes\\AppID\\{90b626f9-3e0d-efca-4b8d-16ddf2b1f1f4}",
+    "Removed HKLM:\\SOFTWARE\\WOW6432Node\\Classes\\CLSID\\{90b626f9-3e0d-efca-4b8d-16ddf2b1f1f4}",
+    "Removed %USERPROFILE%\\AppData\\Local\\ToastNotificationManagerCompat\\Apps\\90B626F9-3E0D-EFCA-4B8D-16DDF2B1F1F4"
+]
