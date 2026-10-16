@@ -221,6 +221,34 @@ pub fn set_entry(
     Ok(wanted)
 }
 
+/// On a mouse that stores binds, move a software thumb remap (`thumb_back`,
+/// `thumb_forward`) into `[onboard]`, where the settings window shows it and
+/// the mouse keeps it, and clear the software one. A remap the mouse can't
+/// store stays in software; a button that already has an `[onboard]` entry
+/// keeps it, since the stored bind wins anyway. Returns a log line per move.
+pub fn migrate_thumbs(km: &KeymapSpec, cfg: &mut crate::config::Config) -> Vec<String> {
+    let mut notes = Vec::new();
+    for (button, field) in [(0x04, &mut cfg.thumb_back), (0x05, &mut cfg.thumb_forward)] {
+        let action = field.trim().to_string();
+        if action.is_empty() || action.eq_ignore_ascii_case("none") || !km.is_writable(button) {
+            continue;
+        }
+        let Some(&(_, name)) = km.buttons.iter().find(|(b, _)| *b == button) else { continue };
+        let taken = cfg.onboard.keys().any(|k| km.button(k).map(|(b, _)| b) == Some(button));
+        if taken {
+            notes.push(format!("{name}: dropped the software remap {action:?}; the on-board bind already covers it"));
+        } else if parse_bind(&action, button).is_ok() {
+            cfg.onboard.insert(name.to_string(), action.clone());
+            notes.push(format!("{name}: moved the software remap {action:?} to the mouse's on-board memory"));
+        } else {
+            notes.push(format!("{name}: kept {action:?} as a software remap; the mouse can't store it"));
+            continue;
+        }
+        *field = "none".to_string();
+    }
+    notes
+}
+
 /// One write that was made.
 pub struct Change {
     pub name: &'static str,
@@ -348,6 +376,27 @@ mod tests {
         assert_eq!(c[2].presets[0], "Back (default)");
         assert!(!c[2].presets.contains(&"Back".to_string()), "no duplicate of the default");
         assert_eq!(c[4].presets[0], "Scroll up (default)");
+    }
+
+    #[test]
+    fn thumb_remaps_move_on_board() {
+        use crate::config::Config;
+        let mut cfg = Config { thumb_back: "copy".into(), thumb_forward: "key:f13".into(), ..Config::default() };
+        let notes = migrate_thumbs(v3(), &mut cfg);
+        assert_eq!(notes.len(), 2);
+        assert_eq!((cfg.thumb_back.as_str(), cfg.thumb_forward.as_str()), ("none", "none"));
+        assert_eq!(cfg.onboard.get("back").map(String::as_str), Some("copy"));
+        assert_eq!(cfg.onboard.get("forward").map(String::as_str), Some("key:f13"));
+        assert!(migrate_thumbs(v3(), &mut cfg).is_empty(), "runs once");
+
+        // An existing [onboard] entry wins; a remap the mouse can't store stays.
+        let mut cfg = Config { thumb_back: "cut".into(), thumb_forward: "key:/".into(), ..Config::default() };
+        cfg.onboard.insert("back".into(), "f5".into());
+        let notes = migrate_thumbs(v3(), &mut cfg);
+        assert_eq!(cfg.onboard.get("back").map(String::as_str), Some("f5"));
+        assert_eq!(cfg.thumb_back, "none");
+        assert_eq!(cfg.thumb_forward, "key:/", "kept in software: {notes:?}");
+        assert!(!cfg.onboard.contains_key("forward"));
     }
 
     #[test]

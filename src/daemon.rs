@@ -864,6 +864,7 @@ fn run_session(
     // devices without lighting hardware — see `apply_startup_lighting`).
     apply_startup_lighting(&ctrl, cfg, log);
 
+    migrate_thumb_remaps(&ctrl, cfg, bindings, log);
     check_onboard_binds(&ctrl, cfg, log);
 
     // Driver mode and the DPI-button vendor-code listeners only apply to devices
@@ -1018,6 +1019,25 @@ fn write_onboard_config(
         Err(e) => log.log(&format!("WARN could not write [onboard] binds: {e}")),
     }
     wanted.iter().map(|w| w.button).collect()
+}
+
+/// On a mouse that stores binds, the settings window has no software thumb
+/// dropdowns, so a `thumb_back`/`thumb_forward` remap would run unseen: move it
+/// into `[onboard]` (see `onboard::migrate_thumbs`), save, and drop the hook.
+fn migrate_thumb_remaps(ctrl: &Mouse, cfg: &mut Config, bindings: &mut Bindings, log: &Logger) {
+    let Some(km) = razer_proto::keymap::spec_for(ctrl.spec().product_id) else {
+        return;
+    };
+    let notes = crate::onboard::migrate_thumbs(km, cfg);
+    if notes.is_empty() {
+        return;
+    }
+    for n in &notes {
+        log.log(&format!("Config: {n}."));
+    }
+    save_config(cfg, log);
+    *bindings = Bindings::from_config(cfg, log);
+    apply_thumb_hook(cfg, log);
 }
 
 /// Once per attach: write the `[onboard]` binds the config asks for (only the
@@ -1289,6 +1309,7 @@ fn handle_menu(
                 log.log(&n);
             }
             *cfg = new_cfg;
+            migrate_thumb_remaps(ctrl, cfg, bindings, log);
             *bindings = Bindings::from_config(cfg, log);
             let (dx, dy) = cfg.dpi_xy();
             let _ = ctrl.set_dpi(dx, dy);
