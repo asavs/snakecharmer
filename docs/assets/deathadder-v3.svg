@@ -52,9 +52,6 @@
   <polyline class="lead" points="236,126 262,150 332,150"/>
   <text class="txt" x="348" y="147">wheel down</text>
   <text class="sub" x="348" y="163">scroll down</text>
-  <polyline class="lead" points="290,200 332,200"/>
-  <text class="txt" x="348" y="197">right</text>
-  <text class="sub" x="348" y="213">right click</text>
   <path class="btn" d="M141 139 C144 138 147 140 148 144 C150 183 150 183 150 183 C150 189 147 192 143 193 C141 193 138 191 138 187 C138 146 138 146 138 146 C138 142 139 139 141 139 Z"/>
   <path class="btn" d="M143 197 C146 197 148 199 148 204 C148 244 148 244 148 244 C148 249 145 253 141 253 C138 252 136 249 136 245 C137 204 137 204 137 204 C137 200 139 197 143 197 Z"/>
   <polyline class="det" points="140,146 147,145"/>

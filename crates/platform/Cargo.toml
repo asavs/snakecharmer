@@ -11,6 +11,7 @@ description = "Isolated Windows FFI for Snakecharmer: keystroke injection (SendI
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_UI_Input",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",

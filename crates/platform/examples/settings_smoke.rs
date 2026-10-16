@@ -236,8 +236,6 @@ fn diagram_minimal() -> Diagram {
             callout(CalloutSlot::Button(0x03), (348, 95), Anchor::Start),
             Shape::Polyline { role: Role::Lead, points: vec![(236, 126), (262, 150), (332, 150)] },
             callout(CalloutSlot::Button(0x0A), (348, 147), Anchor::Start),
-            Shape::Polyline { role: Role::Lead, points: vec![(290, 200), (332, 200)] },
-            callout(CalloutSlot::Button(0x02), (348, 197), Anchor::Start),
             // thumb buttons (drawn as bumps sticking out of the left outline)
             Shape::Path {
                 role: Role::AccentB,
@@ -341,7 +339,6 @@ fn main() {
             // CalloutSlot::Button, so the thumb dropdowns above aren't mounted.
             onboard: Some(
                 [
-                    (0x02, "Right", "Right click (default)", "Right click (default)"),
                     (0x03, "Wheel click", "Middle click (default)", "Copy (Ctrl+C)"),
                     (0x04, "Back", "Back (default)", "f5"),
                     (0x05, "Forward", "Forward (default)", "Forward (default)"),

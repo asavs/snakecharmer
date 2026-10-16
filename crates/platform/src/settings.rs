@@ -30,7 +30,7 @@
 //! [`open`] runs a private message loop and returns when the window closes
 //! (call it on a dedicated thread).
 
-use windows_sys::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows_sys::Win32::Foundation::{COLORREF, HANDLE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
 use windows_sys::Win32::Graphics::Gdi::{
     BeginPaint, CreateFontW, CreateSolidBrush, DeleteObject, EndPaint, FillRect, FrameRect,
@@ -46,17 +46,21 @@ use windows_sys::Win32::UI::Controls::{
     TB_THUMBPOSITION, TB_TOP, WM_MOUSELEAVE,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    EnableWindow, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
+    EnableWindow, GetFocus, GetKeyState, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
+};
+use windows_sys::Win32::UI::Input::{
+    GetRawInputData, GetRawInputDeviceInfoW, RegisterRawInputDevices, HRAWINPUT, RAWINPUT,
+    RAWINPUTDEVICE, RAWINPUTHEADER, RIDI_DEVICENAME, RID_INPUT, RIM_TYPEKEYBOARD, RIM_TYPEMOUSE,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRect, CallWindowProcW, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow,
-    DispatchMessageW, GetMessageW, GetParent, GetWindowTextW, LoadCursorW, RegisterClassW,
-    SendMessageW, SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage,
+    DispatchMessageW, GetMessageW, GetParent, GetWindowTextW, GetNextDlgTabItem, IsDialogMessageW, LoadCursorW,
+    PostMessageW, RegisterClassW, SendMessageW, SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage,
     CBS_AUTOHSCROLL, CBS_DROPDOWN, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETLBTEXT, CB_GETLBTEXTLEN, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
     HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DRAWITEM, WM_HSCROLL,
     WM_MOUSEMOVE, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WNDPROC, WS_CHILD, WS_OVERLAPPED,
-    WS_CAPTION, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
+    WS_CAPTION, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, RI_KEY_BREAK, WM_KEYDOWN, WM_SETFOCUS,
 };
 
 use std::sync::atomic::{AtomicIsize, Ordering};
@@ -94,6 +98,16 @@ const BS_PUSHBUTTON: u32 = 0x0000_0000;
 const BS_OWNERDRAW: u32 = 0x0000_000B;
 const CBN_SELCHANGE: u16 = 1;
 const CBN_KILLFOCUS: u16 = 4;
+const CBN_SETFOCUS: u16 = 3;
+const CBN_SELENDOK: u16 = 9;
+/// [`onboard_result`] posts this with a boxed `(button, Result<Expect, String>)`.
+const WM_APP_ONBOARD: u32 = 0x8000 + 1;
+/// Move focus off an on-board box after a write, so the test press isn't
+/// recorded as a new bind.
+const WM_APP_DEFOCUS: u32 = 0x8000 + 2;
+const WM_INPUT: u32 = 0x00FF;
+const WM_GETDLGCODE: u32 = 0x0087;
+const DLGC_WANTALLKEYS: LRESULT = 0x0004;
 const BN_CLICKED: u16 = 0;
 
 // Control ids.
@@ -151,6 +165,8 @@ const GROUP_GAP: i32 = 12;
 /// clips rather than wraps unless it has the room. (With a diagram the same
 /// fact is stated inside the schematic instead, beside the thumb dropdowns.)
 const HOOK_NOTE_H: i32 = 2 * LBL_H;
+/// The status line above Save: one line of on-board binding guidance.
+const STATUS_H: i32 = LBL_H;
 /// Breathing room above and below the diagram pane (larger than GROUP_GAP so
 /// the schematic sits in open space, not crowded against the top cluster or
 /// the bottom bar).
@@ -245,6 +261,105 @@ pub struct OnboardButton {
     pub text: String,
 }
 
+/// What a button should make the mouse send once its bind is stored: what the
+/// window's test step waits for. Built by the app from the stored bind.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expect {
+    /// A key or chord, named as [`crate::chord_name`] names it ("Ctrl+C").
+    Key(String),
+    Mouse(MouseSend),
+    /// The button is disabled: nothing to test.
+    Nothing,
+    /// The app stopped managing the button; the mouse keeps its bind.
+    Unmanaged,
+}
+
+/// A mouse action the test step can see arrive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseSend {
+    Left,
+    Right,
+    Middle,
+    Back,
+    Forward,
+    ScrollUp,
+    ScrollDown,
+}
+
+impl MouseSend {
+    fn name(self) -> &'static str {
+        match self {
+            MouseSend::Left => "left click",
+            MouseSend::Right => "right click",
+            MouseSend::Middle => "middle click",
+            MouseSend::Back => "back",
+            MouseSend::Forward => "forward",
+            MouseSend::ScrollUp => "scroll up",
+            MouseSend::ScrollDown => "scroll down",
+        }
+    }
+}
+
+/// What arrived from the mouse during a test.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Got {
+    Key(String),
+    Mouse(MouseSend),
+}
+
+impl Got {
+    fn name(&self) -> String {
+        match self {
+            Got::Key(k) => k.clone(),
+            Got::Mouse(m) => m.name().to_string(),
+        }
+    }
+}
+
+/// The status line for one input from the mouse while testing `label`, or
+/// `None` to ignore it: a left click is how people use the window, so it only
+/// counts when left click is what's expected.
+fn verdict(label: &str, expect: &Expect, got: &Got) -> Option<(String, bool)> {
+    let matched = match (expect, got) {
+        (Expect::Key(want), Got::Key(k)) => want.eq_ignore_ascii_case(k),
+        (Expect::Mouse(want), Got::Mouse(m)) => want == m,
+        _ => false,
+    };
+    if matched {
+        return Some((format!("\u{2713} {label} sent {}. It's stored on the mouse.", got.name()), true));
+    }
+    if *got == Got::Mouse(MouseSend::Left) {
+        return None;
+    }
+    let want = match expect {
+        Expect::Key(k) => k.clone(),
+        Expect::Mouse(m) => m.name().to_string(),
+        Expect::Nothing | Expect::Unmanaged => return None,
+    };
+    Some((
+        format!("\u{2717} The mouse sent {}, not {want}. Press {label} on the mouse to test.", got.name()),
+        false,
+    ))
+}
+
+/// Report how storing an on-board bind went, from the app's thread. The
+/// window shows it on its status line and, after a successful write, waits for
+/// the button press that proves it. A no-op when no window is open.
+pub fn onboard_result(button: u8, result: Result<Expect, String>) {
+    let hwnd = SETTINGS_HWND.load(Ordering::SeqCst);
+    if hwnd == 0 {
+        return;
+    }
+    let msg = Box::into_raw(Box::new((button, result)));
+    // SAFETY: the window takes ownership of the box in WM_APP_ONBOARD; if the
+    // post fails (window gone), reclaim it here.
+    unsafe {
+        if PostMessageW(hwnd as HWND, WM_APP_ONBOARD, 0, msg as LPARAM) == 0 {
+            drop(Box::from_raw(msg));
+        }
+    }
+}
+
 /// The on-board controls still to report when Save is clicked: the ones whose
 /// text differs from what was last applied (compared trimmed), so opening and
 /// saving never writes to the mouse.
@@ -301,8 +416,17 @@ struct WindowState {
     lbl_dpi: HWND,
     /// One entry per lighting zone (empty when the device has no lighting).
     swatches: Vec<Swatch>,
-    /// The on-board controls: button id, the combo, and the text it opened with.
-    onboard_edits: Vec<(u8, HWND, String)>,
+    onboard_edits: Vec<OnboardEdit>,
+    /// The status line under the diagram: what to do next, and test results.
+    status: HWND,
+    /// The on-board control whose bind is being tested, and what it should send.
+    testing: Option<(usize, Expect)>,
+    /// The on-board combo focus left after a write, so Tab resumes there.
+    return_focus: Option<HWND>,
+    /// Raw-input device handle -> whether it's a Razer device (VID 1532).
+    razer_devices: std::collections::HashMap<isize, bool>,
+    /// Modifiers held on Razer keyboard interfaces (the mouse's chord keys).
+    razer_mods: Mods,
     /// Owned UI font (Segoe UI 9 pt) shared by all controls.
     ui_font: HFONT,
     /// Runtime-drawn titlebar/taskbar icon (freed on `WM_DESTROY`); null if
@@ -311,6 +435,23 @@ struct WindowState {
     pane: Option<DiagramPane>,
     dpi_min: u16,
     dpi_max: u16,
+}
+
+/// One on-board control: the button id, its combo, the text last applied, and
+/// the button's name for the status line.
+struct OnboardEdit {
+    id: u8,
+    hwnd: HWND,
+    last: String,
+    label: String,
+}
+
+#[derive(Default, Clone, Copy)]
+struct Mods {
+    ctrl: bool,
+    shift: bool,
+    alt: bool,
+    win: bool,
 }
 
 fn to_wide(s: &str) -> Vec<u16> {
@@ -462,7 +603,9 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             top_h += init.lighting.len() as i32 * (GROUP_GAP + ROW2_H); // one row per zone
         }
         top_h += fb_h;
-        let bottom_h = BOTTOM_H + 6 + 16; // button row + gap + hint line below it
+        // button row + gap + hint line below it, and the status line above it
+        // when there are on-board controls to walk through
+        let bottom_h = BOTTOM_H + 6 + 16 + if onboard.is_empty() { 0 } else { STATUS_H + 6 };
         // Content-driven height: the diagram sits one DIAGRAM_VGAP below the
         // top cluster and one above the bottom bar — even, generous breathing
         // room, no portrait-aspect stretch (the window is as tall as its
@@ -624,6 +767,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         x += 84 + 4;
         let _ = mk("BUTTON", "\u{2212}", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_DPI_MINUS, x, y + 2, 26, 26);
         x += 26 + 6;
+        accessible_label(&mk, "DPI", x, y);
         let tb = mk("msctls_trackbar32", "", WS_TABSTOP, ID_TB_DPI, x, y, SLIDER_W, ROW1_H);
         x += SLIDER_W + 6;
         let _ = mk("BUTTON", "+", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_DPI_PLUS, x, y + 2, 26, 26);
@@ -648,7 +792,9 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         };
         // An editable dropdown for an on-board button: the presets plus free
         // text, opening on the button's current text.
-        let make_onboard = |k: usize, b: &OnboardButton, x: i32, cy: i32, w: i32| -> HWND {
+        let make_onboard = |k: usize, b: &OnboardButton, x: i32, cy: i32, w: i32| -> OnboardEdit {
+            // Screen readers name a control after the label just before it.
+            accessible_label(&mk, &format!("{} button bind", b.label), x, cy);
             let style = (CBS_DROPDOWN | CBS_AUTOHSCROLL) as u32 | WS_TABSTOP;
             let cb = mk("COMBOBOX", "", style, ID_CB_ONBOARD_BASE + k as u16, x, cy, w, COMBO_H + COMBO_DROP);
             for item in &b.presets {
@@ -658,9 +804,9 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             let text = to_wide(&b.text);
             SetWindowTextW(cb, text.as_ptr());
             subclass_recorder(cb);
-            cb
+            OnboardEdit { id: b.id, hwnd: cb, last: b.text.clone(), label: b.label.clone() }
         };
-        let mut onboard_edits: Vec<(u8, HWND, String)> = Vec::new();
+        let mut onboard_edits: Vec<OnboardEdit> = Vec::new();
 
         // Polling row, centered (lighting gets its own centered row below —
         // both are device-wide like DPI, so they live in the top cluster;
@@ -701,7 +847,10 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             x += 38 + 2;
             // The swatch is the picker trigger — no separate button — sized
             // as the swatch always was, hover-highlighted.
-            let swatch = mk("BUTTON", "", BS_OWNERDRAW | WS_TABSTOP, ID_BTN_COLOR_BASE + zi16, x, y, 60, ROW2_H);
+            // Owner-drawn, so the text is never painted: it's the button's
+            // name for screen readers.
+            let name = format!("{} color", l.label);
+            let swatch = mk("BUTTON", &name, BS_OWNERDRAW | WS_TABSTOP, ID_BTN_COLOR_BASE + zi16, x, y, 60, ROW2_H);
             subclass_swatch(swatch);
             swatches.push(Swatch {
                 hwnd: swatch,
@@ -747,7 +896,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                 for (k, b) in onboard.iter().enumerate() {
                     let _ = mk("STATIC", &format!("{} (stored on the mouse):", b.label), 0, 0, fx, y, COL_W, LBL_H);
                     y += LBL_H + LBL_GAP;
-                    onboard_edits.push((b.id, make_onboard(k, b, fx, y, COL_W), b.text.clone()));
+                    onboard_edits.push(make_onboard(k, b, fx, y, COL_W));
                     y += COMBO_H + GROUP_GAP;
                 }
             }
@@ -790,23 +939,24 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // entry is its button's identity, so it carries no caption at all —
         // the diagram's leader line runs from the button to the dropdown.
         if let Some((scale, _, (bx0, by0))) = pane_meta {
-            let place = |id: u16, slot: CalloutSlot, c: &ActionCombo| {
+            let place = |id: u16, slot: CalloutSlot, c: &ActionCombo, name: &str| {
                 if let Some((cx, cy, cw, _)) = slot_rect(slot) {
                     let px = pane_origin.0 + (((cx - bx0) as f32) * scale).round() as i32;
                     let py = pane_origin.1 + (((cy - by0) as f32) * scale).round() as i32;
                     let pw = ((cw as f32) * scale).round() as i32;
+                    accessible_label(&mk, name, px, py);
                     let _ = make_combo(id, px, py, pw, &c.labels, c.index);
                 }
             };
             if dpi_in_diagram {
                 if let Some(b) = &init.dpi_buttons {
-                    place(ID_CB_UP, CalloutSlot::DpiUp, &b.up);
-                    place(ID_CB_DOWN, CalloutSlot::DpiDown, &b.down);
+                    place(ID_CB_UP, CalloutSlot::DpiUp, &b.up, "Front DPI button action");
+                    place(ID_CB_DOWN, CalloutSlot::DpiDown, &b.down, "Rear DPI button action");
                 }
             }
             if show_thumbs && thumb_in_diagram {
-                place(ID_CB_THUMB_BACK, CalloutSlot::ThumbBack, &init.thumb_back);
-                place(ID_CB_THUMB_FWD, CalloutSlot::ThumbForward, &init.thumb_forward);
+                place(ID_CB_THUMB_BACK, CalloutSlot::ThumbBack, &init.thumb_back, "Back thumb button action");
+                place(ID_CB_THUMB_FWD, CalloutSlot::ThumbForward, &init.thumb_forward, "Forward thumb button action");
             }
             // On-board buttons, each at its own button's callout.
             if onboard_in_diagram {
@@ -815,7 +965,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                         let px = pane_origin.0 + (((cx - bx0) as f32) * scale).round() as i32;
                         let py = pane_origin.1 + (((cy - by0) as f32) * scale).round() as i32;
                         let pw = ((cw as f32) * scale).round() as i32;
-                        onboard_edits.push((b.id, make_onboard(k, b, px, py, pw), b.text.clone()));
+                        onboard_edits.push(make_onboard(k, b, px, py, pw));
                     }
                 }
             }
@@ -844,6 +994,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                         pane_origin.0 + (((cx + d - bx0) as f32) * scale).round() as i32
                     };
                     let sw = |w: i32| ((w as f32) * scale).round() as i32;
+                    accessible_label(&mk, &format!("{} lighting effect", l.label), sx(0), py);
                     let _ = make_combo(
                         ID_CB_EFFECT_BASE + zi16,
                         sx(0),
@@ -856,7 +1007,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                     // sized as the swatch always was, hover-highlighted.
                     let swatch = mk(
                         "BUTTON",
-                        "",
+                        &format!("{} color", l.label),
                         BS_OWNERDRAW | WS_TABSTOP,
                         ID_BTN_COLOR_BASE + zi16,
                         sx(diagram::LIGHT_COMBO_W + diagram::LIGHT_GAP),
@@ -875,9 +1026,17 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             }
         }
 
-        // --- Bottom bar, centered: just Save (changes apply live as they're
-        // made, and the titlebar X closes) with the hint line directly BELOW it.
-        let by = client_h - MARGIN - bottom_h;
+        // --- Bottom bar, centered: the status line (on-board binding steps and
+        // test results), Save (changes apply live as they're made, and the
+        // titlebar X closes), and the hint line directly BELOW it.
+        let mut by = client_h - MARGIN - bottom_h;
+        let status_text = if onboard.is_empty() {
+            ""
+        } else {
+            "To bind a button, click its box on the mouse and press a key or combo."
+        };
+        let status = mk("STATIC", status_text, SS_CENTER, 0, MARGIN, by, client_w - 2 * MARGIN, STATUS_H);
+        by += if onboard.is_empty() { 0 } else { STATUS_H + 6 };
         let bx = (client_w - 90) / 2;
         let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, bx, by, 90, BOTTOM_H);
         let _ = mk(
@@ -897,6 +1056,11 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             lbl_dpi,
             swatches,
             onboard_edits,
+            status,
+            testing: None,
+            return_focus: None,
+            razer_devices: std::collections::HashMap::new(),
+            razer_mods: Mods::default(),
             ui_font,
             hicon,
             pane,
@@ -928,8 +1092,34 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         );
         SetForegroundWindow(hwnd);
 
+        // Keyboard and mouse raw input while the window is in front, so the
+        // on-board test step sees what the mouse itself sends.
+        if !onboard.is_empty() {
+            let rid = [
+                RAWINPUTDEVICE { usUsagePage: 1, usUsage: 6, dwFlags: 0, hwndTarget: hwnd }, // keyboard
+                RAWINPUTDEVICE { usUsagePage: 1, usUsage: 2, dwFlags: 0, hwndTarget: hwnd }, // mouse
+            ];
+            RegisterRawInputDevices(rid.as_ptr(), rid.len() as u32, std::mem::size_of::<RAWINPUTDEVICE>() as u32);
+        }
+
+        // Keyboard users start on the first control, not the bare window.
+        SetFocus(tb);
+
+        // IsDialogMessage gives the window Tab / Shift+Tab between controls.
+        // After an on-board write focus sits on the window itself (see
+        // WM_APP_DEFOCUS); Tab then continues from the box it left.
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+            if msg.message == WM_KEYDOWN && msg.wParam == 0x09 && GetFocus() == hwnd {
+                if let Some(from) = state_mut(hwnd).and_then(|st| st.return_focus.take()) {
+                    let back = GetKeyState(0x10) < 0;
+                    SetFocus(GetNextDlgTabItem(hwnd, from, back as i32));
+                    continue;
+                }
+            }
+            if IsDialogMessageW(hwnd, &msg) != 0 {
+                continue;
+            }
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
@@ -1003,18 +1193,31 @@ unsafe fn subclass_recorder(combo: HWND) {
 
 /// The key recorder: in an on-board bind box, pressing a key or chord writes
 /// its name ("Ctrl+Shift+T") and applies it at once, instead of typing. Bare
-/// modifiers wait for the key they modify; Alt+F4 still closes the window.
-/// Everything else goes to the original EDIT WNDPROC.
+/// modifiers wait for the key they modify. Three keys keep their usual job so
+/// the window stays usable from the keyboard: Tab / Shift+Tab move on, Alt+Down
+/// opens the preset list, Alt+F4 closes the window. Everything else goes to the
+/// original EDIT WNDPROC.
 unsafe extern "system" fn recorder_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetKeyState;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, GWLP_USERDATA, WM_CHAR, WM_KEYDOWN, WM_SYSCHAR, WM_SYSKEYDOWN,
+        GetWindowLongPtrW, CB_SHOWDROPDOWN, GWLP_USERDATA, WM_CHAR, WM_KEYDOWN, WM_SYSCHAR, WM_SYSKEYDOWN,
     };
     let down = |vk: i32| GetKeyState(vk) < 0;
     match msg {
+        // Ask the window's dialog navigation for every key except Tab.
+        WM_GETDLGCODE => {
+            let m = lparam as *const MSG;
+            if m.is_null() || (*m).wParam != 0x09 {
+                return DLGC_WANTALLKEYS;
+            }
+        }
         WM_KEYDOWN | WM_SYSKEYDOWN => {
             let vk = wparam as u16;
             let alt = msg == WM_SYSKEYDOWN || down(0x12);
+            if alt && vk == 0x28 {
+                SendMessageW(GetParent(hwnd), CB_SHOWDROPDOWN, 1, 0);
+                return 0;
+            }
             if !(alt && vk == 0x73) {
                 if !crate::is_modifier(vk) {
                     let win = down(0x5B) || down(0x5C);
@@ -1023,7 +1226,7 @@ unsafe extern "system" fn recorder_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM,
                         SetWindowTextW(hwnd, text.as_ptr());
                         let combo = GetParent(hwnd);
                         if let Some(st) = state_mut(GetParent(combo)) {
-                            if let Some(k) = st.onboard_edits.iter().position(|(_, h, _)| *h == combo) {
+                            if let Some(k) = st.onboard_edits.iter().position(|e| e.hwnd == combo) {
                                 apply_onboard(st, k, name);
                             }
                         }
@@ -1062,13 +1265,121 @@ unsafe fn combo_item_text(cb: HWND, i: LRESULT) -> Option<String> {
 
 /// Report on-board control `k` as `text` if it differs from what was last
 /// applied, and remember it, so a focus change without an edit stays quiet.
+/// The status line says it's being saved; the app's [`onboard_result`] says
+/// how it went. Focus leaves the box so the test press isn't recorded.
 fn apply_onboard(st: &mut WindowState, k: usize, text: String) {
-    let (id, _, last) = &mut st.onboard_edits[k];
-    if text.trim() == last.trim() {
+    let edit = &mut st.onboard_edits[k];
+    if text.trim() == edit.last.trim() {
         return;
     }
-    *last = text.clone();
-    (st.on_event)(SettingsEvent::Onboard(*id, text.trim().to_string()));
+    edit.last = text.clone();
+    let (id, combo) = (edit.id, edit.hwnd);
+    let status = format!("{}: saving {} to the mouse\u{2026}", edit.label, text.trim());
+    st.testing = None;
+    st.return_focus = Some(combo);
+    // SAFETY: the status static and the combo's parent window are alive while
+    // WindowState is.
+    unsafe {
+        set_text(st.status, &status);
+        PostMessageW(GetParent(combo), WM_APP_DEFOCUS, 0, 0);
+    }
+    (st.on_event)(SettingsEvent::Onboard(id, text.trim().to_string()));
+}
+
+/// Read one raw input and return what a Razer device sent, if it's a press the
+/// test step cares about: a key or chord (with the modifiers the mouse holds),
+/// or a mouse button or scroll. Movement, releases and other vendors' devices
+/// give `None`.
+///
+/// SAFETY: `lparam` is the HRAWINPUT of a WM_INPUT message.
+unsafe fn read_razer_input(st: &mut WindowState, lparam: LPARAM) -> Option<Got> {
+    let mut raw: RAWINPUT = std::mem::zeroed();
+    let mut size = std::mem::size_of::<RAWINPUT>() as u32;
+    let n = GetRawInputData(
+        lparam as HRAWINPUT,
+        RID_INPUT,
+        &mut raw as *mut RAWINPUT as *mut _,
+        &mut size,
+        std::mem::size_of::<RAWINPUTHEADER>() as u32,
+    );
+    if n == u32::MAX || n == 0 {
+        return None;
+    }
+    let device = raw.header.hDevice as isize;
+    let razer = *st.razer_devices.entry(device).or_insert_with(|| is_razer_device(raw.header.hDevice));
+    if !razer {
+        return None;
+    }
+    match raw.header.dwType {
+        RIM_TYPEKEYBOARD => {
+            let kb = raw.data.keyboard;
+            let up = (kb.Flags as u32 & RI_KEY_BREAK) != 0;
+            let m = &mut st.razer_mods;
+            match kb.VKey {
+                0x10 | 0xA0 | 0xA1 => m.shift = !up,
+                0x11 | 0xA2 | 0xA3 => m.ctrl = !up,
+                0x12 | 0xA4 | 0xA5 => m.alt = !up,
+                0x5B | 0x5C => m.win = !up,
+                vk if !up => {
+                    return crate::chord_name(vk, m.ctrl, m.shift, m.alt, m.win).map(Got::Key);
+                }
+                _ => {}
+            }
+            None
+        }
+        RIM_TYPEMOUSE => {
+            let b = raw.data.mouse.Anonymous.Anonymous;
+            let flags = b.usButtonFlags as u32;
+            let send = if flags & 0x0001 != 0 {
+                MouseSend::Left
+            } else if flags & 0x0004 != 0 {
+                MouseSend::Right
+            } else if flags & 0x0010 != 0 {
+                MouseSend::Middle
+            } else if flags & 0x0040 != 0 {
+                MouseSend::Back
+            } else if flags & 0x0100 != 0 {
+                MouseSend::Forward
+            } else if flags & 0x0400 != 0 {
+                if b.usButtonData as i16 > 0 { MouseSend::ScrollUp } else { MouseSend::ScrollDown }
+            } else {
+                return None;
+            };
+            Some(Got::Mouse(send))
+        }
+        _ => None,
+    }
+}
+
+/// Whether a raw-input device is Razer's (USB vendor 1532), by its device path.
+///
+/// SAFETY: `device` comes from a RAWINPUTHEADER.
+unsafe fn is_razer_device(device: HANDLE) -> bool {
+    let mut len = 0u32;
+    GetRawInputDeviceInfoW(device, RIDI_DEVICENAME, std::ptr::null_mut(), &mut len);
+    if len == 0 || len > 1024 {
+        return false;
+    }
+    let mut buf = vec![0u16; len as usize];
+    if GetRawInputDeviceInfoW(device, RIDI_DEVICENAME, buf.as_mut_ptr() as *mut _, &mut len) == u32::MAX {
+        return false;
+    }
+    String::from_utf16_lossy(&buf).to_ascii_uppercase().contains("VID_1532")
+}
+
+/// Set a control's text.
+///
+/// SAFETY: `hwnd` is a live window.
+unsafe fn set_text(hwnd: HWND, text: &str) {
+    let w = to_wide(text);
+    SetWindowTextW(hwnd, w.as_ptr());
+}
+
+/// A zero-size label placed just before a control in creation (z) order: the
+/// name Windows' accessibility layer gives a control with no visible caption,
+/// such as the dropdowns on the diagram.
+fn accessible_label(mk: &impl Fn(&str, &str, u32, u16, i32, i32, i32, i32) -> HWND, name: &str, x: i32, y: i32) {
+    let _ = mk("STATIC", &format!("{name}:"), 0, 0, x, y, 0, 0);
 }
 
 fn snap50(v: i32) -> u16 {
@@ -1077,6 +1388,65 @@ fn snap50(v: i32) -> u16 {
 
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match msg {
+        WM_APP_DEFOCUS => {
+            SetFocus(hwnd);
+            0
+        }
+        // Like a dialog: focus on the window goes to its first control, except
+        // while it's parked there after an on-board write (Tab resumes then).
+        WM_SETFOCUS => {
+            if let Some(st) = state_mut(hwnd) {
+                if st.return_focus.is_none() {
+                    let first = GetNextDlgTabItem(hwnd, std::ptr::null_mut(), 0);
+                    if !first.is_null() {
+                        SetFocus(first);
+                    }
+                }
+            }
+            0
+        }
+        WM_APP_ONBOARD => {
+            let (button, result) = *Box::from_raw(lparam as *mut (u8, Result<Expect, String>));
+            if let Some(st) = state_mut(hwnd) {
+                if let Some(k) = st.onboard_edits.iter().position(|e| e.id == button) {
+                    let label = st.onboard_edits[k].label.clone();
+                    let text = match &result {
+                        Ok(Expect::Key(_) | Expect::Mouse(_)) => {
+                            format!("{label}: saved to the mouse. Press {label} on your mouse to test it.")
+                        }
+                        Ok(Expect::Nothing) => format!("{label}: saved. The button now does nothing."),
+                        Ok(Expect::Unmanaged) => {
+                            format!("{label}: no longer set by Snakecharmer; the mouse keeps its current bind.")
+                        }
+                        Err(e) => format!("\u{2717} {label} wasn't saved: {e}"),
+                    };
+                    set_text(st.status, &text);
+                    st.testing = match result {
+                        Ok(e @ (Expect::Key(_) | Expect::Mouse(_))) => Some((k, e)),
+                        _ => None,
+                    };
+                }
+            }
+            0
+        }
+        WM_INPUT => {
+            if let Some(st) = state_mut(hwnd) {
+                if st.testing.is_some() {
+                    if let Some(got) = read_razer_input(st, lparam) {
+                        let (k, expect) = st.testing.clone().unwrap();
+                        let label = st.onboard_edits[k].label.clone();
+                        if let Some((text, done)) = verdict(&label, &expect, &got) {
+                            set_text(st.status, &text);
+                            if done {
+                                st.testing = None;
+                            }
+                        }
+                    }
+                }
+            }
+            // WM_INPUT must still reach DefWindowProc so Windows can clean up.
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
         WM_PAINT => {
             if let Some(st) = state_mut(hwnd) {
                 if let Some(p) = &st.pane {
@@ -1114,20 +1484,35 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
             let notify = hiword(wparam);
             if let Some(st) = state_mut(hwnd) {
                 match (id, notify) {
-                    // On-board controls apply live like every other control:
-                    // a picked preset at once, typed text when focus leaves.
-                    (id, CBN_SELCHANGE | CBN_KILLFOCUS)
+                    // Entering an on-board box: say what to do.
+                    (id, CBN_SETFOCUS)
                         if (ID_CB_ONBOARD_BASE..ID_CB_ONBOARD_BASE + MAX_ONBOARD).contains(&id) =>
                     {
                         let cb = lparam as HWND;
-                        let text = if notify == CBN_SELCHANGE {
-                            // The edit text isn't updated yet during SELCHANGE.
+                        if let Some(e) = st.onboard_edits.iter().find(|e| e.hwnd == cb) {
+                            let text = format!(
+                                "{}: press the key or combo to store, or pick one from the list (Alt+Down).",
+                                e.label
+                            );
+                            set_text(st.status, &text);
+                        }
+                        st.testing = None;
+                    }
+                    // On-board controls apply live like every other control: a
+                    // preset once it's chosen (not while arrowing through the
+                    // list), a recorded key at once, anything else on focus loss.
+                    (id, CBN_SELENDOK | CBN_KILLFOCUS)
+                        if (ID_CB_ONBOARD_BASE..ID_CB_ONBOARD_BASE + MAX_ONBOARD).contains(&id) =>
+                    {
+                        let cb = lparam as HWND;
+                        let text = if notify == CBN_SELENDOK {
+                            // The edit text isn't updated yet during SELENDOK.
                             combo_item_text(cb, SendMessageW(cb, CB_GETCURSEL, 0, 0))
                         } else {
                             Some(window_text(cb))
                         };
                         if let (Some(text), Some(k)) =
-                            (text, st.onboard_edits.iter().position(|(_, h, _)| *h == cb))
+                            (text, st.onboard_edits.iter().position(|e| e.hwnd == cb))
                         {
                             apply_onboard(st, k, text);
                         }
@@ -1206,9 +1591,9 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                         // (Normally already applied on focus loss; this
                         // catches text still being typed when Save is hit.)
                         let initial: Vec<String> =
-                            st.onboard_edits.iter().map(|(_, _, t)| t.clone()).collect();
+                            st.onboard_edits.iter().map(|e| e.last.clone()).collect();
                         let now: Vec<String> =
-                            st.onboard_edits.iter().map(|(_, h, _)| window_text(*h)).collect();
+                            st.onboard_edits.iter().map(|e| window_text(e.hwnd)).collect();
                         for k in onboard_changed(&initial, &now) {
                             apply_onboard(st, k, now[k].clone());
                         }
@@ -1313,5 +1698,22 @@ mod tests {
         let initial = v(&["Back (default)", "ctrl+c", "Forward (default)", "disabled"]);
         let now = v(&["Back (default)", " ctrl+c ", "Copy (Ctrl+C)", ""]);
         assert_eq!(onboard_changed(&initial, &now), vec![2, 3]);
+    }
+
+    #[test]
+    fn test_step_verdicts() {
+        let key = Expect::Key("Ctrl+Shift+T".into());
+        let (text, done) = verdict("Back", &key, &Got::Key("Ctrl+Shift+T".into())).unwrap();
+        assert!(done && text.starts_with("\u{2713} Back sent Ctrl+Shift+T"), "{text}");
+        // The wrong thing arriving says what came and what to do.
+        let (text, done) = verdict("Back", &key, &Got::Mouse(MouseSend::Back)).unwrap();
+        assert!(!done && text.contains("sent back, not Ctrl+Shift+T") && text.contains("Press Back"), "{text}");
+        // Clicking around the window isn't a failed test...
+        assert_eq!(verdict("Back", &key, &Got::Mouse(MouseSend::Left)), None);
+        // ...unless left click is the bind under test.
+        let left = Expect::Mouse(MouseSend::Left);
+        assert!(verdict("Right", &left, &Got::Mouse(MouseSend::Left)).unwrap().1);
+        let middle = Expect::Mouse(MouseSend::Middle);
+        assert!(verdict("Wheel click", &middle, &Got::Mouse(MouseSend::Middle)).unwrap().1);
     }
 }

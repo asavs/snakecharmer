@@ -197,8 +197,12 @@ forward = "default"       # put it back to factory
 - **Buttons:** `right`, `wheel_click`, `back`, `forward`, `wheel_up`, `wheel_down`. Left
   and the underside DPI button are never written. A button you don't list keeps whatever it
   stores.
-- **Binds:** `default`, `disabled`, a mouse function (`middle click`), or a key or chord
-  (`a`, `1`, `f5`, `enter`, `pageup`, `ctrl+c`, `ctrl+shift+t`, `copy`, `paste`, `cut`).
+- **Binds:** `default`, `disabled`, a mouse function (`middle click`), or any key or chord
+  on a standard keyboard (`a`, `/`, `f13`, `num7`, `pageup`, `ctrl+shift+t`, `copy`).
+- **Settings window:** each button has a box on the mouse picture. Click it and press the
+  key or combo you want, or pick from its list (Alt+Down); it's written right away, then
+  the window asks you to press the button and confirms what the mouse actually sent. Right
+  click is left out of the window, since it's rarely remapped; set it in `[onboard]`.
 - **When it's written:** on attach, only when different from what the mouse stores, and
   checked by read-back. The mouse keeps it, so it works with Snakecharmer closed.
 - **Leftovers:** on attach the daemon reads the stored binds. If it finds non-default ones

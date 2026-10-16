@@ -1283,26 +1283,29 @@ fn handle_menu(
             let Some(&(_, name)) = km.buttons.iter().find(|(b, _)| *b == button) else {
                 return Ok(false);
             };
-            let problem = match crate::onboard::set_entry(km, &mut cfg.onboard, name, &value) {
+            // The window shows the outcome on its status line and, after a
+            // write, waits for the button press that proves it.
+            use platform::settings::Expect;
+            let result = match crate::onboard::set_entry(km, &mut cfg.onboard, name, &value) {
                 Ok(None) => {
                     log.log(&format!("Settings: on-board {name} left alone."));
-                    None
+                    Ok(Expect::Unmanaged)
                 }
-                Ok(Some(w)) => match crate::onboard::apply(ctrl, km, &[w]) {
+                Ok(Some(w)) => match crate::onboard::apply(ctrl, km, std::slice::from_ref(&w)) {
                     Ok(changes) => {
                         for c in changes {
                             log.log(&format!("On-board bind written: {c}"));
                         }
-                        None
+                        Ok(crate::onboard::expect_for(&w.bind))
                     }
-                    Err(e) => Some(format!("Couldn't write the {name} bind to the mouse: {e}")),
+                    Err(e) => Err(format!("the mouse didn't take it ({e})")),
                 },
-                Err(e) => Some(format!("The {name} bind wasn't saved: {e}")),
+                Err(e) => Err(e),
             };
-            if let Some(text) = problem {
-                log.log(&format!("WARN {text}"));
-                thread::spawn(move || platform::alert("Snakecharmer", &text));
+            if let Err(e) = &result {
+                log.log(&format!("WARN on-board {name} not saved: {e}"));
             }
+            platform::settings::onboard_result(button, result);
         }
         MenuAction::Save => {
             save_config(cfg, log);

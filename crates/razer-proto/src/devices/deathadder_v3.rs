@@ -100,10 +100,11 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
             Shape::Polyline { role: Role::Detail, points: &[(218, 106), (237, 106)] },
             Shape::Polyline { role: Role::Detail, points: &[(218, 114), (237, 114)] },
             Shape::Polyline { role: Role::Detail, points: &[(219, 122), (236, 122)] },
-            // Every button with a captured keymap write gets a Button callout:
-            // the window mounts its on-board bind control there. Wheel up,
-            // click and down fan out from the top, middle and bottom of the
-            // wheel; right leaves through the lower right plate.
+            // Button callouts: the window mounts each on-board bind control
+            // there. Every captured-write button except the main clicks, which
+            // people rarely remap (right stays settable from charmctl and
+            // [onboard]). Wheel up, click and down fan out from the top,
+            // middle and bottom of the wheel.
             Shape::Polyline { role: Role::Lead, points: &[(236, 70), (262, 40), (332, 40)] },
             Shape::Callout { slot: CalloutSlot::Button(0x09), at: (348, 37), anchor: Anchor::Start,
                 label: "wheel up", note: "scroll up", note_role: Role::Note },
@@ -113,9 +114,6 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
             Shape::Polyline { role: Role::Lead, points: &[(236, 126), (262, 150), (332, 150)] },
             Shape::Callout { slot: CalloutSlot::Button(0x0A), at: (348, 147), anchor: Anchor::Start,
                 label: "wheel down", note: "scroll down", note_role: Role::Note },
-            Shape::Polyline { role: Role::Lead, points: &[(290, 200), (332, 200)] },
-            Shape::Callout { slot: CalloutSlot::Button(0x02), at: (348, 197), anchor: Anchor::Start,
-                label: "right", note: "right click", note_role: Role::Note },
             // thumb buttons (drawn as bumps sticking out of the left outline)
             Shape::Path { role: Role::Button, start: (141, 139), closed: true, curves: &[
                 ((144, 138), (147, 140), (148, 144)),

@@ -158,6 +158,10 @@ fn presets(button: u8) -> Vec<(String, &'static str)> {
         .collect()
 }
 
+/// Left and right click: settable from `charmctl` and `[onboard]`, but not
+/// offered in the settings window, since people rarely remap them.
+const MAIN_CLICKS: [u8; 2] = [0x01, 0x02];
+
 /// The writable buttons in display order, for the settings window. A button
 /// `[onboard]` sets opens on that entry; one it leaves alone opens on what the
 /// mouse stores (from `stored`, empty if the read failed), so a leftover bind
@@ -165,7 +169,7 @@ fn presets(button: u8) -> Vec<(String, &'static str)> {
 pub fn controls(km: &KeymapSpec, table: &BTreeMap<String, String>, stored: &[StoredBind]) -> Vec<Control> {
     km.buttons
         .iter()
-        .filter(|&&(button, _)| km.is_writable(button))
+        .filter(|&&(button, _)| km.is_writable(button) && !MAIN_CLICKS.contains(&button))
         .map(|&(button, name)| {
             let presets = presets(button);
             let entry = table.iter().find(|(k, _)| km.button(k).map(|(b, _)| b) == Some(button));
@@ -184,6 +188,27 @@ pub fn controls(km: &KeymapSpec, table: &BTreeMap<String, String>, stored: &[Sto
             Control { button, name, presets: presets.into_iter().map(|(l, _)| l).collect(), text }
         })
         .collect()
+}
+
+/// What pressing a button with `bind` stored should make the mouse send, for
+/// the settings window's test step. A key's name is its `Display`, which
+/// matches what the window builds from raw input ("Ctrl+Shift+T").
+pub fn expect_for(bind: &Binding) -> platform::settings::Expect {
+    use platform::settings::{Expect, MouseSend};
+    match bind {
+        Binding::Key { .. } => Expect::Key(bind.to_string()),
+        Binding::Mouse(f) => match f {
+            0x01 => Expect::Mouse(MouseSend::Left),
+            0x02 => Expect::Mouse(MouseSend::Right),
+            0x03 => Expect::Mouse(MouseSend::Middle),
+            0x04 => Expect::Mouse(MouseSend::Back),
+            0x05 => Expect::Mouse(MouseSend::Forward),
+            0x09 => Expect::Mouse(MouseSend::ScrollUp),
+            0x0A => Expect::Mouse(MouseSend::ScrollDown),
+            _ => Expect::Nothing,
+        },
+        Binding::Disabled | Binding::Unknown { .. } => Expect::Nothing,
+    }
 }
 
 /// What the user picked or typed in a control, as a bind for `set_entry`: a
@@ -374,21 +399,22 @@ mod tests {
             [("wheel-click", "ctrl+c"), ("back", "f5"), ("left", "a")].map(|(k, v)| (k.into(), v.into())).into();
         let c = controls(v3(), &table, &[]);
         let names: Vec<&str> = c.iter().map(|c| c.name).collect();
-        assert_eq!(names, ["right", "wheel click", "back", "forward", "wheel up", "wheel down"]);
-        assert_eq!(c[0].text, "Right click (default)", "unmanaged, unread: the default entry");
-        assert_eq!(c[1].text, "Copy (Ctrl+C)", "an entry a preset covers shows the preset");
-        assert_eq!(c[2].text, "f5", "anything else shows as typed");
-        assert_eq!(c[2].presets[0], "Back (default)");
-        assert!(!c[2].presets.contains(&"Back".to_string()), "no duplicate of the default");
-        assert_eq!(c[4].presets[0], "Scroll up (default)");
+        // The main clicks aren't offered, though right is writable.
+        assert_eq!(names, ["wheel click", "back", "forward", "wheel up", "wheel down"]);
+        assert_eq!(c[0].text, "Copy (Ctrl+C)", "an entry a preset covers shows the preset");
+        assert_eq!(c[1].text, "f5", "anything else shows as typed");
+        assert_eq!(c[1].presets[0], "Back (default)");
+        assert!(!c[1].presets.contains(&"Back".to_string()), "no duplicate of the default");
+        assert_eq!(c[2].text, "Forward (default)", "unmanaged, unread: the default entry");
+        assert_eq!(c[3].presets[0], "Scroll up (default)");
     }
 
     #[test]
     fn unmanaged_controls_show_what_the_mouse_stores() {
-        // A Synapse leftover on forward, the factory bind on right, and a
+        // A Synapse leftover on forward, the factory bind on wheel up, and a
         // stored value [onboard] overrides on back.
         let stored = vec![
-            sb(0x02, "right", Binding::Mouse(0x02), Some(true)),
+            sb(0x09, "wheel up", Binding::Mouse(0x09), Some(true)),
             sb(0x04, "back", Binding::Disabled, Some(false)),
             sb(0x05, "forward", Binding::Key { modifiers: 0, usage: 0x27 }, Some(false)),
             sb(0x03, "wheel click", Binding::Key { modifiers: 1, usage: 0x06 }, Some(false)),
@@ -396,13 +422,27 @@ mod tests {
         let table: BTreeMap<String, String> = [("back".to_string(), "f5".to_string())].into();
         let c = controls(v3(), &table, &stored);
         let text = |name| c.iter().find(|c| c.name == name).unwrap().text.clone();
-        assert_eq!(text("right"), "Right click (default)");
+        assert_eq!(text("wheel up"), "Scroll up (default)");
         assert_eq!(text("forward"), "0", "the leftover shows as itself");
         assert_eq!(text("wheel click"), "Copy (Ctrl+C)", "a stored bind a preset covers");
         assert_eq!(text("back"), "f5", "[onboard] wins over the stored value");
         // Picking the default entry on the leftover is a change, and resets it.
         assert_ne!(text("forward"), "Forward (default)");
         assert_eq!(choice_to_bind(0x05, "Forward (default)"), "default");
+    }
+
+    #[test]
+    fn test_step_expects_what_the_recorder_names() {
+        use platform::settings::{Expect, MouseSend};
+        // A recorded chord, stored, must be expected under the same name the
+        // window builds from the mouse's raw keystrokes.
+        for (vk, ctrl, shift) in [(0x54u16, true, true), (0xBF, false, false), (0x61, false, false), (0x7C, true, false)] {
+            let name = platform::chord_name(vk, ctrl, shift, false, false).unwrap();
+            let bind = parse_bind(&name, 0x04).unwrap();
+            assert_eq!(expect_for(&bind), Expect::Key(name.clone()), "{name}");
+        }
+        assert_eq!(expect_for(&Binding::Mouse(0x03)), Expect::Mouse(MouseSend::Middle));
+        assert_eq!(expect_for(&Binding::Disabled), Expect::Nothing);
     }
 
     #[test]
