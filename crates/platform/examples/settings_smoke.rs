@@ -14,7 +14,8 @@
 
 use platform::diagram::{Anchor, CalloutSlot, Diagram, Role, Shape};
 use platform::settings::{
-    self, ActionCombo, DpiButtonsInit, LightingZoneInit, SettingsEvent, SettingsInit,
+    self, ActionCombo, DpiButtonsInit, LightingZoneInit, OnboardInit, OnboardRow, SettingsEvent,
+    SettingsInit,
 };
 
 /// A caption-less callout, as the daemon emits them for the window (the
@@ -331,6 +332,12 @@ fn main() {
             thumb_forward: combo("\u{2192} Forward (default)", 0),
             wheel: ActionCombo { labels: strings(&["Middle click (default)"]), index: 0 },
             lighting: vec![],
+            onboard: Some(OnboardInit {
+                rows: ["Right", "Wheel click", "Back", "Forward", "Wheel up", "Wheel down"]
+                    .iter()
+                    .map(|l| OnboardRow { label: l.to_string(), text: String::new() })
+                    .collect(),
+            }),
         }
     } else {
         // An Elite-like device: everything on.
@@ -364,6 +371,7 @@ fn main() {
                     color: (0x40, 0x60, 0xE0),
                 },
             ],
+            onboard: None,
         }
     };
 

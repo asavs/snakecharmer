@@ -36,6 +36,9 @@ pub enum MenuAction {
     SetZoneEffectKind(u8, String),
     /// Set one lighting zone's color (zone = a `razer_proto::led` id).
     SetZoneColor(u8, Rgb),
+    /// Stage one on-board bind from the settings window (button name, bind
+    /// text; blank = drop the entry) and write it to the mouse if valid.
+    SetOnboard(String, String),
     Save,
     OpenSettings,
     SettingsClosed,
@@ -215,6 +218,12 @@ fn to_platform_diagram(d: &razer_proto::diagram::Diagram) -> platform::diagram::
     pd::Diagram { shapes }
 }
 
+/// "wheel click" -> "Wheel click", the caption of an on-board bind field.
+fn onboard_label(name: &str) -> String {
+    let mut chars = name.chars();
+    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+}
+
 /// Spawn the settings window on its own thread (message loop lives there).
 /// `spec` supplies the plugged-in device's identity and capabilities: the
 /// slider covers the whole DPI range of *that* mouse (16000 on the Elite,
@@ -250,6 +259,13 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
             }
         })
         .collect();
+    // On-board bind fields exist only for mice with a recorded keymap; one
+    // per writable button, seeded from [onboard]. The names map row index
+    // back to a button when the window reports a row.
+    let onboard_rows = razer_proto::keymap::spec_for(spec.product_id)
+        .map(|km| crate::onboard::editable_rows(km, &cfg.onboard));
+    let onboard_names: Vec<&'static str> =
+        onboard_rows.iter().flatten().map(|(name, _)| *name).collect();
     let init = platform::settings::SettingsInit {
         device_name: spec.name.to_string(),
         diagram: spec.diagram.as_ref().map(to_platform_diagram),
@@ -268,6 +284,12 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
         // entry, mounted disabled by the window. No config key, no events.
         wheel: ActionCombo { labels: vec!["Middle click (default)".to_string()], index: 0 },
         lighting,
+        onboard: onboard_rows.map(|rows| platform::settings::OnboardInit {
+            rows: rows
+                .into_iter()
+                .map(|(name, text)| platform::settings::OnboardRow { label: onboard_label(name), text })
+                .collect(),
+        }),
     };
     let tx = tx.clone();
     thread::spawn(move || {
@@ -317,6 +339,9 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
                     .rgb_zones
                     .get(zi)
                     .map(|&zone| MenuAction::SetZoneColor(zone, Rgb::new(r, g, b))),
+                SE::Onboard(i, text) => onboard_names
+                    .get(i)
+                    .map(|name| MenuAction::SetOnboard(name.to_string(), text)),
                 SE::Save => Some(MenuAction::Save),
             };
             if let Some(c) = cmd {
@@ -963,20 +988,16 @@ fn run_session(
     }
 }
 
-/// Once per attach: write the `[onboard]` binds the config asks for (only the
-/// ones that differ), then read the rest and, if any are non-default leftovers,
-/// log them and offer to reset them. A failure (e.g. Synapse streaming lighting
-/// commands and tripping an echo mismatch) is only logged. The notice runs on a
-/// throwaway thread and is shown once per distinct set of leftovers per run.
-fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) {
+/// Write the `[onboard]` binds the config asks for (only the ones that differ)
+/// and return the buttons it configures. A bad config or a failed write is
+/// logged, not fatal; a bad config configures nothing.
+fn write_onboard_config(
+    ctrl: &Mouse,
+    km: &'static razer_proto::keymap::KeymapSpec,
+    cfg: &Config,
+    log: &Logger,
+) -> Vec<u8> {
     use crate::onboard;
-    let spec = ctrl.spec();
-    let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
-        if !cfg.onboard.is_empty() {
-            log.log(&format!("WARN [onboard] ignored: on-board binds aren't supported on the {}", spec.name));
-        }
-        return;
-    };
     let wanted = match onboard::parse_config(km, &cfg.onboard) {
         Ok(w) => w,
         Err(e) => {
@@ -992,7 +1013,24 @@ fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) {
         }
         Err(e) => log.log(&format!("WARN could not write [onboard] binds: {e}")),
     }
-    let configured: Vec<u8> = wanted.iter().map(|w| w.button).collect();
+    wanted.iter().map(|w| w.button).collect()
+}
+
+/// Once per attach: write the `[onboard]` binds the config asks for (only the
+/// ones that differ), then read the rest and, if any are non-default leftovers,
+/// log them and offer to reset them. A failure (e.g. Synapse streaming lighting
+/// commands and tripping an echo mismatch) is only logged. The notice runs on a
+/// throwaway thread and is shown once per distinct set of leftovers per run.
+fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) {
+    use crate::onboard;
+    let spec = ctrl.spec();
+    let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
+        if !cfg.onboard.is_empty() {
+            log.log(&format!("WARN [onboard] ignored: on-board binds aren't supported on the {}", spec.name));
+        }
+        return;
+    };
+    let configured = write_onboard_config(ctrl, km, cfg, log);
     let binds = match onboard::read_binds(ctrl, km) {
         Ok(b) => b,
         Err(e) => {
@@ -1195,6 +1233,34 @@ fn handle_menu(
             save_config(cfg, log);
             log.log(&format!("Settings: {name} color -> {hex}."));
         }
+        MenuAction::SetOnboard(name, value) => {
+            // A rejected entry is reported and never stored; a failed write
+            // keeps the (valid) entry so the next attach retries it.
+            let spec = ctrl.spec();
+            let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
+                return Ok(false);
+            };
+            let problem = match crate::onboard::set_entry(km, &mut cfg.onboard, &name, &value) {
+                Ok(None) => {
+                    log.log(&format!("Settings: on-board {name} left alone."));
+                    None
+                }
+                Ok(Some(w)) => match crate::onboard::apply(ctrl, km, &[w]) {
+                    Ok(changes) => {
+                        for c in changes {
+                            log.log(&format!("On-board bind written: {c}"));
+                        }
+                        None
+                    }
+                    Err(e) => Some(format!("Couldn't write the {name} bind to the mouse: {e}")),
+                },
+                Err(e) => Some(format!("The {name} bind wasn't saved: {e}")),
+            };
+            if let Some(text) = problem {
+                log.log(&format!("WARN {text}"));
+                thread::spawn(move || platform::alert("Snakecharmer", &text));
+            }
+        }
         MenuAction::Save => {
             save_config(cfg, log);
             log.log("Settings: config saved.");
@@ -1224,6 +1290,9 @@ fn handle_menu(
             }
             apply_startup_lighting(ctrl, cfg, log);
             apply_thumb_hook(cfg, log);
+            if let Some(km) = razer_proto::keymap::spec_for(ctrl.spec().product_id) {
+                write_onboard_config(ctrl, km, cfg, log);
+            }
             log.log("Menu: config reloaded and reapplied.");
         }
         MenuAction::Quit => return Ok(true),
@@ -1327,6 +1396,12 @@ fn reassert(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::E
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn onboard_labels_capitalize_the_button_name() {
+        assert_eq!(onboard_label("wheel click"), "Wheel click");
+        assert_eq!(onboard_label(""), "");
+    }
 
     #[test]
     fn all_action_presets_parse() {

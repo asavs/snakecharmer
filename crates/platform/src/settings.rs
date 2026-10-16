@@ -51,7 +51,8 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRect, CallWindowProcW, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow,
     DispatchMessageW, GetMessageW, GetParent, LoadCursorW, RegisterClassW, SendMessageW,
-    SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage,
+    GetWindowTextW, SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow,
+    TranslateMessage, WS_BORDER,
     CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
     HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DRAWITEM, WM_HSCROLL,
@@ -94,6 +95,7 @@ const BS_PUSHBUTTON: u32 = 0x0000_0000;
 const BS_OWNERDRAW: u32 = 0x0000_000B;
 const CBN_SELCHANGE: u16 = 1;
 const BN_CLICKED: u16 = 0;
+const ES_AUTOHSCROLL: u32 = 0x0000_0080;
 
 // Control ids.
 const ID_TB_DPI: u16 = 101;
@@ -107,6 +109,9 @@ const ID_CB_WHEEL: u16 = 114;
 const ID_BTN_DPI_MINUS: u16 = 115;
 const ID_BTN_DPI_PLUS: u16 = 116;
 const ID_BTN_SAVE: u16 = 109;
+// On-board bind edit fields: id = base + row index (up to MAX_ONBOARD rows).
+const MAX_ONBOARD: u16 = 16;
+const ID_ED_ONBOARD_BASE: u16 = 300;
 // Per-zone lighting controls: id = base + zone index (up to MAX_ZONES zones).
 const MAX_ZONES: u16 = 16;
 const ID_CB_EFFECT_BASE: u16 = 200;
@@ -167,6 +172,16 @@ const SLIDER_W: i32 = 240;
 const POLL_COMBO_W: i32 = 140;
 /// Minimum client width (the centered rows must fit without a diagram).
 const MIN_CLIENT_W: i32 = 430;
+/// Height of the on-board explainer above the bind fields (three lines: at
+/// `MIN_CLIENT_W` the sentence wraps to that many).
+const ONBOARD_NOTE_H: i32 = 3 * LBL_H;
+/// Widths of one on-board bind cell (caption + edit) and the gap between the
+/// two columns the cells are laid out in.
+const OB_LBL_W: i32 = 74;
+const OB_EDIT_W: i32 = 110;
+const OB_COL_GAP: i32 = 14;
+/// Vertical gap between on-board bind rows.
+const OB_ROW_GAP: i32 = 6;
 
 /// One remappable-button dropdown: its list entries and the selected index.
 /// Convention: index 0 is the button's *identity/default* entry (e.g.
@@ -220,11 +235,43 @@ pub struct SettingsInit {
     pub wheel: ActionCombo,
     /// One lighting row per zone, in device order (empty = no lighting).
     pub lighting: Vec<LightingZoneInit>,
+    /// On-board bind fields; `None` = this mouse has no recorded keymap and
+    /// the section is not created.
+    pub onboard: Option<OnboardInit>,
+}
+
+/// One on-board bind field: the button's caption and the bind text it starts
+/// with (empty = nothing configured, leave the mouse alone).
+pub struct OnboardRow {
+    pub label: String,
+    pub text: String,
+}
+
+/// The on-board bind editor: one text field per writable button. The window
+/// only carries text; the app validates it (see [`SettingsEvent::Onboard`]).
+pub struct OnboardInit {
+    pub rows: Vec<OnboardRow>,
+}
+
+/// Which on-board rows to report when Save is clicked: every non-empty row
+/// (so a bad entry is re-reported rather than silently kept) and any row
+/// edited back to empty (so the app can drop it). Untouched empty rows stay
+/// quiet. `initial` and `now` are parallel; text is compared trimmed.
+fn onboard_rows_to_send(initial: &[String], now: &[String]) -> Vec<usize> {
+    now.iter()
+        .enumerate()
+        .filter(|(i, n)| {
+            !n.trim().is_empty() || initial.get(*i).is_some_and(|b| !b.trim().is_empty())
+        })
+        .map(|(i, _)| i)
+        .collect()
 }
 
 /// Events emitted by the window on live changes / button presses.
 /// Lighting events carry the zone's index into [`SettingsInit::lighting`].
-#[derive(Debug, Clone, Copy)]
+/// `Onboard(row, text)` is sent only on Save, just before [`Self::Save`]: the
+/// row's index into [`OnboardInit::rows`] and its trimmed text.
+#[derive(Debug, Clone)]
 pub enum SettingsEvent {
     Dpi(u16),
     Polling(usize),
@@ -234,6 +281,7 @@ pub enum SettingsEvent {
     ThumbForward(usize),
     Effect(usize, usize),
     Color(usize, u8, u8, u8),
+    Onboard(usize, String),
     Save,
 }
 
@@ -262,6 +310,8 @@ struct WindowState {
     lbl_dpi: HWND,
     /// One entry per lighting zone (empty when the device has no lighting).
     swatches: Vec<Swatch>,
+    /// The on-board bind edit fields with the text each started with.
+    onboard_edits: Vec<(HWND, String)>,
     /// Owned UI font (Segoe UI 9 pt) shared by all controls.
     ui_font: HFONT,
     /// Runtime-drawn titlebar/taskbar icon (freed on `WM_DESTROY`); null if
@@ -405,11 +455,22 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         if fb_h > 0 {
             fb_h += GROUP_GAP;
         }
+        // On-board binds: an explainer plus the fields in two columns.
+        let onboard_rows = init
+            .onboard
+            .as_ref()
+            .map_or(0, |o| o.rows.len().min(MAX_ONBOARD as usize) as i32);
+        let onboard_h = if onboard_rows == 0 {
+            0
+        } else {
+            let grid = (onboard_rows + 1) / 2;
+            GROUP_GAP + ONBOARD_NOTE_H + 4 + grid * ROW2_H + (grid - 1) * OB_ROW_GAP
+        };
         let mut top_h = ROW1_H + GROUP_GAP + ROW2_H; // DPI slider + polling
         if !lighting_in_diagram {
             top_h += init.lighting.len() as i32 * (GROUP_GAP + ROW2_H); // one row per zone
         }
-        top_h += fb_h;
+        top_h += fb_h + onboard_h;
         let bottom_h = BOTTOM_H + 6 + 16; // button row + gap + hint line below it
         // Content-driven height: the diagram sits one DIAGRAM_VGAP below the
         // top cluster and one above the bottom bar — even, generous breathing
@@ -707,6 +768,48 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                 y += HOOK_NOTE_H;
             }
         }
+
+        // On-board binds: one short label saying what they are, then a text
+        // field per writable button. Text only; the app validates on Save.
+        let mut onboard_edits: Vec<(HWND, String)> = Vec::new();
+        if let (Some(ob), true) = (&init.onboard, onboard_h > 0) {
+            y += GROUP_GAP;
+            let _ = mk(
+                "STATIC",
+                "On-board binds are stored in the mouse and work even when Snakecharmer \
+                 isn't running. A key bound here replaces the thumb-button remap for that \
+                 button. Written to the mouse on Save; blank = leave alone. E.g. ctrl+c, \
+                 middle click, disabled, default.",
+                SS_CENTER,
+                0,
+                MARGIN,
+                y,
+                client_w - 2 * MARGIN,
+                ONBOARD_NOTE_H,
+            );
+            y += ONBOARD_NOTE_H + 4;
+            let cell_w = OB_LBL_W + 4 + OB_EDIT_W;
+            let grid_w = 2 * cell_w + OB_COL_GAP;
+            let gx = (client_w - grid_w) / 2;
+            for (i, row) in ob.rows.iter().take(MAX_ONBOARD as usize).enumerate() {
+                let (col, line) = ((i % 2) as i32, (i / 2) as i32);
+                let cx = gx + col * (cell_w + OB_COL_GAP);
+                let cy = y + line * (ROW2_H + OB_ROW_GAP);
+                let _ = mk("STATIC", &format!("{}:", row.label), 0, 0, cx, cy + 4, OB_LBL_W, LBL_H);
+                let ed = mk(
+                    "EDIT",
+                    &row.text,
+                    WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,
+                    ID_ED_ONBOARD_BASE + i as u16,
+                    cx + OB_LBL_W + 4,
+                    cy,
+                    OB_EDIT_W,
+                    ROW2_H,
+                );
+                onboard_edits.push((ed, row.text.clone()));
+            }
+            y += onboard_h - GROUP_GAP - ONBOARD_NOTE_H - 4;
+        }
         let _ = y; // cursor now == MARGIN + top_h; the pane starts below it
 
         // In-diagram dropdowns, mounted in the callouts' reserved rects and
@@ -809,6 +912,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             tb,
             lbl_dpi,
             swatches,
+            onboard_edits,
             ui_font,
             hicon,
             pane,
@@ -898,6 +1002,13 @@ unsafe extern "system" fn swatch_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, l
     }
     let orig: WNDPROC = std::mem::transmute(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     CallWindowProcW(orig, hwnd, msg, wparam, lparam)
+}
+
+/// The text of an edit control.
+unsafe fn window_text(hwnd: HWND) -> String {
+    let mut buf = [0u16; 256];
+    let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32).max(0) as usize;
+    String::from_utf16_lossy(&buf[..n.min(buf.len())])
 }
 
 fn snap50(v: i32) -> u16 {
@@ -1011,7 +1122,18 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                         SetWindowTextW(st.lbl_dpi, txt.as_ptr());
                         (st.on_event)(SettingsEvent::Dpi(dpi));
                     }
-                    (ID_BTN_SAVE, BN_CLICKED) => (st.on_event)(SettingsEvent::Save),
+                    (ID_BTN_SAVE, BN_CLICKED) => {
+                        // Report the on-board fields first so the app has
+                        // validated and staged them before it writes the file.
+                        let initial: Vec<String> =
+                            st.onboard_edits.iter().map(|(_, t)| t.clone()).collect();
+                        let now: Vec<String> =
+                            st.onboard_edits.iter().map(|(h, _)| window_text(*h)).collect();
+                        for i in onboard_rows_to_send(&initial, &now) {
+                            (st.on_event)(SettingsEvent::Onboard(i, now[i].trim().to_string()));
+                        }
+                        (st.on_event)(SettingsEvent::Save)
+                    }
                     _ => {}
                 }
             }
@@ -1093,5 +1215,24 @@ unsafe fn choose_color(owner: HWND, initial: (u8, u8, u8)) -> Option<(u8, u8, u8
         Some(((v & 0xFF) as u8, ((v >> 8) & 0xFF) as u8, ((v >> 16) & 0xFF) as u8))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn v(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn onboard_save_reports_filled_and_cleared_rows_only() {
+        // Untouched blanks stay quiet; filled rows are re-reported every
+        // Save; a row cleared since open is reported (as empty) to drop it.
+        let initial = v(&["", "ctrl+c", "", "disabled"]);
+        let now = v(&["", "ctrl+c", "  a ", ""]);
+        assert_eq!(onboard_rows_to_send(&initial, &now), vec![1, 2, 3]);
+        assert!(onboard_rows_to_send(&v(&["", ""]), &v(&["", "  "])).is_empty());
     }
 }
