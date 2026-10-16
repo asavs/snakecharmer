@@ -230,7 +230,12 @@ fn onboard_label(name: &str) -> String {
 /// slider covers the whole DPI range of *that* mouse (16000 on the Elite,
 /// 30000 on the V3), its schematic fills the side pane, and the DPI-button
 /// / lighting control groups only exist when the hardware does.
-fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
+fn open_settings_window(
+    cfg: &Config,
+    spec: DeviceSpec,
+    stored: &[crate::onboard::StoredBind],
+    tx: &Sender<Event>,
+) {
     use platform::settings::ActionCombo;
     // Each dropdown's index-0 entry is its button's identity (mapping to
     // config "none"); the thumb entries say "(default)" — no hook, native
@@ -264,7 +269,7 @@ fn open_settings_window(cfg: &Config, spec: DeviceSpec, tx: &Sender<Event>) {
     // per writable button, mounted at its CalloutSlot::Button on the diagram
     // and opening on its [onboard] entry. They replace the thumb dropdowns.
     let onboard = razer_proto::keymap::spec_for(spec.product_id).map(|km| {
-        crate::onboard::controls(km, &cfg.onboard)
+        crate::onboard::controls(km, &cfg.onboard, stored)
             .into_iter()
             .map(|c| platform::settings::OnboardButton {
                 id: c.button,
@@ -948,7 +953,18 @@ fn run_session(
                     log.log("Settings already open; brought to foreground.");
                 } else {
                     *settings_open = true;
-                    open_settings_window(cfg, spec, tx);
+                    // The on-board controls open on what the mouse stores, so
+                    // a leftover bind shows as itself (a failed read falls
+                    // back to the config alone).
+                    let stored = razer_proto::keymap::spec_for(spec.product_id)
+                        .map(|km| crate::onboard::read_binds(&ctrl, km))
+                        .transpose()
+                        .unwrap_or_else(|e| {
+                            log.log(&format!("WARN could not read on-board binds for settings: {e}"));
+                            None
+                        })
+                        .unwrap_or_default();
+                    open_settings_window(cfg, spec, &stored, tx);
                     log.log("Opened settings window.");
                 }
             }

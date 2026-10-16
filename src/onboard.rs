@@ -158,24 +158,29 @@ fn presets(button: u8) -> Vec<(String, &'static str)> {
         .collect()
 }
 
-/// The writable buttons in display order, for the settings window.
-pub fn controls(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Vec<Control> {
+/// The writable buttons in display order, for the settings window. A button
+/// `[onboard]` sets opens on that entry; one it leaves alone opens on what the
+/// mouse stores (from `stored`, empty if the read failed), so a leftover bind
+/// shows as itself and picking the default entry is a change that resets it.
+pub fn controls(km: &KeymapSpec, table: &BTreeMap<String, String>, stored: &[StoredBind]) -> Vec<Control> {
     km.buttons
         .iter()
         .filter(|&&(button, _)| km.is_writable(button))
         .map(|&(button, name)| {
             let presets = presets(button);
             let entry = table.iter().find(|(k, _)| km.button(k).map(|(b, _)| b) == Some(button));
-            let text = match entry {
-                None => presets[0].0.clone(),
-                Some((_, v)) => {
-                    let bind = parse_bind(v, button).ok();
-                    presets
-                        .iter()
-                        .find(|(_, p)| bind.is_some() && parse_bind(p, button).ok() == bind)
-                        .map_or_else(|| v.clone(), |(label, _)| label.clone())
-                }
+            let (bind, typed) = match entry {
+                Some((_, v)) => (parse_bind(v, button).ok(), v.clone()),
+                None => match stored.iter().find(|s| s.button == button) {
+                    Some(s) => (Some(s.bind.clone()), s.bind.to_string()),
+                    None => (Binding::default_for(button), String::new()),
+                },
             };
+            // The default entry first, so a stored factory bind reads as "(default)".
+            let text = presets
+                .iter()
+                .find(|(_, p)| bind.is_some() && parse_bind(p, button).ok() == bind)
+                .map_or(typed, |(label, _)| label.clone());
             Control { button, name, presets: presets.into_iter().map(|(l, _)| l).collect(), text }
         })
         .collect()
@@ -367,15 +372,37 @@ mod tests {
     fn controls_are_the_writable_buttons_opening_on_their_config() {
         let table: BTreeMap<String, String> =
             [("wheel-click", "ctrl+c"), ("back", "f5"), ("left", "a")].map(|(k, v)| (k.into(), v.into())).into();
-        let c = controls(v3(), &table);
+        let c = controls(v3(), &table, &[]);
         let names: Vec<&str> = c.iter().map(|c| c.name).collect();
         assert_eq!(names, ["right", "wheel click", "back", "forward", "wheel up", "wheel down"]);
-        assert_eq!(c[0].text, "Right click (default)", "unmanaged opens on the default entry");
+        assert_eq!(c[0].text, "Right click (default)", "unmanaged, unread: the default entry");
         assert_eq!(c[1].text, "Copy (Ctrl+C)", "an entry a preset covers shows the preset");
         assert_eq!(c[2].text, "f5", "anything else shows as typed");
         assert_eq!(c[2].presets[0], "Back (default)");
         assert!(!c[2].presets.contains(&"Back".to_string()), "no duplicate of the default");
         assert_eq!(c[4].presets[0], "Scroll up (default)");
+    }
+
+    #[test]
+    fn unmanaged_controls_show_what_the_mouse_stores() {
+        // A Synapse leftover on forward, the factory bind on right, and a
+        // stored value [onboard] overrides on back.
+        let stored = vec![
+            sb(0x02, "right", Binding::Mouse(0x02), Some(true)),
+            sb(0x04, "back", Binding::Disabled, Some(false)),
+            sb(0x05, "forward", Binding::Key { modifiers: 0, usage: 0x27 }, Some(false)),
+            sb(0x03, "wheel click", Binding::Key { modifiers: 1, usage: 0x06 }, Some(false)),
+        ];
+        let table: BTreeMap<String, String> = [("back".to_string(), "f5".to_string())].into();
+        let c = controls(v3(), &table, &stored);
+        let text = |name| c.iter().find(|c| c.name == name).unwrap().text.clone();
+        assert_eq!(text("right"), "Right click (default)");
+        assert_eq!(text("forward"), "0", "the leftover shows as itself");
+        assert_eq!(text("wheel click"), "Copy (Ctrl+C)", "a stored bind a preset covers");
+        assert_eq!(text("back"), "f5", "[onboard] wins over the stored value");
+        // Picking the default entry on the leftover is a change, and resets it.
+        assert_ne!(text("forward"), "Forward (default)");
+        assert_eq!(choice_to_bind(0x05, "Forward (default)"), "default");
     }
 
     #[test]
