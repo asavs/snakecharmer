@@ -1,0 +1,15 @@
+  8.14s  1532:00B2 IF00   mouse  LEFT down
+  8.48s  1532:00B2 IF02   KEY    D1 down (vk 0x31, scan 0x02)
+  8.56s  1532:00B2 IF02   KEY    D1 up (vk 0x31, scan 0x02)
+  8.83s  1532:00B2 IF02   KEY    D1 down (vk 0x31, scan 0x02)
+  8.93s  1532:00B2 IF02   KEY    D1 up (vk 0x31, scan 0x02)
+  9.19s  1532:00B2 IF02   KEY    D1 down (vk 0x31, scan 0x02)
+  9.30s  1532:00B2 IF02   KEY    D1 up (vk 0x31, scan 0x02)
+ 12.02s  1532:00B2 IF00   mouse  XBUTTON2 (forward) down
+ 12.32s  1532:00B2 IF00   mouse  XBUTTON2 (forward) down
+ 12.59s  1532:00B2 IF00   mouse  XBUTTON2 (forward) down
+--- keystrokes from non-Razer devices (counted, not logged):
+  none
+--- raw mouse packets per device (movement included):
+  1532:00B2 IF00: 131
+

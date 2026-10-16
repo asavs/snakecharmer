@@ -184,6 +184,8 @@ pub enum ProtoError {
     BadColor(String),
     /// A keymap read reply described a different button than the one asked for.
     KeymapButtonMismatch { sent: u8, got: u8 },
+    /// A keymap write with no captured or decoded form.
+    KeymapNotWritable(String),
 }
 
 impl core::fmt::Display for ProtoError {
@@ -207,6 +209,7 @@ impl core::fmt::Display for ProtoError {
             ProtoError::KeymapButtonMismatch { sent, got } => {
                 write!(f, "keymap reply for button 0x{got:02x}, asked for 0x{sent:02x}")
             }
+            ProtoError::KeymapNotWritable(why) => write!(f, "can't write that bind: {why}"),
         }
     }
 }

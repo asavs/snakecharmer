@@ -5,7 +5,9 @@
 //! Usage:
 //!   charmctl devices                        list the Razer mice plugged in, supported or not
 //!   charmctl status                         device mode + DPI + polling rate (read-only)
-//!   charmctl keymap                         button binds stored on the mouse (read-only)
+//!   charmctl keymap                         button binds stored on the mouse
+//!   charmctl keymap reset                   put leftover on-board binds back to default
+//!   charmctl keymap set <button> <bind>     store a bind on the mouse (e.g. back ctrl+c)
 //!   charmctl set-dpi X [Y]                  set DPI
 //!   charmctl set-poll <hz>                  set polling rate (Hz)
 //!   charmctl set-mode driver|hardware       set device mode
@@ -45,7 +47,7 @@ fn main() {
     let result: Result<(), Box<dyn std::error::Error>> = match cmd {
         "devices" => devices(),
         "status" => status(),
-        "keymap" => keymap(),
+        "keymap" => keymap(rest),
         "set-dpi" => set_dpi(rest),
         "set-poll" => set_poll(rest),
         "set-mode" => set_mode(rest),
@@ -76,7 +78,9 @@ fn print_help() {
          USAGE:\n\
          \x20 charmctl devices                         list Razer mice plugged in, supported or not\n\
          \x20 charmctl status                          device mode + DPI + polling rate (read-only)\n\
-         \x20 charmctl keymap                          button binds stored on the mouse (read-only)\n\
+         \x20 charmctl keymap                          button binds stored on the mouse\n\
+         \x20 charmctl keymap reset                    put leftover on-board binds back to default\n\
+         \x20 charmctl keymap set <button> <bind>      store a bind on the mouse (e.g. back ctrl+c)\n\
          \x20 charmctl set-dpi X [Y]                   set DPI\n\
          \x20 charmctl set-poll <hz>                   set polling rate (Hz)\n\
          \x20 charmctl set-mode driver|hardware        set device mode\n\
@@ -136,21 +140,59 @@ fn status() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Print the binds stored in the mouse's on-board memory. Those apply with no
-/// software running, so a non-default one is usually a leftover from Synapse.
-fn keymap() -> Result<(), Box<dyn std::error::Error>> {
+/// Show, reset or set the binds stored in the mouse's on-board memory. Those
+/// apply with no software running, so a non-default one is usually a leftover
+/// from Synapse.
+fn keymap(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     use razer_proto::keymap;
     use snakecharmer::onboard;
     let mouse = Mouse::open()?;
     let spec = mouse.spec();
     let Some(km) = keymap::spec_for(spec.product_id) else {
         println!(
-            "Reading on-board binds isn't supported on the {} yet. See {KEYMAP_DOC_URL}",
+            "On-board binds aren't supported on the {} yet. See {KEYMAP_DOC_URL}",
             spec.name
         );
         return Ok(());
     };
-    println!("On-board binds on the {} (read-only):", spec.name);
+    match args.first().map(|s| s.as_str()) {
+        None => {}
+        Some("reset") => {
+            let out = onboard::reset(&mouse, km, &[])?;
+            if out.changes.is_empty() && out.stuck.is_empty() {
+                println!("Nothing to reset: every bind is already default.");
+            }
+            for c in &out.changes {
+                println!("  reset {c}");
+            }
+            if !out.stuck.is_empty() {
+                println!(
+                    "Can't reset {} yet: no recorded write for that button. See {KEYMAP_DOC_URL}",
+                    out.stuck.join(", ")
+                );
+            }
+            println!();
+        }
+        Some("set") if args.len() >= 3 => {
+            // Button names can be two words (`keymap set wheel click f5`), and so
+            // can binds (`middle click`): the button is the longest leading run
+            // of words that names one.
+            let words = &args[1..];
+            let split = (1..words.len())
+                .rev()
+                .find(|&n| km.button(&words[..n].join(" ")).is_some())
+                .unwrap_or(1);
+            let table = [(words[..split].join(" "), words[split..].join(" "))].into();
+            let wanted = onboard::parse_config(km, &table)?;
+            match onboard::apply(&mouse, km, &wanted)?.first() {
+                Some(c) => println!("  set {c}\n"),
+                None => println!("  {} already stores {}\n", wanted[0].name, wanted[0].bind),
+            }
+        }
+        Some("set") => return Err("usage: keymap set <button> <bind>   e.g. keymap set back ctrl+c".into()),
+        Some(other) => return Err(format!("unknown keymap command {other:?} (want reset or set)").into()),
+    }
+    println!("On-board binds on the {}:", spec.name);
     let binds = onboard::read_binds(&mouse, km)?;
     for b in &binds {
         let tag = match b.is_default {
@@ -160,12 +202,11 @@ fn keymap() -> Result<(), Box<dyn std::error::Error>> {
         };
         println!("  {:<12} {}{tag}", b.name, b.bind);
     }
-    let leftovers = onboard::leftovers(&binds).len();
+    let leftovers = onboard::leftovers(&binds, &[]).len();
     if leftovers > 0 {
         println!(
-            "\n{leftovers} button(s) carry a non-default bind stored on the mouse. It applies \
-             with no software running, and Snakecharmer can't change it yet; reset it in \
-             Synapse. See {KEYMAP_DOC_URL}"
+            "\n{leftovers} button(s) store a non-default bind, which applies with no software \
+             running. `charmctl keymap reset` puts them back to default."
         );
     }
     Ok(())

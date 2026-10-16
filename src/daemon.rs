@@ -835,7 +835,7 @@ fn run_session(
     // devices without lighting hardware — see `apply_startup_lighting`).
     apply_startup_lighting(&ctrl, cfg, log);
 
-    check_onboard_binds(&ctrl, log);
+    check_onboard_binds(&ctrl, cfg, log);
 
     // Driver mode and the DPI-button vendor-code listeners only apply to devices
     // that actually have the wheel DPI buttons. On a device without them there
@@ -963,17 +963,36 @@ fn run_session(
     }
 }
 
-/// Once per attach: read the on-board button binds (read-only, only the ids in
-/// the mouse's keymap spec) and, if any are non-default, log them and offer the
-/// keymap doc in a notice. A read failure (e.g. Synapse streaming lighting
+/// Once per attach: write the `[onboard]` binds the config asks for (only the
+/// ones that differ), then read the rest and, if any are non-default leftovers,
+/// log them and offer to reset them. A failure (e.g. Synapse streaming lighting
 /// commands and tripping an echo mismatch) is only logged. The notice runs on a
 /// throwaway thread and is shown once per distinct set of leftovers per run.
-fn check_onboard_binds(ctrl: &Mouse, log: &Logger) {
+fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) {
     use crate::onboard;
     let spec = ctrl.spec();
     let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
+        if !cfg.onboard.is_empty() {
+            log.log(&format!("WARN [onboard] ignored: on-board binds aren't supported on the {}", spec.name));
+        }
         return;
     };
+    let wanted = match onboard::parse_config(km, &cfg.onboard) {
+        Ok(w) => w,
+        Err(e) => {
+            log.log(&format!("WARN [onboard] not applied: {e}"));
+            Vec::new()
+        }
+    };
+    match onboard::apply(ctrl, km, &wanted) {
+        Ok(changes) => {
+            for c in changes {
+                log.log(&format!("On-board bind written: {c}"));
+            }
+        }
+        Err(e) => log.log(&format!("WARN could not write [onboard] binds: {e}")),
+    }
+    let configured: Vec<u8> = wanted.iter().map(|w| w.button).collect();
     let binds = match onboard::read_binds(ctrl, km) {
         Ok(b) => b,
         Err(e) => {
@@ -981,21 +1000,51 @@ fn check_onboard_binds(ctrl: &Mouse, log: &Logger) {
             return;
         }
     };
-    let left = onboard::leftovers(&binds);
+    let left = onboard::leftovers(&binds, &configured);
     if left.is_empty() {
-        log.log("On-board binds are all default.");
+        log.log("On-board binds match the config and factory defaults.");
         return;
     }
     let described = onboard::describe(&left);
     log.log(&format!("WARN non-default binds stored on the mouse: {described}."));
     if onboard::first_time(&described) {
         let text = onboard::notice_text(spec.name, &described);
+        let log = log.clone();
         thread::spawn(move || {
             if platform::alert_yes_no("Snakecharmer", &text) {
-                platform::open_url(onboard::KEYMAP_DOC_URL);
+                reset_leftovers(km, &configured, &log);
             }
         });
     }
+}
+
+/// The "reset them now?" answer. Runs on the notice's thread with its own
+/// handle; a clash with the session's periodic reassert fails a read-back,
+/// which is reported rather than retried.
+fn reset_leftovers(km: &'static razer_proto::keymap::KeymapSpec, configured: &[u8], log: &Logger) {
+    use crate::onboard;
+    let result = Mouse::open()
+        .and_then(|m| onboard::reset(&m, km, configured));
+    let message = match result {
+        Ok(out) => {
+            for c in &out.changes {
+                log.log(&format!("On-board bind reset: {c}"));
+            }
+            let mut m = format!("Reset {} button(s) to the factory bind.", out.changes.len());
+            if !out.stuck.is_empty() {
+                m += &format!(
+                    "\n\nCan't reset {} yet: no recorded write for that button.",
+                    out.stuck.join(", ")
+                );
+            }
+            m
+        }
+        Err(e) => {
+            log.log(&format!("WARN on-board reset failed: {e}"));
+            format!("The reset didn't complete: {e}\n\nTry again with `charmctl keymap reset`.")
+        }
+    };
+    platform::alert("Snakecharmer", &message);
 }
 
 fn apply_startup_lighting(ctrl: &Mouse, cfg: &Config, log: &Logger) {

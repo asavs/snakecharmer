@@ -56,6 +56,12 @@ pub struct Config {
     /// `lighting` / `color`. Kept last: TOML tables must follow plain values.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub zones: BTreeMap<String, ZoneConfig>,
+    /// Binds written to the mouse's own memory (`[onboard]`), keyed by button
+    /// name: `back = "ctrl+c"`, `wheel_click = "default"`. They work with the
+    /// daemon closed. Only mice with a recorded keymap (`razer_proto::keymap`);
+    /// a button not listed keeps whatever it stores.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub onboard: BTreeMap<String, String>,
 }
 
 impl Default for Config {
@@ -73,6 +79,7 @@ impl Default for Config {
             reassert_interval_secs: 60,
             autostart_bootstrapped: false,
             zones: BTreeMap::new(),
+            onboard: BTreeMap::new(),
         }
     }
 }
@@ -181,6 +188,7 @@ mod tests {
                 "logo".to_string(),
                 ZoneConfig { lighting: Some("breathing".into()), color: None },
             )]),
+            onboard: BTreeMap::from([("back".to_string(), "ctrl+c".to_string())]),
         };
         let text = toml::to_string_pretty(&c).unwrap();
         let back: Config = toml::from_str(&text).unwrap();
@@ -209,6 +217,7 @@ mod tests {
     fn empty_zones_stay_out_of_the_toml() {
         let text = toml::to_string_pretty(&Config::default()).unwrap();
         assert!(!text.contains("zones"), "no empty [zones] table:\n{text}");
+        assert!(!text.contains("onboard"), "no empty [onboard] table:\n{text}");
     }
 
     #[test]

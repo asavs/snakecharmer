@@ -30,8 +30,8 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, VkKeyScanW, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    MessageBoxW, IDRETRY, IDYES, MB_ICONINFORMATION, MB_RETRYCANCEL, MB_SETFOREGROUND, MB_YESNO,
-    SW_SHOWNORMAL,
+    MessageBoxW, IDRETRY, IDYES, MB_ICONINFORMATION, MB_OK, MB_RETRYCANCEL, MB_SETFOREGROUND,
+    MB_YESNO, SW_SHOWNORMAL,
 };
 
 /// Common virtual-key codes (a small, hand-picked subset).
@@ -181,6 +181,23 @@ pub fn alert_retry(title: &str, text: &str) -> bool {
         )
     };
     clicked == IDRETRY
+}
+
+/// Show a blocking message box with an OK button. Blocks the calling thread,
+/// same as [`alert_retry`] — call it off the daemon's loop.
+pub fn alert(title: &str, text: &str) {
+    let title: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    let text: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: as in `alert_retry`: valid NUL-terminated buffers that outlive
+    // the call, a null owner HWND, and no retained pointers.
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND,
+        );
+    }
 }
 
 /// Show a blocking message box with Yes/No buttons. Returns `true` for Yes.

@@ -249,6 +249,25 @@ impl Mouse {
         Ok(proto::keymap::parse_binding(&resp, button)?)
     }
 
+    /// Write one button's bind to on-board memory and verify it by reading it
+    /// back. It persists across power cycles, so callers write only what
+    /// differs. Refused unless the button is in `km.writable`.
+    pub fn set_button_binding(
+        &self,
+        km: &proto::keymap::KeymapSpec,
+        button: u8,
+        bind: &proto::keymap::Binding,
+    ) -> Result<proto::keymap::Binding> {
+        let report = proto::keymap::write_binding_report(km, self.spec.transaction_id, button, bind)?;
+        self.send_command(&report)?;
+        sleep(Duration::from_millis(50));
+        let read = self.get_button_binding(button)?;
+        if read != *bind {
+            return Err(Error::Verify(format!("wrote {bind} to button 0x{button:02x}, device reports {read}")));
+        }
+        Ok(read)
+    }
+
     // --- Chroma / RGB lighting ---------------------------------------------
     //
     // Each effect is applied to every zone in the spec's `rgb_zones`, in order.

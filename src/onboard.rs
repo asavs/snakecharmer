@@ -1,12 +1,17 @@
-//! Read-only check of the button binds stored in the mouse's on-board memory.
-//! They apply with no software running, so a non-default one is usually a
-//! leftover from Synapse. Shared by `charmctl keymap` and the daemon so the
-//! "what counts as a leftover" rule lives in one place.
+//! The button binds stored in the mouse's on-board memory. They apply with no
+//! software running, so a non-default one is usually a leftover from Synapse.
+//! Shared by `charmctl keymap` and the daemon so the rules for what counts as a
+//! leftover, and what gets written, live in one place.
+//!
+//! Writes go through [`Mouse::set_button_binding`], which only accepts the
+//! buttons a capture recorded Synapse writing, and reads every write back.
+//! Nothing is written unless it differs from what the mouse already stores.
 
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use razer_hid::Mouse;
-use razer_proto::keymap::{Binding, KeymapSpec};
+use razer_proto::keymap::{parse_bind, Binding, KeymapSpec};
 
 /// The on-board keymap research: what's decoded, for which mice.
 pub const KEYMAP_DOC_URL: &str =
@@ -15,6 +20,7 @@ pub const KEYMAP_DOC_URL: &str =
 /// One button's stored bind and whether it differs from the factory one.
 /// A button with no known factory bind is never flagged.
 pub struct StoredBind {
+    pub button: u8,
     pub name: &'static str,
     pub bind: Binding,
     pub is_default: Option<bool>,
@@ -28,14 +34,18 @@ pub fn read_binds(mouse: &Mouse, km: &KeymapSpec) -> Result<Vec<StoredBind>, raz
         .map(|&(button, name)| {
             let bind = mouse.get_button_binding(button)?;
             let is_default = Binding::default_for(button).map(|d| d == bind);
-            Ok(StoredBind { name, bind, is_default })
+            Ok(StoredBind { button, name, bind, is_default })
         })
         .collect()
 }
 
-/// The binds that are known to differ from the factory default.
-pub fn leftovers(binds: &[StoredBind]) -> Vec<&StoredBind> {
-    binds.iter().filter(|b| b.is_default == Some(false)).collect()
+/// The binds that are known to differ from the factory default, skipping the
+/// buttons in `configured` (the user chose those in `[onboard]`).
+pub fn leftovers<'a>(binds: &'a [StoredBind], configured: &[u8]) -> Vec<&'a StoredBind> {
+    binds
+        .iter()
+        .filter(|b| b.is_default == Some(false) && !configured.contains(&b.button))
+        .collect()
 }
 
 /// "back = 0, wheel click = 8" for the log and the notice.
@@ -53,7 +63,7 @@ pub fn notice_text(device: &str, described: &str) -> String {
         "Your {device} has binds stored on the mouse: {described}.\n\n\
          They apply even without Snakecharmer, which is why a button can send \
          something other than what you expect.\n\n\
-         Open the page that explains how to reset them?"
+         Reset them to the factory binds now?"
     )
 }
 
@@ -71,22 +81,111 @@ pub fn first_time(described: &str) -> bool {
     true
 }
 
+/// A bind to put on one button.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Wanted {
+    pub button: u8,
+    pub name: &'static str,
+    pub bind: Binding,
+}
+
+/// Resolve the `[onboard]` config table (button name -> bind) against `km`.
+/// Every bad entry is reported, not just the first, so one save fixes them all.
+pub fn parse_config(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Result<Vec<Wanted>, String> {
+    let mut wanted = Vec::new();
+    let mut errors = Vec::new();
+    for (key, value) in table {
+        let Some((button, name)) = km.button(key) else {
+            errors.push(format!("{key:?} isn't a button on this mouse"));
+            continue;
+        };
+        if !km.is_writable(button) {
+            errors.push(format!("{name} can't be rebound yet"));
+            continue;
+        }
+        match parse_bind(value, button) {
+            Ok(bind) => wanted.push(Wanted { button, name, bind }),
+            Err(e) => errors.push(format!("{name} = {value:?}: {e}")),
+        }
+    }
+    if errors.is_empty() { Ok(wanted) } else { Err(errors.join("; ")) }
+}
+
+/// One write that was made.
+pub struct Change {
+    pub name: &'static str,
+    pub before: Binding,
+    pub after: Binding,
+}
+
+impl core::fmt::Display for Change {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}: {} -> {}", self.name, self.before, self.after)
+    }
+}
+
+/// Put `wanted` on the mouse, writing only buttons whose stored bind differs.
+pub fn apply(mouse: &Mouse, km: &KeymapSpec, wanted: &[Wanted]) -> Result<Vec<Change>, razer_hid::Error> {
+    let mut changes = Vec::new();
+    for w in wanted {
+        let before = mouse.get_button_binding(w.button)?;
+        if before != w.bind {
+            let after = mouse.set_button_binding(km, w.button, &w.bind)?;
+            changes.push(Change { name: w.name, before, after });
+        }
+    }
+    Ok(changes)
+}
+
+/// What a reset did, and the leftovers it couldn't touch (buttons with no
+/// captured write, such as left).
+pub struct ResetOutcome {
+    pub changes: Vec<Change>,
+    pub stuck: Vec<String>,
+}
+
+/// Put every leftover back to its factory bind, skipping `configured` buttons.
+pub fn reset(mouse: &Mouse, km: &KeymapSpec, configured: &[u8]) -> Result<ResetOutcome, razer_hid::Error> {
+    let binds = read_binds(mouse, km)?;
+    let (wanted, stuck) = reset_plan(km, &leftovers(&binds, configured));
+    let changes = apply(mouse, km, &wanted)?;
+    Ok(ResetOutcome { changes, stuck })
+}
+
+/// Split leftovers into the defaults to write and the ones that can't be.
+fn reset_plan(km: &KeymapSpec, leftovers: &[&StoredBind]) -> (Vec<Wanted>, Vec<String>) {
+    let mut wanted = Vec::new();
+    let mut stuck = Vec::new();
+    for b in leftovers {
+        match Binding::default_for(b.button) {
+            Some(bind) if km.is_writable(b.button) => wanted.push(Wanted { button: b.button, name: b.name, bind }),
+            _ => stuck.push(format!("{} = {}", b.name, b.bind)),
+        }
+    }
+    (wanted, stuck)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn sb(name: &'static str, bind: Binding, is_default: Option<bool>) -> StoredBind {
-        StoredBind { name, bind, is_default }
+    fn v3() -> &'static KeymapSpec {
+        razer_proto::keymap::spec_for(0x00B2).unwrap()
+    }
+
+    fn sb(button: u8, name: &'static str, bind: Binding, is_default: Option<bool>) -> StoredBind {
+        StoredBind { button, name, bind, is_default }
     }
 
     #[test]
-    fn leftovers_skip_defaults_and_unknown_defaults() {
+    fn leftovers_skip_defaults_unknown_defaults_and_configured() {
         let binds = vec![
-            sb("left", Binding::Mouse(1), Some(true)),
-            sb("back", Binding::Key { modifiers: 0, usage: 0x27 }, Some(false)),
-            sb("underside", Binding::Disabled, None),
+            sb(0x01, "left", Binding::Mouse(1), Some(true)),
+            sb(0x04, "back", Binding::Key { modifiers: 0, usage: 0x27 }, Some(false)),
+            sb(0x05, "forward", Binding::Disabled, Some(false)),
+            sb(0x60, "underside", Binding::Disabled, None),
         ];
-        let l = leftovers(&binds);
+        let l = leftovers(&binds, &[0x05]);
         assert_eq!(l.len(), 1);
         assert_eq!(l[0].name, "back");
     }
@@ -94,10 +193,10 @@ mod tests {
     #[test]
     fn notice_names_device_and_binds() {
         let binds = vec![
-            sb("back", Binding::Disabled, Some(false)),
-            sb("wheel click", Binding::Disabled, Some(false)),
+            sb(0x04, "back", Binding::Disabled, Some(false)),
+            sb(0x03, "wheel click", Binding::Disabled, Some(false)),
         ];
-        let d = describe(&leftovers(&binds));
+        let d = describe(&leftovers(&binds, &[]));
         assert_eq!(d, "back = disabled, wheel click = disabled");
         let t = notice_text("DeathAdder V3", &d);
         assert!(t.starts_with("Your DeathAdder V3 has binds stored on the mouse: back = disabled"));
@@ -108,5 +207,32 @@ mod tests {
         assert!(first_time("test-set-a"));
         assert!(!first_time("test-set-a"));
         assert!(first_time("test-set-b"));
+    }
+
+    #[test]
+    fn config_resolves_names_and_reports_every_error() {
+        let table: BTreeMap<String, String> =
+            [("back", "ctrl+c"), ("wheel-click", "default")].map(|(k, v)| (k.into(), v.into())).into();
+        let w = parse_config(v3(), &table).unwrap();
+        assert_eq!(w[0], Wanted { button: 0x04, name: "back", bind: Binding::Key { modifiers: 1, usage: 0x06 } });
+        assert_eq!(w[1], Wanted { button: 0x03, name: "wheel click", bind: Binding::Mouse(0x03) });
+
+        let bad: BTreeMap<String, String> =
+            [("left", "a"), ("thumb", "a"), ("back", "ctrl+nope")].map(|(k, v)| (k.into(), v.into())).into();
+        let e = parse_config(v3(), &bad).unwrap_err();
+        assert!(e.contains("left can't be rebound"), "{e}");
+        assert!(e.contains("\"thumb\" isn't a button"), "{e}");
+        assert!(e.contains("back = \"ctrl+nope\""), "{e}");
+    }
+
+    #[test]
+    fn reset_writes_defaults_and_reports_unwritable_leftovers() {
+        let binds = vec![
+            sb(0x01, "left", Binding::Mouse(0x02), Some(false)),
+            sb(0x03, "wheel click", Binding::Key { modifiers: 0, usage: 0x25 }, Some(false)),
+        ];
+        let (wanted, stuck) = reset_plan(v3(), &leftovers(&binds, &[]));
+        assert_eq!(wanted, vec![Wanted { button: 0x03, name: "wheel click", bind: Binding::Mouse(0x03) }]);
+        assert_eq!(stuck, vec!["left = right click".to_string()]);
     }
 }
