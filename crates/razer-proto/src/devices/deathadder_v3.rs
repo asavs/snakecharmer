@@ -145,7 +145,7 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
             // stores binds itself, so there is no hook and no software cost
             Shape::Text { role: Role::Note, at: (122, 255), anchor: Anchor::End, text: "binds are stored on the mouse" },
             Shape::Text { role: Role::Note, at: (122, 271), anchor: Anchor::End, text: "and work without Snakecharmer" },
-            Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(written on Save, no hook)" },
+            Shape::Text { role: Role::Note, at: (122, 287), anchor: Anchor::End, text: "(no hook, zero overhead)" },
         ],
     }),
 };

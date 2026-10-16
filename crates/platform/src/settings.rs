@@ -52,7 +52,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRect, CallWindowProcW, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow,
     DispatchMessageW, GetMessageW, GetParent, GetWindowTextW, LoadCursorW, RegisterClassW,
     SendMessageW, SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage,
-    CBS_AUTOHSCROLL, CBS_DROPDOWN, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
+    CBS_AUTOHSCROLL, CBS_DROPDOWN, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETLBTEXT, CB_GETLBTEXTLEN, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
     HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DRAWITEM, WM_HSCROLL,
     WM_MOUSEMOVE, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WNDPROC, WS_CHILD, WS_OVERLAPPED,
@@ -93,6 +93,7 @@ const TBM_GETPOS: u32 = 0x0400; // WM_USER + 0
 const BS_PUSHBUTTON: u32 = 0x0000_0000;
 const BS_OWNERDRAW: u32 = 0x0000_000B;
 const CBN_SELCHANGE: u16 = 1;
+const CBN_KILLFOCUS: u16 = 4;
 const BN_CLICKED: u16 = 0;
 
 // Control ids.
@@ -244,8 +245,8 @@ pub struct OnboardButton {
     pub text: String,
 }
 
-/// The on-board controls to report when Save is clicked: only the ones whose
-/// text changed since the window opened (compared trimmed), so opening and
+/// The on-board controls still to report when Save is clicked: the ones whose
+/// text differs from what was last applied (compared trimmed), so opening and
 /// saving never writes to the mouse.
 fn onboard_changed(initial: &[String], now: &[String]) -> Vec<usize> {
     now.iter()
@@ -258,9 +259,9 @@ fn onboard_changed(initial: &[String], now: &[String]) -> Vec<usize> {
 
 /// Events emitted by the window on live changes / button presses.
 /// Lighting events carry the zone's index into [`SettingsInit::lighting`].
-/// `Onboard(id, text)` is sent only on Save, just before [`Self::Save`], for
-/// each on-board control the user changed: the button id and its trimmed text.
-/// They aren't live because each one writes to the mouse's memory.
+/// `Onboard(id, text)` is sent when an on-board control changes: at once for a
+/// picked preset, when focus leaves for typed text (and on Save for text still
+/// being typed). It carries the button id and the trimmed text.
 #[derive(Debug, Clone)]
 pub enum SettingsEvent {
     Dpi(u16),
@@ -993,6 +994,30 @@ unsafe fn window_text(hwnd: HWND) -> String {
     String::from_utf16_lossy(&buf[..n.min(buf.len())])
 }
 
+/// A combo box's list entry `i` (`None` for no selection or a long entry).
+///
+/// SAFETY: `cb` is a combo box; the buffer is sized from CB_GETLBTEXTLEN.
+unsafe fn combo_item_text(cb: HWND, i: LRESULT) -> Option<String> {
+    let len = SendMessageW(cb, CB_GETLBTEXTLEN, i as WPARAM, 0);
+    if i < 0 || !(0..256).contains(&len) {
+        return None;
+    }
+    let mut buf = [0u16; 256];
+    let n = SendMessageW(cb, CB_GETLBTEXT, i as WPARAM, buf.as_mut_ptr() as LPARAM).max(0) as usize;
+    Some(String::from_utf16_lossy(&buf[..n.min(buf.len())]))
+}
+
+/// Report on-board control `k` as `text` if it differs from what was last
+/// applied, and remember it, so a focus change without an edit stays quiet.
+fn apply_onboard(st: &mut WindowState, k: usize, text: String) {
+    let (id, _, last) = &mut st.onboard_edits[k];
+    if text.trim() == last.trim() {
+        return;
+    }
+    *last = text.clone();
+    (st.on_event)(SettingsEvent::Onboard(*id, text.trim().to_string()));
+}
+
 fn snap50(v: i32) -> u16 {
     (((v + 25) / 50) * 50).clamp(0, 65535) as u16
 }
@@ -1036,6 +1061,24 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
             let notify = hiword(wparam);
             if let Some(st) = state_mut(hwnd) {
                 match (id, notify) {
+                    // On-board controls apply live like every other control:
+                    // a picked preset at once, typed text when focus leaves.
+                    (id, CBN_SELCHANGE | CBN_KILLFOCUS)
+                        if (ID_CB_ONBOARD_BASE..ID_CB_ONBOARD_BASE + MAX_ONBOARD).contains(&id) =>
+                    {
+                        let cb = lparam as HWND;
+                        let text = if notify == CBN_SELCHANGE {
+                            // The edit text isn't updated yet during SELCHANGE.
+                            combo_item_text(cb, SendMessageW(cb, CB_GETCURSEL, 0, 0))
+                        } else {
+                            Some(window_text(cb))
+                        };
+                        if let (Some(text), Some(k)) =
+                            (text, st.onboard_edits.iter().position(|(_, h, _)| *h == cb))
+                        {
+                            apply_onboard(st, k, text);
+                        }
+                    }
                     (ID_CB_UP, CBN_SELCHANGE) => {
                         let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
                         if i >= 0 {
@@ -1107,13 +1150,14 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                     (ID_BTN_SAVE, BN_CLICKED) => {
                         // Report the on-board fields first so the app has
                         // validated and staged them before it writes the file.
+                        // (Normally already applied on focus loss; this
+                        // catches text still being typed when Save is hit.)
                         let initial: Vec<String> =
                             st.onboard_edits.iter().map(|(_, _, t)| t.clone()).collect();
                         let now: Vec<String> =
                             st.onboard_edits.iter().map(|(_, h, _)| window_text(*h)).collect();
                         for k in onboard_changed(&initial, &now) {
-                            let id = st.onboard_edits[k].0;
-                            (st.on_event)(SettingsEvent::Onboard(id, now[k].trim().to_string()));
+                            apply_onboard(st, k, now[k].clone());
                         }
                         (st.on_event)(SettingsEvent::Save)
                     }
