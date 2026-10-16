@@ -4,12 +4,27 @@
 button bind, so Snakecharmer can write them itself and users can configure on-board binds
 without Synapse.
 
-**Status: V3 decoded; Elite tested with Synapse 4.** The DeathAdder V3's write
-(`0x02/0x0C`) and read (`0x02/0x8C`) are recorded under [Findings](#findings).
+**Status: V3 reads implemented; writes captured for six controls; Elite tested
+with Synapse 4.** The DeathAdder V3's write (`0x02/0x0C`) and read (`0x02/0x8C`) are
+recorded under [Findings](#findings).
 The Elite session recorded only streamed lighting while button assignments were
 saved, supporting software remapping with this version. A Synapse 3 comparison
 is still pending. No keymap write path ships in the daemon; `charmctl keymap`
 reads only the recorded V3 entries.
+
+| V3 button | Captured read | Captured write to that button |
+|---|---|---|
+| Back, forward | Yes | Yes, including defaults |
+| Right, wheel click, wheel up/down | Yes | Yes, key `1` and defaults (2026-10-16) |
+| Left | Yes | No; left unchanged |
+| Underside | Yes; category remains undecoded | No |
+
+An all-button reset is not established by these captures: left and underside
+have no captured write. The original step 09 produced no wheel-click write
+because its assignment was already Default. The additional pass deliberately
+changed each of the four missing controls before restoring it, recording eight
+writes with matching success replies. All eight used `[10] = 00`; that byte's
+meaning in read replies remains unresolved. See the [additional V3 findings](#additional-v3-button-writes-2026-10-16).
 
 ## The problem
 
@@ -64,21 +79,41 @@ same rule. The capture session collects profile data whenever the mouse has more
 Steps 3 and 4 write to persistent memory, unlike DPI, which Snakecharmer only ever sets
 live. They ship only after the bytes are confirmed on hardware by more than one capture.
 
-After that, each new mouse needs no capture: its owner runs the usual
-[hardware verification](../AGENTS.md#the-common-task-add-support-for-a-mouse), plus the
-listener to confirm a bind took.
+Recorded V3 commands can be reused in implementation and regression tests.
+They do not establish keymap support for another model, even one in the same
+protocol family. A device's keymap read/write allowlist must have its own
+documented basis before commands are sent to it.
 
 ## When a capture is needed
 
-Decoding happens once, on the maintainer's two mice. They are different generations
-(transaction id `0x1F` and `0x3F`), so if both use the same format it very likely covers
-the range. A capture from someone else is only needed when:
+The existing V3 captures supply evidence for its recorded controls and tested
+assignments; contributors do not need to recapture those just to work on the
+implementation. New evidence is needed for an unconfirmed mouse model, button,
+function category, modifier encoding, or profile selector. Shared USB framing
+and similar transaction ids do not prove shared binding behavior. In particular,
+the Elite's Synapse 4 software remapping does not confirm a V3-style on-board
+keymap on the Elite.
 
-- **the mouse's format turns out to differ** from both decoded ones, or
-- **the mouse has more than one on-board profile.** Neither decoded mouse does, so the
-  profile byte needs one capture from a multi-profile mouse, once.
+### What contributors need to repeat
 
-Anyone else can stop here. The rest of this page is the method for those cases.
+| Work | Required hardware work | Synapse USB capture |
+|---|---|---|
+| Documentation, formatting, or pure parsing changes | Tests appropriate to the change | Usually none; reuse saved evidence |
+| A mouse port using commands fully documented by OpenRazer | The usual [device verification](../AGENTS.md#the-common-task-add-support-for-a-mouse), including DPI read-back and normal physical input | None for those documented commands |
+| Changes to device I/O or binding behavior on an already confirmed model | Check the affected behavior on hardware; writes need successful read-back and physical output checks | Reuse existing exact command evidence unless the change needs an unconfirmed form |
+| Keymap support for another model or an unconfirmed V3 control/function/profile | Obtain the missing protocol evidence, then verify on that hardware; persistent behavior needs a power-cycle check | Targeted capture when no reference establishes the command; never assume compatibility and probe |
+
+The [button listener](../reference/button_listener.ps1) is a passive behavioral
+check. It needs a person to press physical buttons but does not need Synapse or
+USBPcap. A vendor capture answers a different question: which commands Synapse
+sends when saving a setting. Those command records can become reusable tests;
+the physical check still matters when supporting another model or changing
+device behavior. An empty listener log is inconclusive if no movement packets
+arrived; it is not proof that a mouse emitted no keystrokes.
+
+Ordinary users should not need to repeat this research for supported features.
+Once a verified reset/write feature ships, they can use it directly. At present,
+`charmctl keymap` remains read-only, and reset/config writes are not implemented.
 
 ## What a capture has to answer
 
@@ -164,6 +199,21 @@ for each:
 After each change, make sure Synapse has saved it to on-board memory, then press Enter. If
 a step isn't possible (no disable option, say), type a short note instead; it's stored with
 that step and printed in the report.
+
+For the missing V3 button writes, use the separate additional pass:
+
+```powershell
+.\capture_session.ps1 -Mouse V3 -CaptureSet V3Additional
+```
+
+This pass records ten seconds idle, then wheel click, right click, wheel up,
+and wheel down, each changed to key `1` and then restored to Default. Save
+after every change. If a scroll assignment is unavailable, record a note for
+that step rather than substituting another button. Left click and the underside
+button are never changed. Step labels and `capture_set` in `markers.json`
+distinguish this pass from the original session; both use step ids 01 onward.
+The change before each default prevents an already-default button from
+producing no write, as happened in the original V3 wheel-click step.
 
 ### 4. Verify and decode
 
@@ -338,6 +388,82 @@ The underside entry stayed `undecoded (category 0x06: 06)` throughout. This
 test adds persistence evidence for the V3; the Elite comparison with Synapse 3 and explicit
 approval of a keymap write path are still required before writes ship.
 
+#### Additional V3 button writes (2026-10-16)
+
+The [handoff report](captures/V3-20261016-additional-buttons/HANDOFF.md)
+answers the earlier missing-write and byte `[10]` questions for the implementer.
+
+The [masked report](captures/V3-20261016-additional-buttons/report.md),
+[step markers](captures/V3-20261016-additional-buttons/markers.json), and
+[complete keymap reports](captures/V3-20261016-additional-buttons/keymap-reports.json)
+record wheel click, right click, scroll up, and scroll down changed to key `1`
+and then restored to Default using Synapse's UI. All eight writes have a matching
+acknowledgement with status `0x02`. They use class `0x02`, id `0x0C`, data size
+10, USB interface 0, and the same layout as the original back/forward writes.
+
+Synapse's installed-package registry reported `4.0.827`, while the running
+AppEngine window was hosted by `app-4.0.503`. The UI About version was not
+checked; the markers retain that distinction rather than assigning an exact
+Synapse UI version. The V3 was the only connected mouse of the two research
+models, and its PnP interfaces reported OK.
+
+| Control / button id | Key `1` arguments `[8..17]` | Default arguments `[8..17]` |
+|---|---|---|
+| Wheel click `03` | `01 03 00 02 02 00 1e 00 00 00` | `01 03 00 01 01 03 00 00 00 00` |
+| Right click `02` | `01 02 00 02 02 00 1e 00 00 00` | `01 02 00 01 01 02 00 00 00 00` |
+| Scroll up `09` | `01 09 00 02 02 00 1e 00 00 00` | `01 09 00 01 01 09 00 00 00 00` |
+| Scroll down `0A` | `01 0a 00 02 02 00 1e 00 00 00` | `01 0a 00 01 01 0a 00 00 00 00` |
+
+The transaction ids were `07` through `0C` for the first six writes, then
+`07` and `08` for scroll down after Synapse reinitialized its device page.
+This does not establish a Snakecharmer write transaction-id policy.
+
+Computer Use performed each assignment and Save, and checked the resulting UI
+label before advancing the capture marker. Bringing Synapse fully to the
+foreground resolved the helper's initial activation failures. During step 07,
+Synapse briefly navigated to Linked Games; passive PnP enumeration still showed
+all fifteen V3 interfaces with status OK. Returning to the V3 tab generated
+device-info traffic and sixteen keymap read requests: eight observed button ids,
+each queried with request selector `00` and `01`. A vendor probe `0x00/0x8E`
+returned `0x05`; this is Synapse's traffic, not a command sent by Snakecharmer.
+
+Those reads showed `[10] = 00` on right, wheel click, and scroll up after they
+had been explicitly restored to Default. The original launch read had `01`
+for those controls. Left and the not-yet-changed scroll down still returned
+`01` in this pass. Thus `[10]` is not a fixed per-button value; a flag for an
+untouched/default-fallback entry is one possible interpretation, not a decoded
+meaning. Both read selectors produced the same binding/flag for each button.
+
+The decoder now retains finite keymap request lists even when they exceed its
+lighting-stream threshold; its self-test includes these sixteen queries. The
+raw captures remain local at
+`C:\Users\asas\snakecharmer-captures\V3-20261016-123309`.
+
+All four tested UI assignments ended at Default; left and underside were not
+changed. Computer Use was reset and Synapse AppEngine/monitor processes were
+stopped, with [absence verified](captures/V3-20261016-additional-buttons/synapse-stopped.json).
+The subsequent [60-second physical check](captures/V3-20261016-additional-buttons/listener-after.txt)
+registered left, right, wheel click, back, forward, and both scroll directions
+from the V3 interface, with 494 raw mouse packets and no V3 keyboard events.
+Two synthetic left-click events were excluded from the physical-button evidence;
+non-Razer keystrokes were counted without logging their values.
+
+The [stored-bind read](captures/V3-20261016-additional-buttons/keymap-final.txt)
+showed all seven decoded binds at Default. One human press of the underside
+button changed the [reported DPI to 3200](captures/V3-20261016-additional-buttons/status-after-underside-once.txt)
+from 1600 in hardware mode, confirming its DPI-cycle behavior without decoding
+its keymap category. The user then reported four more presses followed by
+unplugging and reconnecting the V3. With Synapse AppEngine/monitor still absent,
+the [final status](captures/V3-20261016-additional-buttons/status-after-power-cycle.txt)
+was hardware mode, 1600 x 1600 DPI, and 1000 Hz; the
+[post-power-cycle keymap](captures/V3-20261016-additional-buttons/keymap-after-power-cycle.txt)
+still showed all seven decoded defaults. Intermediate DPI stages were not read
+individually. The underside entry remains `undecoded (category 0x06: 06)`.
+
+No Snakecharmer keymap write was sent. These checks confirm normal physical
+output before the power cycle and stored defaults afterward; they do not prove
+persistence of a nondefault bind on each newly tested control.
+
 ### DeathAdder Elite (`1532:005C`), Synapse 4.0.827, profile count unconfirmed
 
 Captured on 2026-10-07 using Synapse's UI. Version `4.0.827` was supplied by the
@@ -424,8 +550,10 @@ effect of one saved assignment, rather than infer storage from USB traffic.
 
 This confirms that this saved assignment depends on Synapse running in the
 tested setup, with default output also recorded in the requested reconnect
-check. Restoration of the saved software profile is pending. It does not
-establish all storage capabilities of the Elite or behavior under Synapse 3.
+check. The user subsequently requested complete Synapse removal, which removed
+its saved local software profiles; see [the removal audit](RAZER-REMOVAL.md).
+This does not establish all storage capabilities of the Elite or behavior under
+Synapse 3.
 
 An additional mode read during Synapse startup failed with an echo mismatch
 (`sent 00/84, got 0f/03`). Direct device commands were stopped; no forced mode

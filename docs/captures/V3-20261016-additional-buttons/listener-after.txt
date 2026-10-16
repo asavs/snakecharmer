@@ -1,0 +1,25 @@
+﻿  7.12s  1532:00B2 IF00   mouse  RIGHT down
+  7.76s  1532:00B2 IF00   mouse  RIGHT down
+  8.74s  1532:00B2 IF00   mouse  LEFT down
+  9.22s  1532:00B2 IF00   mouse  LEFT down
+ 10.58s  1532:00B2 IF00   mouse  wheel down (-120)
+ 10.76s  1532:00B2 IF00   mouse  MIDDLE (wheel click) down
+ 11.20s  1532:00B2 IF00   mouse  MIDDLE (wheel click) down
+ 14.67s  1532:00B2 IF00   mouse  XBUTTON2 (forward) down
+ 15.09s  1532:00B2 IF00   mouse  XBUTTON2 (forward) down
+ 15.96s  1532:00B2 IF00   mouse  XBUTTON1 (back) down
+ 16.36s  1532:00B2 IF00   mouse  XBUTTON1 (back) down
+ 18.93s  1532:00B2 IF00   mouse  wheel up (120)
+ 19.34s  1532:00B2 IF00   mouse  wheel up (120)
+ 19.74s  1532:00B2 IF00   mouse  wheel up (120)
+ 20.53s  1532:00B2 IF00   mouse  wheel down (-120)
+ 20.98s  1532:00B2 IF00   mouse  wheel down (-120)
+ 21.41s  1532:00B2 IF00   mouse  wheel down (-120)
+ 21.54s  1532:00B2 IF00   mouse  wheel down (-120)
+ 51.07s  (no device / synthetic) mouse  LEFT down
+ 51.30s  (no device / synthetic) mouse  LEFT down
+--- keystrokes from non-Razer devices (counted, not logged):
+  048D:C101: 2 key presses
+--- raw mouse packets per device (movement included):
+  1532:00B2 IF00: 494
+  (no device / synthetic): 4

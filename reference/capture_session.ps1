@@ -17,7 +17,8 @@
 param(
     [Parameter(Mandatory)][string]$Mouse,   # a short name for the session folder, e.g. V3, Elite, NagaV2Pro
     [string]$OutDir = (Join-Path $HOME 'snakecharmer-captures'),
-    [string]$USBPcapCMD = 'C:\Program Files\USBPcap\USBPcapCMD.exe'
+    [string]$USBPcapCMD = 'C:\Program Files\USBPcap\USBPcapCMD.exe',
+    [ValidateSet('Standard','V3Additional')][string]$CaptureSet = 'Standard'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,6 +47,23 @@ $steps = @(
     @{ id = '09'; label = 'Set the WHEEL CLICK back to its default' }
     @{ id = '10'; label = 'Set the BACK thumb button back to its default' }
 )
+# A separate pass fills the gaps in V3-20261006-135244: wheel click was already
+# default then, and right/scroll were only read. Change each before restoring it
+# so Save produces an actual vendor write. Never alter primary left or underside.
+if ($CaptureSet -eq 'V3Additional') {
+    if ($Mouse -ne 'V3') { throw 'V3Additional is only for the DeathAdder V3.' }
+    $steps = @(
+        @{ id = '00'; label = 'IDLE: V3 button page open. Touch nothing.'; idle = $true; seconds = 10 }
+        @{ id = '01'; label = 'Set WHEEL CLICK to keyboard key 1 and Save' }
+        @{ id = '02'; label = 'Restore WHEEL CLICK to Default and Save' }
+        @{ id = '03'; label = 'Set RIGHT CLICK to keyboard key 1 and Save' }
+        @{ id = '04'; label = 'Restore RIGHT CLICK to Default and Save' }
+        @{ id = '05'; label = 'Set WHEEL UP to keyboard key 1 and Save, or note if unavailable' }
+        @{ id = '06'; label = 'Restore WHEEL UP to Default and Save, or note if unavailable' }
+        @{ id = '07'; label = 'Set WHEEL DOWN to keyboard key 1 and Save, or note if unavailable' }
+        @{ id = '08'; label = 'Restore WHEEL DOWN to Default and Save, or note if unavailable' }
+    )
+}
 # Only for mice with more than one on-board profile: where the profile number
 # sits in the same command, and the command that switches the active profile.
 $profileSteps = @(
@@ -89,10 +107,10 @@ Write-Host ''
 $synapse = Read-Host 'Synapse version (Help/About in Synapse; Enter to skip)'
 $profiles = Read-Host 'How many on-board profiles does Synapse offer for this mouse? (1 if there is no profile picker)'
 if ($profiles -notmatch '^\d+$') { $profiles = '1' }
-if ([int]$profiles -gt 1) { $steps += $profileSteps }
+if ([int]$profiles -gt 1 -and $CaptureSet -eq 'Standard') { $steps += $profileSteps }
 $steps += $endIdle
 
-$markers = [ordered]@{ mouse = $Mouse; synapse = $synapse; onboard_profiles = [int]$profiles
+$markers = [ordered]@{ mouse = $Mouse; capture_set = $CaptureSet; synapse = $synapse; onboard_profiles = [int]$profiles
                        started = (Get-Date).ToString('o'); steps = @() }
 function Save-Markers { $markers | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $session 'markers.json') -Encoding utf8 }
 

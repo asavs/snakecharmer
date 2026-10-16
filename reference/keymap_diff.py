@@ -187,7 +187,7 @@ def fmt_cmd(r):
     return f"class 0x{r[6]:02X} id 0x{r[7]:02X} size {r[5]:2d} txn 0x{r[1]:02X} | {args}"
 
 
-# More distinct payloads than this for one command within one step is a stream
+# More distinct payloads than this for one command within one step suggests a stream
 # (Synapse sends Chroma frames, class 0x0F id 0x03, thousands of times). Listing
 # and pairwise-diffing those buries the few writes a step is about.
 STREAM_LIMIT = 8
@@ -198,7 +198,12 @@ def split_streams(table):
     groups = {}
     for (cls, cid, _, _), (_, n) in table.items():
         groups.setdefault((cls, cid), []).append(n)
-    streams = {g: (len(ns), sum(ns)) for g, ns in groups.items() if len(ns) > STREAM_LIMIT}
+    # The V3 launch queries eight buttons twice (selector 00/01). Those sixteen
+    # finite requests are protocol evidence, not a lighting stream. Keep keymap
+    # writes too: bulk remapping must not hide the commands being researched.
+    keymap_commands = {(0x02, 0x0C), (0x02, 0x8C)}
+    streams = {g: (len(ns), sum(ns)) for g, ns in groups.items()
+               if len(ns) > STREAM_LIMIT and g not in keymap_commands}
     kept = OrderedDict((k, v) for k, v in table.items() if (k[0], k[1]) not in streams)
     return kept, streams
 
@@ -373,6 +378,13 @@ def self_test():
 
         out = analyze(d)
 
+    keymap_queries = OrderedDict()
+    for button in (0x01, 0x02, 0x03, 0x04, 0x05, 0x09, 0x0A, 0x60):
+        for selector in (0x00, 0x01):
+            r = _report(0x13, 0x02, 0x8C, bytes([1, button, selector] + [0] * 7))
+            keymap_queries[command_key(r)] = [r, 1]
+    kept_queries, query_streams = split_streams(keymap_queries)
+
     checks = [
         ("finds 18 reports in both formats", "18 Razer reports across 2 capture file(s)" in out),
         ("hides idle chatter", out.count("class 0x00 id 0x84") == 0),
@@ -384,6 +396,7 @@ def self_test():
         ("summarizes a stream", "class 0x0F id 0x03: 12 distinct payloads" in out
          and "| 00 00 05 ff 05 00" not in out),
         ("never diffs a stream", "id 0x03:" not in out.split("# Byte changes")[1]),
+        ("keeps all 16 button/layer read requests", len(kept_queries) == 16 and not query_streams),
         ("ignores non-Razer traffic", "4" not in out.split("(bus, address): ")[1].split("\n")[0]),
     ]
     for name, ok in checks:

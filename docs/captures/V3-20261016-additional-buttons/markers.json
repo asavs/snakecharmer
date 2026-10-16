@@ -1,0 +1,79 @@
+{
+    "mouse":  "V3",
+    "capture_set":  "V3Additional",
+    "synapse":  "Synapse 4; installed package 4.0.827 (About not checked)",
+    "onboard_profiles":  1,
+    "started":  "2026-10-16T12:33:46.4604448-07:00",
+    "steps":  [
+                  {
+                      "id":  "00",
+                      "label":  "IDLE: V3 button page open. Touch nothing.",
+                      "start":  1792179254.827,
+                      "end":  1792179264.926,
+                      "idle":  true
+                  },
+                  {
+                      "id":  "01",
+                      "label":  "Set WHEEL CLICK to keyboard key 1 and Save",
+                      "start":  1792179264.978,
+                      "end":  1792180449.542,
+                      "note":  "Computer Use saved wheel click as keyboard 1; UI label confirmed"
+                  },
+                  {
+                      "id":  "02",
+                      "label":  "Restore WHEEL CLICK to Default and Save",
+                      "start":  1792180449.548,
+                      "end":  1792180503.496,
+                      "note":  "Computer Use restored wheel click to Default; Scroll Click label confirmed"
+                  },
+                  {
+                      "id":  "03",
+                      "label":  "Set RIGHT CLICK to keyboard key 1 and Save",
+                      "start":  1792180503.543,
+                      "end":  1792180545.073,
+                      "note":  "Computer Use saved right click as keyboard 1; UI label confirmed"
+                  },
+                  {
+                      "id":  "04",
+                      "label":  "Restore RIGHT CLICK to Default and Save",
+                      "start":  1792180545.077,
+                      "end":  1792180582.089,
+                      "note":  "Computer Use restored right click to Default; Right Click label confirmed"
+                  },
+                  {
+                      "id":  "05",
+                      "label":  "Set WHEEL UP to keyboard key 1 and Save, or note if unavailable",
+                      "start":  1792180582.093,
+                      "end":  1792180624.191,
+                      "note":  "Computer Use saved scroll up as keyboard 1; UI label confirmed"
+                  },
+                  {
+                      "id":  "06",
+                      "label":  "Restore WHEEL UP to Default and Save, or note if unavailable",
+                      "start":  1792180624.194,
+                      "end":  1792180657.795,
+                      "note":  "Computer Use restored scroll up to Default; Scroll Up label confirmed"
+                  },
+                  {
+                      "id":  "07",
+                      "label":  "Set WHEEL DOWN to keyboard key 1 and Save, or note if unavailable",
+                      "start":  1792180657.798,
+                      "end":  1792180771.675,
+                      "note":  "Synapse briefly navigated to Linked Games; V3 stayed enumerated with OK status. Returned to V3 and saved scroll down as keyboard 1; UI label confirmed"
+                  },
+                  {
+                      "id":  "08",
+                      "label":  "Restore WHEEL DOWN to Default and Save, or note if unavailable",
+                      "start":  1792180771.678,
+                      "end":  1792180844.118,
+                      "note":  "Computer Use restored scroll down to Default; all four tested controls show defaults"
+                  },
+                  {
+                      "id":  "99",
+                      "label":  "IDLE: touch nothing.",
+                      "start":  1792180844.121,
+                      "end":  1792180852.176,
+                      "idle":  true
+                  }
+              ]
+}

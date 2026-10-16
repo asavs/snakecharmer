@@ -1,0 +1,1 @@
+﻿device = DeathAdder V3 (PID 0x00B2), mode = hardware (0x00), dpi = 3200 x 3200, polling = 1000 Hz

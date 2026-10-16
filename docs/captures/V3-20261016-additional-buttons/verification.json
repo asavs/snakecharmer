@@ -1,0 +1,31 @@
+{
+  "writes": 8,
+  "matching_write_success_replies": 8,
+  "finite_read_requests": 16,
+  "read_success_replies": 16,
+  "read_selectors_return_same_arguments": true,
+  "decoder_self_test_checks": 10,
+  "physical_check": "passed: left, right, wheel click, back, forward, scroll up, scroll down",
+  "physical_check_log": "listener-after.txt",
+  "v3_raw_mouse_packets": 494,
+  "v3_keyboard_events": 0,
+  "synthetic_left_clicks_excluded": 2,
+  "non_razer_key_presses_counted_without_values": 2,
+  "underside_check": "one human press changed DPI from 1600 to 3200 in hardware mode",
+  "underside_status_log": "status-after-underside-once.txt",
+  "restoration_and_power_cycle": "user reported four further DPI-button presses, then unplugging and reconnecting",
+  "synapse_appengine_and_monitor_absent_before_final_reads": true,
+  "final_status_log": "status-after-power-cycle.txt",
+  "final_mode": "hardware (0x00)",
+  "final_dpi": [1600, 1600],
+  "final_polling_hz": 1000,
+  "final_stored_bind_read": "passed after reported power cycle: all seven decoded binds Default",
+  "final_keymap_log": "keymap-after-power-cycle.txt",
+  "underside_bind": "undecoded (category 0x06: 06)",
+  "snakecharmer_keymap_writes_sent": 0,
+  "limitations": [
+    "Intermediate DPI stages were not read individually",
+    "Physical button listener ran before the final power cycle",
+    "Nondefault persistence on each newly captured control was not independently tested"
+  ]
+}

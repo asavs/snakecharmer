@@ -1,0 +1,14 @@
+﻿[
+    {
+        "Command":  "cargo test --workspace",
+        "ExitCode":  0
+    },
+    {
+        "Command":  "cargo clippy --release --all-targets",
+        "ExitCode":  0
+    },
+    {
+        "Command":  "cargo build --release",
+        "ExitCode":  0
+    }
+]
