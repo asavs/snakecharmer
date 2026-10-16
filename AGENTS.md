@@ -74,16 +74,23 @@ shared layer, and that is a different change.
 
 ## On-board memory
 
-Snakecharmer can't write on-board button binds yet; the format is being decoded from
-USB captures of Synapse, in [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md). For a
-device port, just record the mouse's on-board profile count in the PR.
+Snakecharmer writes on-board button binds on the DeathAdder V3 only; the format was
+decoded from USB captures of Synapse, in [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md).
+For a device port, just record the mouse's on-board profile count in the PR.
 
 - **Reads are allowed** where that doc records them, sent exactly as Synapse sent them:
   the same command, the same argument pattern, and only the button ids observed. Never
   sweep ids or arguments to see what answers; that's fuzzing, and rule 1 forbids it.
-- **Writes are not**, until the doc records a confirmed format for that mouse and the
-  maintainer has approved a write path. Until then, keymap write bytes are reference
-  data, not commands.
+- **Writes are allowed on the DeathAdder V3**, approved by the maintainer on 2026-10-16,
+  for the buttons listed in `KeymapSpec::writable` (right, wheel click, back, forward,
+  wheel up, wheel down), and only through `Mouse::set_button_binding`, which replays the
+  layout Synapse was captured sending. Hardware check:
+  [`docs/captures/V3-20261016-snakecharmer-write/notes.md`](docs/captures/V3-20261016-snakecharmer-write/notes.md).
+- **Everything else stays read-only.** Adding a mouse or a button to `writable` needs a
+  capture of Synapse writing it, recorded in the doc, plus maintainer approval. Never
+  write left, the underside button, or any bind category the doc lists as undecoded, and
+  never sweep ids or arguments to see what a write does. Other mice's keymap write bytes
+  are reference data, not commands.
 
 ## Acceptance
 

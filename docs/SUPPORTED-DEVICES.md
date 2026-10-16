@@ -26,6 +26,18 @@ from [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_dri
   DPI set/read round-trips and correct feature gating, not just a table entry copied from
   OpenRazer.
 
+## On-board binds
+
+Separate from the table above: whether Snakecharmer can write button binds into the
+mouse's own memory (`charmctl keymap`, the config's `[onboard]` table). That needs a
+recorded keymap and a capture of Synapse writing it, see
+[`ONBOARD-KEYMAP.md`](ONBOARD-KEYMAP.md).
+
+- **DeathAdder V3 (wired):** read, reset and write for right, wheel click, back, forward,
+  wheel up and wheel down. Left and the underside DPI button are not written.
+- **DeathAdder Elite:** none. Synapse 4 remaps it in software, so there are no leftover
+  on-board binds, and the hook-based remap covers it.
+
 ## Button maps
 
 Which physical control is which config key. A device may ship without one — the field is

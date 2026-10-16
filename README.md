@@ -73,6 +73,9 @@ Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI
   while a remap is configured; at the default (`none`/`none`) no hook is installed at
   all, so the pointer's motion path is untouched. Note: games accept MB4/MB5 natively,
   so most people don't need this.
+- **On-board binds** (DeathAdder V3) — write a button's bind into the mouse's own memory,
+  so it works with Snakecharmer closed, in games that block injected input, and on other
+  PCs. See [On-board binds](#on-board-binds).
 - **RGB lighting** — static, breathing, spectrum, or off, per zone: the wheel and
   logo can carry different effects and colors (settings window), or one pick for
   both (tray menu).
@@ -170,7 +173,43 @@ reassert_interval_secs = 60
 # [zones.logo]
 # lighting = "breathing"
 # color = "#ff0000"
+
+# Optional on-board binds, written to the mouse itself (DeathAdder V3 only).
+# [onboard]
+# back = "ctrl+c"
+# wheel_click = "default"
 ```
+
+### On-board binds
+
+Some mice can store a button's bind in their own memory, and then send it with no software
+running. On the DeathAdder V3, Snakecharmer can write those binds, from the config or with
+`charmctl keymap set`. It also reads what's stored and can put leftover binds (from
+Synapse, say) back to factory.
+
+```toml
+[onboard]
+back = "ctrl+c"           # button name = bind
+wheel_click = "f5"
+forward = "default"       # put it back to factory
+```
+
+- **Buttons:** `right`, `wheel_click`, `back`, `forward`, `wheel_up`, `wheel_down`. Left
+  and the underside DPI button are never written. A button you don't list keeps whatever it
+  stores.
+- **Binds:** `default`, `disabled`, a mouse function (`middle click`), or a key or chord
+  (`a`, `1`, `f5`, `enter`, `pageup`, `ctrl+c`, `ctrl+shift+t`, `copy`, `paste`, `cut`).
+- **When it's written:** on attach, only when different from what the mouse stores, and
+  checked by read-back. The mouse keeps it, so it works with Snakecharmer closed.
+- **Leftovers:** on attach the daemon reads the stored binds. If it finds non-default ones
+  that `[onboard]` doesn't cover, it shows a notice offering to reset them.
+
+Every write replays the layout Synapse was captured sending
+([capture](docs/captures/V3-20261006-135244-report.md),
+[more buttons](docs/captures/V3-20261016-additional-buttons/)); the first write from
+Snakecharmer itself was checked on hardware
+([notes](docs/captures/V3-20261016-snakecharmer-write/notes.md)). Other mice need their own
+capture first; see [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md).
 
 ### PC Vitals health capsule
 
@@ -191,7 +230,9 @@ producer memory.
 ```
 charmctl devices                         list Razer mice plugged in, supported or not
 charmctl status                          device mode + DPI + polling rate (read-only)
-charmctl keymap                          button binds stored on the mouse (read-only)
+charmctl keymap                          button binds stored on the mouse
+charmctl keymap reset                    put non-default binds back to factory (V3)
+charmctl keymap set <button> <bind>      write a bind to the mouse, e.g. back ctrl+c (V3)
 charmctl set-dpi X [Y]                    set DPI
 charmctl set-poll <hz>                    set polling rate (Hz)
 charmctl set-mode driver|hardware         set device mode
@@ -297,11 +338,13 @@ itself is still never opened or written to.
 That bind lives in the mouse's on-board memory, not on the PC. Synapse can save remaps to
 the mouse itself, which then sends them with no software running, so uninstalling Synapse
 leaves them in place. On the DeathAdder V3, `charmctl keymap` reads what's stored on each
-button and flags anything that isn't the default. Snakecharmer can't reset on-board binds
-yet; until it can, **reset the buttons to default in Synapse before uninstalling it**.
-For other mice, [`reference/button_listener.ps1`](reference/button_listener.ps1) shows
-what each button really sends, and [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md) is
-the work on decoding it.
+button and flags anything that isn't the default, and `charmctl keymap reset` puts them
+back to factory; the daemon also offers that reset when it finds leftovers on attach. On
+other mice that store binds on-board, Snakecharmer can't reset them yet, so **reset the
+buttons to default in Synapse before uninstalling it**.
+[`reference/button_listener.ps1`](reference/button_listener.ps1) shows what each button
+really sends, and [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md) is the work on
+decoding it. The DeathAdder Elite is not affected: Synapse 4 remaps it in software.
 </details>
 
 <details>

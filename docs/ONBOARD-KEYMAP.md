@@ -4,13 +4,20 @@
 button bind, so Snakecharmer can write them itself and users can configure on-board binds
 without Synapse.
 
-**Status: V3 reads implemented; writes captured for six controls; Elite tested
-with Synapse 4.** The DeathAdder V3's write (`0x02/0x0C`) and read (`0x02/0x8C`) are
-recorded under [Findings](#findings).
+**Status: V3 read, reset and write from the config are implemented and verified on
+hardware; the Elite was tested with Synapse 4 and needs none of it.** The DeathAdder V3's
+write (`0x02/0x0C`) and read (`0x02/0x8C`) are recorded under [Findings](#findings).
+`charmctl keymap` shows the stored binds, `charmctl keymap reset` puts non-default binds
+back to factory, `charmctl keymap set <button> <bind>` writes one, and the config's
+`[onboard]` table is written to the mouse on attach. The maintainer approved the V3 write
+path on 2026-10-16. Writes cover the six controls in `KeymapSpec::writable` (right, wheel
+click, back, forward, wheel up, wheel down) and replay the layouts Synapse was captured
+sending. The first Snakecharmer write, with the physical check and the reset, is in
+[`captures/V3-20261016-snakecharmer-write/notes.md`](captures/V3-20261016-snakecharmer-write/notes.md).
 The Elite session recorded only streamed lighting while button assignments were
-saved, supporting software remapping with this version. A Synapse 3 comparison
-is still pending. No keymap write path ships in the daemon; `charmctl keymap`
-reads only the recorded V3 entries.
+saved, supporting software remapping with this version (Synapse 4 remaps it in software,
+so it has no leftover on-board binds; Snakecharmer's hook remap covers it). A Synapse 3
+comparison is still pending.
 
 | V3 button | Captured read | Captured write to that button |
 |---|---|---|
@@ -19,8 +26,8 @@ reads only the recorded V3 entries.
 | Left | Yes | No; left unchanged |
 | Underside | Yes; category remains undecoded | No |
 
-An all-button reset is not established by these captures: left and underside
-have no captured write. The original step 09 produced no wheel-click write
+A reset of every button is not possible from these captures: left and underside
+have no captured write, so Snakecharmer never writes them. The original step 09 produced no wheel-click write
 because its assignment was already Default. The additional pass deliberately
 changed each of the four missing controls before restoring it, recording eight
 writes with matching success replies. All eight used `[10] = 00`; that byte's
@@ -70,14 +77,30 @@ same rule. The capture session collects profile data whenever the mouse has more
 1. **Capture and decode** (this page). Record Synapse making one change at a time, then
    diff the reports until every byte Snakecharmer needs is pinned down.
 2. **Read.** Done for the DeathAdder V3: `charmctl keymap` sends the read Synapse sends
-   and prints each button's stored bind, flagging any that isn't the default. Showing it
-   in the settings window comes later.
+   and prints each button's stored bind, flagging any that isn't the default. The daemon
+   also reads on attach and shows a notice offering a reset when it finds leftover
+   non-default binds that `[onboard]` doesn't cover. Showing binds in the settings window
+   comes later.
 3. **Reset to defaults** by replaying exactly the bytes Synapse sent for each default.
-4. **Write binds from the config**, as an option alongside the hook-based thumb remap, and
+   Done for the V3's six writable buttons: `charmctl keymap reset`.
+4. **Write binds from the config**, as an option alongside the hook-based thumb remap.
+   Done for the V3: `charmctl keymap set` and the `[onboard]` table, written on attach
+   only when different from what's stored and verified by read-back. Still open:
    on-board profiles for mice that have them.
 
 Steps 3 and 4 write to persistent memory, unlike DPI, which Snakecharmer only ever sets
-live. They ship only after the bytes are confirmed on hardware by more than one capture.
+live. They shipped for the V3 after the bytes were confirmed by captures of Synapse and
+by Snakecharmer's own write on hardware. Another mouse or button needs the same: a
+capture of Synapse writing it, and maintainer approval.
+
+### Open questions
+
+- The V3 underside button's category `0x06` payload is undecoded, so it is read-only.
+- The meaning of byte `[10]` in read replies (see [Findings](#findings)).
+- The meaning of byte `[8]`, always `01` (possibly OpenRazer's VARSTORE).
+- Multi-profile mice: the profile selector hasn't been captured, since the V3 has one.
+- Left button: no captured write, so it is never written.
+- Other mice: each needs its own capture. The Elite's Synapse 3 behavior is unchecked.
 
 Recorded V3 commands can be reused in implementation and regression tests.
 They do not establish keymap support for another model, even one in the same
@@ -112,9 +135,9 @@ device behavior. An empty listener log is inconclusive if no movement packets
 arrived; it is not proof that a mouse emitted no keystrokes.
 
 Ordinary users should not need to repeat this research for supported features.
-Once a verified reset/write feature ships, they can use it directly. At present,
-`charmctl keymap` remains read-only, and reset/config writes are not implemented.
-
+On the DeathAdder V3, `charmctl keymap reset`, `charmctl keymap set` and the `[onboard]`
+config table are the verified feature; use them directly. Another model needs the
+capture described here first.
 ## What a capture has to answer
 
 The session's steps come from what Snakecharmer's config will need to express:
@@ -260,10 +283,12 @@ What an agent can do:
 
 What an agent must not do, on top of the rules in [`AGENTS.md`](../AGENTS.md):
 
-- **Send a keymap write to a mouse.** Not to test a hypothesis. Until this page records a
-  confirmed format for that mouse and the maintainer has approved a write path, write
-  bytes are reference data, not commands. A read recorded under [Findings](#findings) is
-  fine, sent exactly as Synapse sent it; never sweep button ids or arguments.
+- **Send a keymap write to a mouse** other than through the shipped V3 path
+  (`Mouse::set_button_binding`, buttons in `KeymapSpec::writable`). Not to test a
+  hypothesis. Until this page records a confirmed format for that mouse and button and the
+  maintainer has approved it, write bytes are reference data, not commands. Never write
+  left or an undecoded category. A read recorded under [Findings](#findings) is fine, sent
+  exactly as Synapse sent it; never sweep button ids or arguments.
 - Ask for, upload, or commit the raw `.pcap` files. They contain the person's keyboard
   input. `report.md` is the shareable artifact.
 - Present a guess as a finding. If two hypotheses fit the diffs, record both and say which
@@ -386,7 +411,8 @@ keymap write was sent.
 
 The underside entry stayed `undecoded (category 0x06: 06)` throughout. This
 test adds persistence evidence for the V3; the Elite comparison with Synapse 3 and explicit
-approval of a keymap write path are still required before writes ship.
+approval of a keymap write path were still required at that point. (The maintainer approved
+the V3 write path on 2026-10-16; the Elite comparison remains open.)
 
 #### Additional V3 button writes (2026-10-16)
 
@@ -460,7 +486,8 @@ was hardware mode, 1600 x 1600 DPI, and 1000 Hz; the
 still showed all seven decoded defaults. Intermediate DPI stages were not read
 individually. The underside entry remains `undecoded (category 0x06: 06)`.
 
-No Snakecharmer keymap write was sent. These checks confirm normal physical
+No Snakecharmer keymap write was sent in this session (the first one came later the same day,
+see [the write test](captures/V3-20261016-snakecharmer-write/notes.md)). These checks confirm normal physical
 output before the power cycle and stored defaults afterward; they do not prove
 persistence of a nondefault bind on each newly tested control.
 
