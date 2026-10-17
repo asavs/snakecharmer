@@ -92,7 +92,7 @@ Snakecharmer supports a short, deliberate list of devices, listed in the
 one to hand an AI coding agent.
 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): how to contribute.
-- [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md): how to work out a mouse's protocol.
+- [`CRACKING-MICE-GUIDE.md`](docs/CRACKING-MICE-GUIDE.md): how to work out a mouse's protocol.
 - [`docs/DRAWING-MICE-GUIDE.md`](docs/DRAWING-MICE-GUIDE.md): how to draw its button-map
   diagram.
 - [`docs/DEVICE-WISHLIST.md`](docs/DEVICE-WISHLIST.md): the mice that are up for grabs,
@@ -217,7 +217,7 @@ forward = "default"       # put it back to how it came
   into `[onboard]` on first connect (logged); one the mouse can't store stays in software.
 
 Every write replays the layout Synapse was captured sending
-([capture](docs/captures/V3-20261006-135244-report.md),
+([capture](docs/captures/V3-20261006-135244/report.md),
 [more buttons](docs/captures/V3-20261016-additional-buttons/)); the first write from
 Snakecharmer itself was checked on hardware
 ([notes](docs/captures/V3-20261016-snakecharmer-write/notes.md)). Other mice need their own
@@ -278,7 +278,7 @@ Candidate features that fit the zero-overhead goal (see
 most to least likely. None are promises.
 
 - **More devices.** The protocol crate is built for it. Crack your own mouse with
-  [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md) and send a PR.
+  [`CRACKING-MICE-GUIDE.md`](docs/CRACKING-MICE-GUIDE.md) and send a PR.
 - **Lift-off distance / surface calibration.** The protocol exists in OpenRazer, but it
   needs careful verification since it touches sensor behavior.
 - **Per-application profiles.** Possible, but it adds a foreground-window watcher. It only

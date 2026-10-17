@@ -346,27 +346,27 @@ keymap write path.
 - **Read-back:** class `0x02`, id `0x8C`, the write's id with the high bit set, as with
   DPI (`0x04/0x05` write, `0x04/0x85` read). Not in this session: the 11 GET replies
   here only acknowledge the writes. Synapse sent it at launch, in an earlier capture
-  ([masked launch report](captures/V3-20261006-131912-launch-report.md)), once per
+  ([masked launch report](captures/V3-20261006-131912/launch-report.md)), once per
   button with request `[8..10] = 01 <button> 00`, then again with `[10] = 01`. Each
   reply carries the stored bind in the write layout: back `01 04 00 01 01 04` and
   forward `01 05 00 01 01 05`, identical to the default writes in steps 10 and 08.
-- **Confirmed by:** [masked session report](captures/V3-20261006-135244-report.md),
+- **Confirmed by:** [masked session report](captures/V3-20261006-135244/report.md),
   11 writes and 11 matching success replies. UI assignments were checked after
-  each Save. The [after-session listener](captures/V3-20261006-135244-listener-after.txt)
+  each Save. The [after-session listener](captures/V3-20261006-135244/listener-after.txt)
   recorded three back presses as `XBUTTON1`, three forward presses as `XBUTTON2`,
   two wheel clicks as `MIDDLE`, normal left/right/scroll input, and no keyboard
   events. The user reported exiting Synapse, but a subsequent read-only
-  [`charmctl status`](captures/V3-20261006-135244-status-after.txt) returned driver
+  [`charmctl status`](captures/V3-20261006-135244/status-after.txt) returned driver
   mode (`0x03`). After the user reconnected the mouse with Synapse's window
-  closed, [status still returned driver mode](captures/V3-20261006-135244-status-reconnected.txt)
+  closed, [status still returned driver mode](captures/V3-20261006-135244/status-reconnected.txt)
   and Razer AppEngine background processes were still running. With the user's
   explicit approval, AppEngine was stopped and the existing OpenRazer-derived
-  [`set-mode hardware` command](captures/V3-20261006-135244-mode-set-hardware.txt)
+  [`set-mode hardware` command](captures/V3-20261006-135244/mode-set-hardware.txt)
   selected hardware mode with matching read-back. The
-  [final listener](captures/V3-20261006-135244-listener-hardware.txt) recorded
+  [final listener](captures/V3-20261006-135244/listener-hardware.txt) recorded
   three presses each of `XBUTTON1`, `XBUTTON2`, and `MIDDLE`, 506 mouse packets
   including movement, and no keyboard events. A
-  [status check](captures/V3-20261006-135244-status-hardware.txt) confirmed
+  [status check](captures/V3-20261006-135244/status-hardware.txt) confirmed
   hardware mode (`0x00`) during and after this test. Default inputs are therefore
   verified in hardware mode; this does not prove persistence of nondefault binds.
   A before-session listener output was not collected for this session.
@@ -418,7 +418,7 @@ the V3 write path on 2026-10-16; the Elite comparison remains open.)
 
 #### Additional V3 button writes (2026-10-16)
 
-The [handoff report](captures/V3-20261016-additional-buttons/HANDOFF.md)
+The [handoff report](captures/V3-20261016-additional-buttons/summary.md)
 answers the earlier missing-write and byte `[10]` questions for the implementer.
 
 The [masked report](captures/V3-20261016-additional-buttons/report.md),
@@ -464,8 +464,7 @@ meaning. Both read selectors produced the same binding/flag for each button.
 
 The decoder now retains finite keymap request lists even when they exceed its
 lighting-stream threshold; its self-test includes these sixteen queries. The
-raw captures remain local at
-`C:\Users\asas\snakecharmer-captures\V3-20261016-123309`.
+raw captures are kept locally, not in the repo.
 
 All four tested UI assignments ended at Default; left and underside were not
 changed. Computer Use was reset and Synapse AppEngine/monitor processes were

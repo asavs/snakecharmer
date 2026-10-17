@@ -1,7 +1,7 @@
 # `reference/` — the Python recon toolkit
 
 This is the **original, runnable crack of the DeathAdder Elite in Python** — the worked
-example behind [`../CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md). Snakecharmer itself is
+example behind [`../docs/CRACKING-MICE-GUIDE.md`](../docs/CRACKING-MICE-GUIDE.md). Snakecharmer itself is
 the polished Rust rewrite; these ~4 small files are kept because they're the best thing to
 read (and hack on) when **adding a new device**: the whole method — enumerate → build
 report + CRC → read-confirm → write → self-logging listener — in one gulp, with no compile
@@ -79,7 +79,7 @@ mirroring what OpenRazer does on Linux.
 - Left/right click, movement, wheel and the two side buttons are standard HID in both
   modes and are unaffected.
 - **Never fuzz or guess feature reports** — only send commands read out of OpenRazer (or
-  another FOSS reference). See `../CRACKING-MICE-GUIDE.md` §8 for the full safety rules.
+  another FOSS reference). See `../docs/CRACKING-MICE-GUIDE.md` §8 for the full safety rules.
 
 ## Protocol reference (as researched from OpenRazer)
 

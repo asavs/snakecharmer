@@ -4,7 +4,7 @@ contact_links:
     url: https://github.com/asavs/snakecharmer/blob/master/docs/DEVICE-WISHLIST.md
     about: Every Razer mouse whose protocol OpenRazer already documents, with its USB id and transaction id filled in. Check here first. Most devices need no reverse-engineering at all.
   - name: I want to add a device myself
-    url: https://github.com/asavs/snakecharmer/blob/master/CRACKING-MICE-GUIDE.md
+    url: https://github.com/asavs/snakecharmer/blob/master/docs/CRACKING-MICE-GUIDE.md
     about: The full method for adding a device. It's a good job to hand an AI coding agent, and the repo includes a runnable Python recon toolkit to start from.
   - name: A device works but has no button-map diagram
     url: https://github.com/asavs/snakecharmer/blob/master/docs/DRAWING-MICE-GUIDE.md

@@ -97,6 +97,6 @@ Claim it there.
 
 Adding a device is meant to be a **one-file diff**: a `DeviceSpec` const, a line in
 `SUPPORTED`, a test, and a row here. Start with
-[`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md), then open a PR with the
+[`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md), then open a PR with the
 [add-device template](../.github/PULL_REQUEST_TEMPLATE/add-device.md). If your device is
 already in OpenRazer's `razermouse_driver.c`, you may not need a packet capture at all.

@@ -6,3 +6,8 @@
 SUBAGENT-TRANSCRIPT.md
 tools/diagram-notes.md
 tools/diagram-finish.signal
+
+# Python bytecode and local agent settings
+__pycache__/
+*.pyc
+.claude/settings.local.json

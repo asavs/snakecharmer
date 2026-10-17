@@ -10,7 +10,7 @@
 > has to draw a mouse to add one, and drawing one for a device someone else ported is a
 > useful contribution on its own.
 >
-> Companion to [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md) (which gets the
+> Companion to [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md) (which gets the
 > *protocol*; this gets the *picture*). The worked examples throughout are the two shipped
 > devices, the **DeathAdder Elite** and the **DeathAdder V3 (wired)**, whose diagrams
 > live in [`crates/razer-proto/src/devices/`](../crates/razer-proto/src/devices/)

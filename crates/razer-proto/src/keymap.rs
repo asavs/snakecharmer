@@ -405,7 +405,7 @@ mod tests {
     }
 
     /// Every write Synapse sent to the V3, rebuilt from its bind:
-    /// `docs/captures/V3-20261006-135244-report.md` (back, forward) and
+    /// `docs/captures/V3-20261006-135244/report.md` (back, forward) and
     /// `docs/captures/V3-20261016-additional-buttons/` (the rest).
     #[test]
     fn write_matches_capture() {

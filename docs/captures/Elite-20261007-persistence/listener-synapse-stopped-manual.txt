@@ -1,5 +1,5 @@
 Human-run command, output supplied by the user:
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\asas\anti-synapse\reference\button_listener.ps1 -Seconds 30
+powershell -NoProfile -ExecutionPolicy Bypass -File reference\button_listener.ps1 -Seconds 30
 
   1.93s  1532:005C IF00   mouse  XBUTTON1 (back) down
   3.08s  1532:005C IF00   mouse  XBUTTON1 (back) down

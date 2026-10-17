@@ -20,7 +20,7 @@ Two kinds of contributions are welcome:
    lists every Razer mouse whose protocol is already in OpenRazer, with its USB id and
    transaction id, and who cracked the ones that shipped. Open an issue saying you're taking
    one so two people don't crack the same mouse the same weekend. Then fork or clone.
-2. **Hand your agent [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md).** It's the full
+2. **Hand your agent [`CRACKING-MICE-GUIDE.md`](docs/CRACKING-MICE-GUIDE.md).** It's the full
    method and works for any device: enumerate the mouse's HID collections, find the
    *reference implementation* for your brand (OpenRazer, libratbag, Solaar…), read the
    protocol out of it, confirm the control channel with a **read** before any write, then

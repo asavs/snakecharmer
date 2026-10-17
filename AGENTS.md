@@ -40,7 +40,7 @@ crates/razer-hid/     device open/enumerate, feature reports, input-report liste
 crates/platform/      Win32 FFI: single-instance, keystroke injection, mouse hook, settings UI
 src/                  daemon, tray, config, lighting
 reference/            runnable Python recon toolkit — poke a device with no compile cycle
-tools/                dev tools: diagram point editor, wishlist generator
+tools/                dev tools: diagram point editor, wishlist generator, Razer audit/removal PowerShell scripts
 ```
 
 `crates/razer-proto/src/devices/` holds one file per supported device, and

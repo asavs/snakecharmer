@@ -5,7 +5,7 @@ Every Razer mouse Snakecharmer *could* drive, and who cracked the ones it alread
 Every device listed here has its protocol **already written down in an open-source
 reference** ([OpenRazer](https://github.com/openrazer/openrazer)). That's the hard part of a
 crack, and it's done. What's left per device is the part
-[`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md) walks you through: confirm the channel
+[`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md) walks you through: confirm the channel
 with a read, fill in a `DeviceSpec`, draw the button map, verify on real hardware.
 
 Shipped devices are listed in [`SUPPORTED-DEVICES.md`](SUPPORTED-DEVICES.md), the mice this
@@ -21,7 +21,7 @@ The whole flow is ordinary GitHub. You don't need to ask permission.
    you. This step exists only to stop two people cracking the same mouse on the same
    weekend. The form also works the other way round: if you have the hardware but don't
    want to write any code, fill it in and someone else can pick it up.
-2. **Crack it.** Use [`CRACKING-MICE-GUIDE.md`](../CRACKING-MICE-GUIDE.md) for the method, the
+2. **Crack it.** Use [`CRACKING-MICE-GUIDE.md`](CRACKING-MICE-GUIDE.md) for the method, the
    [`reference/`](../reference/) Python toolkit for poking the device first, and
    [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md) for the diagram. It's a good job to
    hand an AI coding agent; both shipped devices were done that way.

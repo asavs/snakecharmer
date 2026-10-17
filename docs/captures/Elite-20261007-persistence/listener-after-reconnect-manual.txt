@@ -1,5 +1,5 @@
 Human-run listener output supplied in response to the unplug/replug test request:
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\asas\anti-synapse\reference\button_listener.ps1 -Seconds 30
+powershell -NoProfile -ExecutionPolicy Bypass -File reference\button_listener.ps1 -Seconds 30
 
   2.99s  1532:005C IF00   mouse  XBUTTON1 (back) down
   4.72s  1532:005C IF00   mouse  XBUTTON1 (back) down

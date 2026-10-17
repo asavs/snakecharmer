@@ -228,7 +228,7 @@ Run this exact sequence for any new mouse:
    write a **self-logging listener** (step 5).
 8. **Persist** at login (step 6).
 9. **Button-map diagram:** draw the `DeviceSpec::diagram` shape data from the model's
-   official schematic. See [`docs/DRAWING-MICE-GUIDE.md`](docs/DRAWING-MICE-GUIDE.md)
+   official schematic. See [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md)
    for the full workflow (finding the schematic, drawing guidelines, the DSL, verification).
 
 ### How other brands differ
@@ -260,12 +260,12 @@ Run this exact sequence for any new mouse:
 
 ## Appendix: where the worked example lives
 This repository *is* a worked example, at two levels:
-- **Runnable recon toolkit (Python):** [`reference/`](reference/): `razer_common.py`
+- **Runnable recon toolkit (Python):** [`reference/`](../reference/): `razer_common.py`
   (protocol + CRC), `dpi_button_daemon.py` (self-logging listener/injector),
   `set_device_mode.py`, `set_dpi.py`. The whole method above runs in ~150 lines.
   **Start here to crack a new device.**
 - **Shipping implementation (Rust):** `crates/razer-proto` (pure protocol + unit tests
   asserting the exact driver-mode bytes/CRC against OpenRazer), `crates/razer-hid` (HID
-  I/O), plus tray/RGB/settings/thumb-hook. See [`docs/SPEC.md`](docs/SPEC.md).
+  I/O), plus tray/RGB/settings/thumb-hook. See [`SPEC.md`](SPEC.md).
 
 The protocol itself was sourced from [OpenRazer](https://github.com/openrazer/openrazer).
