@@ -131,7 +131,7 @@ pub enum Binding {
 }
 
 impl Binding {
-    /// The factory bind for `button`, where a capture established it.
+    /// The default bind for `button`, where a capture established it.
     pub fn default_for(button: u8) -> Option<Binding> {
         matches!(button, 0x01..=0x05 | 0x09 | 0x0A).then_some(Binding::Mouse(button))
     }

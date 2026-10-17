@@ -165,7 +165,7 @@ h.send_feature_report(bytes([0x00]) + SET_DRIVER_MODE_90)   # busy-retry: if sta
 - Read-back of mode returns the value you set (`0x03`). ✔
 - **All** collections still enumerate (device didn't drop off the bus). ✔
 - Left/right click + movement still work (you're using the mouse, so this confirms itself). ✔
-- Unplug/replug returns it to stock (proves reversibility). ✔
+- Unplug/replug returns it to normal (proves reversibility). ✔
 
 ---
 
@@ -252,7 +252,7 @@ Run this exact sequence for any new mouse:
   implementation or observed from the vendor's own app.
 - ✅ **Read before you write.** Confirm the channel non-destructively first.
 - ✅ **Verify the device still fully works** (click, move, enumerate) after every write, and
-  confirm **unplug/replug restores stock**. That is your escape hatch.
+  confirm **unplug/replug restores normal behavior**. That is your escape hatch.
 - ✅ If an effect is uncertain or a command's meaning isn't in the reference, **stop and
   report**. Don't experiment on your only mouse.
 

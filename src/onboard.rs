@@ -17,8 +17,8 @@ use razer_proto::keymap::{parse_bind, Binding, KeymapSpec};
 pub const KEYMAP_DOC_URL: &str =
     "https://github.com/asavs/snakecharmer/blob/master/docs/ONBOARD-KEYMAP.md";
 
-/// One button's stored bind and whether it differs from the factory one.
-/// A button with no known factory bind is never flagged.
+/// One button's stored bind and whether it differs from the default one.
+/// A button with no known default bind is never flagged.
 pub struct StoredBind {
     pub button: u8,
     pub name: &'static str,
@@ -39,7 +39,7 @@ pub fn read_binds(mouse: &Mouse, km: &KeymapSpec) -> Result<Vec<StoredBind>, raz
         .collect()
 }
 
-/// The binds that are known to differ from the factory default, skipping the
+/// The binds that are known to differ from the default, skipping the
 /// buttons in `configured` (the user chose those in `[onboard]`).
 pub fn leftovers<'a>(binds: &'a [StoredBind], configured: &[u8]) -> Vec<&'a StoredBind> {
     binds
@@ -63,7 +63,7 @@ pub fn notice_text(device: &str, described: &str) -> String {
         "Your {device} has binds stored on the mouse: {described}.\n\n\
          They apply even without Snakecharmer, which is why a button can send \
          something other than what you expect.\n\n\
-         Reset them to the factory binds now?"
+         Reset them to the default binds now?"
     )
 }
 
@@ -112,7 +112,7 @@ pub fn parse_config(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Result
 }
 
 /// One writable button as the settings window shows it: an editable dropdown
-/// whose first entry names the button and its factory bind.
+/// whose first entry names the button and its default bind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Control {
     pub button: u8,
@@ -137,9 +137,9 @@ const PRESETS: [(&str, &str); 8] = [
 
 /// "Back (default)": the entry that names the button and puts it back.
 fn default_label(button: u8) -> String {
-    let factory = Binding::default_for(button).map(|b| b.to_string()).unwrap_or_default();
+    let default = Binding::default_for(button).map(|b| b.to_string()).unwrap_or_default();
     // "back (mouse button 4)" -> "Back"
-    let short = factory.split(" (").next().unwrap_or_default();
+    let short = default.split(" (").next().unwrap_or_default();
     let mut c = short.chars();
     let short: String = c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default();
     format!("{short} (default)")
@@ -147,12 +147,12 @@ fn default_label(button: u8) -> String {
 
 /// The presets for `button`, skipping the one its default already covers.
 fn presets(button: u8) -> Vec<(String, &'static str)> {
-    let factory = Binding::default_for(button);
+    let default = Binding::default_for(button);
     std::iter::once((default_label(button), "default"))
         .chain(
             PRESETS
                 .iter()
-                .filter(|(_, bind)| parse_bind(bind, button).ok() != factory)
+                .filter(|(_, bind)| parse_bind(bind, button).ok() != default)
                 .map(|&(label, bind)| (label.to_string(), bind)),
         )
         .collect()
@@ -180,7 +180,7 @@ pub fn controls(km: &KeymapSpec, table: &BTreeMap<String, String>, stored: &[Sto
                     None => (Binding::default_for(button), String::new()),
                 },
             };
-            // The default entry first, so a stored factory bind reads as "(default)".
+            // The default entry first, so a stored default bind reads as "(default)".
             let text = presets
                 .iter()
                 .find(|(_, p)| bind.is_some() && parse_bind(p, button).ok() == bind)
@@ -312,7 +312,7 @@ pub struct ResetOutcome {
     pub stuck: Vec<String>,
 }
 
-/// Put every leftover back to its factory bind, skipping `configured` buttons.
+/// Put every leftover back to its default bind, skipping `configured` buttons.
 pub fn reset(mouse: &Mouse, km: &KeymapSpec, configured: &[u8]) -> Result<ResetOutcome, razer_hid::Error> {
     let binds = read_binds(mouse, km)?;
     let (wanted, stuck) = reset_plan(km, &leftovers(&binds, configured));
@@ -411,7 +411,7 @@ mod tests {
 
     #[test]
     fn unmanaged_controls_show_what_the_mouse_stores() {
-        // A Synapse leftover on forward, the factory bind on wheel up, and a
+        // A Synapse leftover on forward, the default bind on wheel up, and a
         // stored value [onboard] overrides on back.
         let stored = vec![
             sb(0x09, "wheel up", Binding::Mouse(0x09), Some(true)),

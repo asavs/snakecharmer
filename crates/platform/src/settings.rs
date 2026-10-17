@@ -248,7 +248,7 @@ pub struct SettingsInit {
 
 /// One button whose bind is stored in the mouse's own memory: an editable
 /// dropdown mounted at the diagram's [`CalloutSlot::Button`] with this `id`.
-/// Like [`ActionCombo`], `presets[0]` names the button and its factory bind,
+/// Like [`ActionCombo`], `presets[0]` names the button and its default bind,
 /// so the control identifies itself; other binds can be typed (`ctrl+c`).
 /// The window only carries text; the app validates it.
 pub struct OnboardButton {

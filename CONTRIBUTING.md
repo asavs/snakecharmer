@@ -51,7 +51,7 @@ a mouse. Also:
 - **No firmware, bootloader, or DFU.** This method never needs it.
 - **Read before you write.** Confirm the channel non-destructively first.
 - **Verify after every write:** the device still clicks, moves, and enumerates, and
-  **unplugging and replugging restores stock behavior**.
+  **unplugging and replugging restores the mouse's normal behavior**.
 - If a command's meaning isn't in the reference, **stop and report**. Don't experiment
   on someone's only mouse.
 
@@ -98,6 +98,6 @@ attribution does.
 
 - [ ] `cargo test` and `cargo clippy` are clean.
 - [ ] New protocol code has **byte-exact tests** against the reference implementation.
-- [ ] You verified on **real hardware**, and unplug/replug restores stock behavior.
+- [ ] You verified on **real hardware**, and unplug/replug restores the mouse's normal behavior.
 - [ ] `NOTICE` credits any project you sourced the protocol from.
 - [ ] No firmware/DFU, no fuzzed/guessed commands.

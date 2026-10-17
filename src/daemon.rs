@@ -1080,7 +1080,7 @@ fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) {
     };
     let left = onboard::leftovers(&binds, &configured);
     if left.is_empty() {
-        log.log("On-board binds match the config and factory defaults.");
+        log.log("On-board binds match the config and the defaults.");
         return;
     }
     let described = onboard::describe(&left);
@@ -1108,7 +1108,7 @@ fn reset_leftovers(km: &'static razer_proto::keymap::KeymapSpec, configured: &[u
             for c in &out.changes {
                 log.log(&format!("On-board bind reset: {c}"));
             }
-            let mut m = format!("Reset {} button(s) to the factory bind.", out.changes.len());
+            let mut m = format!("Reset {} button(s) to the default bind.", out.changes.len());
             if !out.stuck.is_empty() {
                 m += &format!(
                     "\n\nCan't reset {} yet: no recorded write for that button.",

@@ -8,7 +8,7 @@ without Synapse.
 on hardware. The Elite was tested with Synapse 4 and needs none of it.** The DeathAdder V3's
 write (`0x02/0x0C`) and read (`0x02/0x8C`) are recorded under [Findings](#findings).
 `charmctl keymap` shows the stored binds, `charmctl keymap reset` puts non-default binds
-back to factory, `charmctl keymap set <button> <bind>` writes one, and the config's
+back to default, `charmctl keymap set <button> <bind>` writes one, and the config's
 `[onboard]` table is written to the mouse on attach. The maintainer approved the V3 write
 path on 2026-10-16. Writes cover the six controls in `KeymapSpec::writable` (right, wheel
 click, back, forward, wheel up, wheel down) and replay the layouts Synapse was captured

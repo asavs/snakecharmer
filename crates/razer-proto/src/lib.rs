@@ -141,7 +141,7 @@ pub mod status {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DeviceMode {
-    /// Factory behavior: the DPI buttons cycle DPI stages internally and send nothing.
+    /// The mouse's own behavior: the DPI buttons cycle DPI stages internally and send nothing.
     Hardware = 0x00,
     /// Driver mode: the firmware stops consuming the DPI buttons and emits vendor events.
     Driver = 0x03,
