@@ -1,108 +1,258 @@
-# Snakecharmer — Design Spec
+# Snakecharmer design
 
-A native Windows replacement for Razer Synapse, scoped to the **Razer DeathAdder
-Elite** (USB `VID 0x1532 / PID 0x005C`). It keeps the parts of Synapse that are
-useful (button remapping, DPI, lighting) and drops the five processes and the
-background Chromium instance. It answers only to the user.
+Snakecharmer is a Windows daemon that configures supported Razer mice over USB HID: DPI,
+polling rate, lighting, button remaps, and on-board button binds. It replaces Razer Synapse
+for those settings. This document describes how it works now. For usage, see the
+[README](../README.md). For the rules any change to device code must follow, see
+[AGENTS.md](../AGENTS.md).
 
-> Born from the session where we removed Synapse (its `CefSharp` browser was the
-> single biggest CPU hog on the machine) and then reverse-engineered the mouse's HID
-> protocol to keep the one feature worth keeping. This is the finished version of that.
+## Goals
 
-## Footprint targets (the whole point)
-Same rule as [pc-vitals](../../pc-vitals/): an anti-bloat tool that hogs resources
-defeats its own purpose.
+- Cost nothing while idle. One static exe, blocking reads instead of poll loops, no
+  background browser. A tool that replaces bloat can't be bloated itself.
+- Essential settings only: DPI, polling rate, button binds, and lighting as a setting.
+  Apply it, then go quiet.
+- Don't break the mouse. Send only commands documented in
+  [OpenRazer](https://github.com/openrazer/openrazer) or seen in a USB capture of Razer's
+  own software. Never touch firmware, the bootloader, or DFU.
+- Adding a mouse is a one-file diff. Everything device-specific lives in one `DeviceSpec`.
+- Local only. No telemetry, accounts, or network access.
 
-- Static exe **≤ 2 MB** (`crt-static`, no runtime deps)
-- Steady-state RAM **< 10 MB**
-- **Negligible CPU** while idle: blocking HID reads, no poll loops
-- Zero background browser, zero telemetry, local-only
+## Non-goals
 
-## Capabilities (v1 — all four, per user decision)
-1. **DPI-button remap.** The two buttons behind the wheel emit private Razer vendor
-   codes (`0x20`/`0x21`) that the OS can't see. We catch them at the HID layer and
-   inject keystrokes.
-2. **DPI level.** Set and lock sensitivity to any value, applied at login.
-3. **RGB lighting.** Static, breathing, spectrum, or off, for the mouse's two lit
-   zones (scroll wheel and logo).
-4. **Thumb-button remap.** The two side buttons are *standard* mouse buttons the OS
-   sees as Back/Forward. Remapping them to keystrokes needs a low-level input hook
-   (`WH_MOUSE_LL`) that can suppress the original. This is the one harder subsystem
-   (it's what XMBC does).
+Animated or game-synced lighting, macros, per-application profiles, DPI stages, cloud
+profiles, and accounts. Each of these needs something running all the time, which is the
+cost this project exists to avoid. The README's
+[alternatives table](../README.md#one-target-and-its-razer) and
+[ALTERNATIVES.md](ALTERNATIVES.md) list tools that do them.
 
-## UI
-- **Tray icon** (`Shell_NotifyIcon`) with a right-click menu (quick DPI, lighting,
-  reload, quit) and a **settings window**: DPI slider, per-zone lighting rows
-  (effect dropdown + color picker per RGB zone), per-button action dropdowns, Save
-  (changes apply live).
-- Config persisted as TOML in `%LOCALAPPDATA%\Snakecharmer\config.toml`.
-- Runs at login via an app-managed `HKCU\...\Run` value (no admin; registered on first
-  run, toggleable from the tray, listed in the OS's own Startup-apps UI), windowless
-  until opened.
+## Architecture
 
-## Architecture (Rust, Win32-direct)
+A Cargo workspace with one app package and three library crates:
 
-```
-snakecharmer/
-├─ crates/
-│  ├─ razer-proto/      # pure protocol: report builder, CRC, mode/DPI/RGB commands
-│  │                    #   pure protocol from OpenRazer — no I/O, unit-testable
-│  ├─ razer-hid/        # device open/enumerate, feature reports, input-report listener
-│  │                    #   (hidapi crate, or windows-rs HID); the CefSharp-free core
-│  └─ input-hook/       # WH_MOUSE_LL hook for thumb-button remap + suppression
-└─ src/                 # the app: tray, settings window (egui/eframe or native),
-                        #   config load/save, wiring; login autostart registration
-                        #   lives behind a platform seam (Run key today, WinRT
-                        #   StartupTask when packaged)
-```
+| Crate | Contents | I/O |
+|---|---|---|
+| `crates/razer-proto` | 90-byte report builder, CRC, response validation; device mode, DPI, polling and lighting commands; `DeviceSpec` and `SUPPORTED` (`devices/`); the on-board keymap protocol (`keymap.rs`); device schematics as data (`diagram.rs`) | none (`unsafe_code = "forbid"`) |
+| `crates/razer-hid` | `Mouse` (open a supported device, send a feature report, typed wrappers), `Listener` for input reports, `detected_mice` for naming unsupported devices. Uses `hidapi`. | HID |
+| `crates/platform` | All Win32 FFI and all `unsafe`: keystroke injection (`SendInput`), single-instance mutex, message boxes, tray icon, `WH_MOUSE_LL` hook, settings window, GDI+ diagram renderer, runtime-drawn icon, Run-key autostart, atomic file replace. Uses `windows-sys`. | Win32 |
+| `snakecharmer` (`src/`) | `daemon.rs` (session loop, tray and settings wiring), `config.rs`, `actions.rs` (action strings to key chords), `lighting.rs`, `onboard.rs`, `health.rs`, `logger.rs` | files |
 
-Candidate deps (keep the tree lean for the ≤2 MB target, and audit each one):
-- HID: `hidapi` **or** raw `windows` crate HID APIs
-- Tray + window: evaluate `tray-icon` + `egui/eframe` vs. native `windows` crate
-  (`Shell_NotifyIcon` + a dialog). eframe is heavier but much faster to build; a native
-  Win32 window is the lightest option. **Decide at Phase 3.**
-- Hook: `windows` crate `SetWindowsHookEx(WH_MOUSE_LL)`
-- Config: `serde` + `toml`
+Binaries:
 
-## Protocol reference (reverse-engineered, from OpenRazer + this machine)
-90-byte feature report (report ID 0 → 91-byte buffer on Windows with a leading `0x00`),
-sent to the **interface-0 mouse HID collection**. CRC = XOR of bytes `2..87`.
-DeathAdder Elite uses **transaction_id `0x3F`**.
+| Binary | Purpose |
+|---|---|
+| `snakecharmer.exe` (`src/main.rs`) | The daemon. Built for the Windows subsystem, so it has no console. Exits at once if another instance holds the `Local\SnakecharmerDaemon` mutex. |
+| `charmctl.exe` (`src/bin/charmctl.rs`) | Console CLI: `devices`, `status`, `keymap [reset\|set]`, `set-dpi`, `set-poll`, `set-mode`, `set-color`, `set-effect`, `self-test`, `where`. It opens the device itself and does not talk to the daemon. |
+| `diagram-editor.exe` (`src/bin/diagram-editor.rs`) | Dev-only local server for dragging diagram points in a browser and writing them back to the device files. |
 
-```
-                 st  txn rem   proto sz  cls id  args      ...zeros... crc rsvd
-Driver mode:     00  3F  00 00 00    02  00  04  03 00     (78x00)     05  00
-Hardware mode:   00  3F  00 00 00    02  00  04  00 00     (78x00)     06  00
-Get mode (read): 00  3F  00 00 00    02  00  84  00 00     (78x00)     86  00
-```
-- **DPI set/get:** command_class `0x04`, ids `0x05`/`0x85` (see OpenRazer `razermouse_driver.c`).
-- **DPI buttons in driver mode:** 16-byte input report, ID `0x04`, on the keyboard-
-  protocol interface, vendor codes `0x20` (up) / `0x21` (down).
-- **RGB (Chroma):** command_class `0x03` matrix effects, **to be confirmed** from
-  OpenRazer `razerchromacommon.c` for this device (static/breathing/spectrum/none).
-- Full protocol reference: [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razercommon.*`, `razerchromacommon.c`).
+### Threads
+
+| Thread | Lifetime | Job |
+|---|---|---|
+| Main | process | Session loop: open the mouse, apply settings, then wait on an event channel (button codes, menu and settings commands) with a timeout for the periodic re-assert. |
+| Tray | process | `Shell_NotifyIcon` message pump. It also owns the mouse hook, because Windows drops a `WH_MOUSE_LL` hook whose thread doesn't pump messages. |
+| Reader (one per readable HID collection) | session, only on mice with DPI buttons | Blocking read of vendor input reports; sends new codes to the main thread. |
+| Settings window | while open | Runs the window's own message loop and sends events to the main thread. |
+| Notice | while a dialog is up | Short-lived thread per message box, so a dialog left open never stalls the daemon. |
+
+### Session lifecycle
+
+1. Enumerate HID and open the first device whose product id is in `SUPPORTED`, on its
+   interface-0 mouse collection (usage page `0x01`, usage `0x02`). That is the only
+   collection that accepts the vendor feature reports. Other devices, Razer or not, are
+   never opened.
+2. Set DPI, set the polling rate if one is configured, and apply lighting unless it is
+   `keep`.
+3. On a mouse with a recorded keymap, move software thumb remaps into `[onboard]`, write
+   the configured on-board binds, read back all binds, and offer to reset leftovers.
+4. On a mouse with DPI buttons, switch to driver mode and start the reader threads.
+5. Wait for events. Every `reassert_interval_secs` (default 60, minimum 5), read DPI, the
+   polling rate, and on DPI-button mice the device mode, and rewrite any that drifted.
+   Lighting is not re-asserted. A mouse without DPI buttons has no blocking read to notice
+   an unplug, so the daemon reads its DPI every 5 seconds as a liveness check.
+6. When a device call fails, the session ends. The daemon retries after 3 s, doubling the
+   wait up to 30 s while the device keeps failing; a session that lasted 60 s resets it.
+   Tray clicks are still handled during the wait.
+
+Two supported mice plugged in at once is not supported. Commands go to whichever one
+enumerates first.
+
+## Device model
+
+Each supported mouse is one file in `crates/razer-proto/src/devices/` that defines a
+`DeviceSpec`:
+
+| Field | Meaning |
+|---|---|
+| `product_id` | USB PID (the vendor is always `0x1532`) |
+| `transaction_id` | Byte 1 of every report; varies by model generation |
+| `name` | Shown in logs, the tray, and the settings title |
+| `rgb_zones` | Lighting zone ids, in apply order; empty means no lighting |
+| `dpi_buttons` | Vendor codes of the wheel DPI buttons, or `None` |
+| `dpi_min`, `dpi_max` | Accepted DPI range, also used for the slider |
+| `polling` | Command family (`Classic` or `Extended`) and the accepted rates |
+| `diagram` | Top-down schematic, or `None` |
+
+`SUPPORTED` in `devices/mod.rs` is the source of truth for what the daemon opens:
+
+| Device | PID | Txn | Lighting | DPI buttons | DPI max | Polling (Hz) | On-board binds |
+|---|---|---|---|---|---|---|---|
+| DeathAdder Elite | `0x005C` | `0x3F` | wheel, logo | `0x20` / `0x21` | 16000 | 125, 500, 1000 | no |
+| DeathAdder V3 | `0x00B2` | `0x1F` | none | none | 30000 | 125, 500, 1000, 2000, 4000, 8000 | yes |
+
+The daemon skips features a device lacks instead of treating them as errors. Without
+lighting, lighting calls do nothing; without DPI buttons, there is no driver mode and no
+reader thread.
+
+To add a mouse, copy the closest device file, change the values, list it in `SUPPORTED`,
+add a test, and add a row to [SUPPORTED-DEVICES.md](SUPPORTED-DEVICES.md) (a test checks
+that the two agree). [DEVICE-WISHLIST.md](DEVICE-WISHLIST.md) has the OpenRazer values for
+most Razer mice. `diagram: None` ships: the settings window falls back to labeled rows, and
+drawing is a separate job ([DRAWING-MICE-GUIDE.md](DRAWING-MICE-GUIDE.md)). On-board keymaps
+live in their own table (`keymap::SUPPORTED`) so a device port stays one file. The full
+procedure is in [AGENTS.md](../AGENTS.md#the-common-task-add-support-for-a-mouse). Working
+out an unknown protocol is covered in [CRACKING-MICE-GUIDE.md](CRACKING-MICE-GUIDE.md).
+
+## Protocol
+
+Every command is a 90-byte feature report (report ID 0, sent as a 91-byte buffer with a
+leading `0x00`), and every response is 90 bytes. The layout is documented at the top of
+`crates/razer-proto/src/lib.rs`: status, transaction id, data size, command class and id,
+80 argument bytes, and a CRC that is the XOR of bytes 2 to 87. `Mouse::send_command`
+retries up to five times on a busy status, then checks the response for status `0x02` and
+a matching command echo. Tests compare exact bytes against OpenRazer
+(`*_matches_openrazer`).
+
+## Features
+
+### Device mode and DPI buttons
+
+The two DPI buttons behind the Elite's wheel send private vendor codes that Windows never
+sees. In driver mode (`0x03`) they arrive as input reports starting with `0x04` on the
+mouse's auxiliary HID collections. The daemon probes those collections, keeps the readable
+ones, and runs a blocking reader on each. A new code is debounced (200 ms), mapped through
+`dpi_up` or `dpi_down` to a key chord, and sent with `SendInput`. The defaults are copy and
+paste.
+
+### Thumb remaps and the mouse hook
+
+Back and Forward are ordinary mouse buttons, so a software remap needs a global
+`WH_MOUSE_LL` hook that suppresses the original. The hook is installed only while a remap
+is configured. With `thumb_back` and `thumb_forward` both `none` (the default) there is no
+hook, and mouse events never pass through Snakecharmer. When the hook is installed, it
+passes through everything except a remapped thumb button, ignores injected events, and
+never blocks: it uses `try_lock` and passes the event through if the lock is taken. It
+applies to every mouse on the PC, not only the Razer one.
+
+On a mouse that stores binds (the V3), Back and Forward are bound on-board instead, and an
+existing software remap moves into `[onboard]` on first connect.
+
+### Lighting
+
+Static, breathing, spectrum, or off, per zone, using OpenRazer's extended matrix effect
+command (class `0x0F`, id `0x02`). Each zone takes its effect and color from
+`[zones.<name>]` and falls back to the device-wide `lighting` and `color`. `keep` leaves a
+zone untouched. The tray menu sets all zones at once; the settings window sets each zone
+separately. The protocol has no color read-back, so success means the device accepted the
+command.
+
+### Polling rate
+
+OpenRazer has two command families. `Classic` uses class `0x00`, ids `0x05` / `0x85`, and
+tops out at 1000 Hz. `Extended` uses ids `0x40` / `0xC0` and reaches 8000 Hz.
+`PollingSpec.rates` lists the rates a device accepts, and the daemon sends no others. If
+`polling_rate` is unset, the hardware value is left alone.
+
+### On-board keymap
+
+Some mice store button binds in their own memory and send them with no software running.
+OpenRazer has no remapping, so this protocol was decoded from USB captures of Synapse 4 on
+the DeathAdder V3. [ONBOARD-KEYMAP.md](ONBOARD-KEYMAP.md) has the evidence.
+
+- Reads (class `0x02`, id `0x8C`) go only to the button ids in `KeymapSpec.buttons`, the
+  ones Synapse was seen querying.
+- Writes (class `0x02`, id `0x0C`) go only to buttons in `KeymapSpec.writable`. On the V3
+  those are right, wheel click, back, forward, wheel up, and wheel down. Left click and the
+  underside button have no captured write and are never written.
+- The main clicks are never rebound. `write_binding_report` refuses any bind on left or
+  right click other than its default, so right click can only be reset, which undoes a
+  remap Synapse left behind.
+- `Mouse::set_button_binding` writes, waits 50 ms, reads the bind back, and returns an
+  error if it differs.
+- On attach, the daemon writes only the `[onboard]` entries that differ from what the mouse
+  stores. It then flags non-default binds the config doesn't cover and offers to reset
+  them, once per distinct set per run.
+- A bind can be the default, disabled, a mouse function seen in a capture, or a key or
+  chord from the named key list.
+
+### Config
+
+TOML at `%LOCALAPPDATA%\Snakecharmer\config.toml`, created with defaults on first run. If
+the file fails to parse, the daemon logs it and starts with defaults. The log is
+`daemon.log` in the same folder. Keys: `dpi`, `dpi_y`, `dpi_up`, `dpi_down`, `thumb_back`,
+`thumb_forward`, `lighting`, `color`, `polling_rate`, `reassert_interval_secs`,
+`autostart_bootstrapped`, `[zones.*]`, `[onboard]`. Defaults and examples are in the
+[README](../README.md#configuration).
+
+### Tray and settings window
+
+The tray menu has DPI presets within the device's range, lighting presets, Settings, a
+Start with Windows check, Reload config, and Quit. A left-click on the icon opens
+settings.
+
+The settings window is built from plain Win32 common controls, with no GUI framework. It
+has a DPI slider, a polling dropdown, lighting controls per zone, and the device schematic
+drawn with GDI+, with each button's control placed on the schematic at its callout. The
+window doesn't create controls for features the device lacks. Every change goes to the
+mouse and the config file right away. After writing an on-board bind, the window asks you
+to press the button and uses raw input to confirm what the mouse actually sent.
+
+### Start with Windows
+
+On first run the daemon adds a `Snakecharmer` value under
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, which needs no admin rights.
+`autostart_bootstrapped` records that this happened, so if you turn it off it stays off.
+The tray check reads the registry, which is the only source of truth.
+
+### PC Vitals health capsule
+
+PC Vitals is a separate local health monitor that reads status files from provider apps.
+Snakecharmer is one provider: it writes a JSON capsule to
+`%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`. The file is written only on events
+(start, connect, session failure, polling change, quit). A lease refresh every 45 minutes
+runs inside the session loop's existing wait, so it adds no thread and no device I/O. The
+capsule holds bounded counters, typed incident codes, the retry delay, the polling rate,
+and a salted device id. It holds no paths, usernames, logs, or serials, and it gives PC
+Vitals no authority to set severity, recommend a restart, or run an action. Writes are
+atomic and capped at 32 KiB.
 
 ## Safety
-- Only documented Razer commands (OpenRazer-sourced). No firmware/bootloader/DFU. No
-  fuzzing feature reports: a bad write can wedge the user's **only** mouse.
-- Never rebind left or right click; right click may only be reset to default. Unplug/replug
-  undoes everything set live; on-board binds persist until changed or reset.
 
-## Phasing (multi-session)
-- **P1 — Foundation:** toolchain, workspace, `razer-proto` ported + unit-tested;
-  `razer-hid` opens the device and does set-mode / set-DPI / get-mode from Rust.
-  *Milestone: Rust talks to the mouse.*
-- **P2 — Daemon core:** input-report listener + keystroke injection for the DPI buttons,
-  running headless.
-- **P3 — RGB + tray:** Chroma commands; tray icon + menu.
-- **P4 — Settings window:** DPI slider, color picker, button dropdowns, config persistence.
-- **P5 — Thumb-button remap:** `WH_MOUSE_LL` hook + suppression; login autostart
-  (delivered: app-managed Run key + tray toggle); polish to the footprint gate.
+The full rules are in
+[AGENTS.md](../AGENTS.md#the-rules-that-matter-read-before-writing-any-device-code). In
+short:
 
-## Milestones
-| # | Deliverable |
+- Send only commands read from OpenRazer or seen in a capture of Razer's software. Never
+  fuzz, guess, or sweep ids.
+- Read before writing. Stop on a status other than `0x02`, a read-back mismatch, or a
+  device that stops responding.
+- Never touch firmware, the bootloader, or DFU.
+- Never rebind left or right click.
+- On-board binds persist on the mouse until changed or reset. DPI is sent with the
+  no-store flag; lighting effects are sent with the variable-storage flag, as OpenRazer
+  sends them.
+
+## Resource budget
+
+Measured figures, from the [README](../README.md#why):
+
+| | Measured |
 |---|---|
-| M1 | Rust sets driver mode + DPI on the real mouse (P1) |
-| M2 | Headless daemon: DPI buttons remap + injection, running headless (P2) |
-| M3 | Tray app sets RGB + DPI (P3–P4) |
-| M4 | Full app incl. thumb remap, within the ≤2 MB / <10 MB gate (P5) |
+| Exe size | 0.61 MB, one static exe (`crt-static`; release profile with `opt-level = "z"`, LTO, `panic = "abort"`, stripped) |
+| Idle RAM | 17 MB working set, 2.5 MB private |
+| Idle CPU | about 0.06 CPU-hours per day |
+| Processes | 1 |
+| Kernel drivers | 0 |
+
+Weigh every new dependency against these numbers. The app uses raw `windows-sys` instead
+of a GUI framework, draws with the GDI+ that ships in Windows, and has no async runtime.
