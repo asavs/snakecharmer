@@ -54,7 +54,7 @@ directly over Win32 HID and then gets out of the way.
 | Kernel drivers | `RZCONTROL` + `RZVIRTUAL` virtual device drivers<br><sub>observed still registered after uninstalling Synapse</sub> | none (userland HID only) | **2 → 0** |
 | On-disk size | 500 MB<br><sub>Razer's published minimum</sub> | 0.61 MB (measured)<br><sub>single static exe</sub> | **~820×** |
 | Idle RAM | ~558 MB (measured) | 17 MB (measured)<br><sub>2.5 MB private working set</sub> | **~32×** |
-| Idle CPU | ≈ 1 CPU·h/day  | ≈ 0.06 CPU·h/day (measured)<br><sub>blocking HID reads, no poll loop</sub> | **~17×** |
+| Idle CPU | ≈ 1 CPU·h/day  | ≈ 0.06 CPU·h/day (measured)<br><sub>blocking HID reads; mice without DPI buttons get a small liveness read every few seconds</sub> | **~17×** |
 | Telemetry | yes | none, local-only | — |
 
 Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI setting. Yikes man
@@ -284,8 +284,8 @@ snakecharmer/
 ├─ crates/
 │  ├─ razer-proto/   # pure protocol: report builder, CRC, mode/DPI/RGB commands (no I/O)
 │  ├─ razer-hid/     # device open/enumerate, feature reports, input-report listener
-│  └─ platform/      # Win32: single-instance, keystroke injection, WH_MOUSE_LL hook
-├─ src/              # daemon, tray, native settings window, config, lighting
+│  └─ platform/      # Win32: single-instance, keystroke injection, WH_MOUSE_LL hook, tray, settings window
+├─ src/              # daemon, config, lighting, on-board binds, health capsule, charmctl
 └─ reference/        # runnable Python recon toolkit — worked example for cracking new devices
 ```
 
@@ -334,9 +334,9 @@ Snakecharmer sends only documented Razer commands (sourced from OpenRazer). It n
 touches firmware, the bootloader, or DFU, and never fuzzes feature reports, because a bad
 write can wedge your only mouse. It never rebinds left or right click, so you can't lock
 yourself out of the mouse; the only write right click accepts is a reset to default.
-Unplugging and replugging the mouse undoes everything the daemon sets live. On-board
-binds are the exception: they stay on the mouse until you change them or run
-`charmctl keymap reset`.
+Unplugging and replugging the mouse resets driver mode and DPI. Lighting effects are sent
+with the store flag, so the mouse may keep them across a replug. On-board binds stay on the
+mouse until you change them or run `charmctl keymap reset`.
 
 Staying in userland with documented commands is deliberate. For the full argument, and
 what each level of "going deeper" would actually mean, see
@@ -347,7 +347,7 @@ what each level of "going deeper" would actually mean, see
 <details>
 <summary><b>…I unplug the mouse while Snakecharmer is running?</b></summary>
 
-The session ends and the daemon retries every 3 seconds. When a supported mouse comes
+The session ends and the daemon retries, starting at 3 seconds and backing off to 30. When a supported mouse comes
 back (the same one or a different supported model), it reconnects and re-applies your
 DPI, driver mode, and lighting automatically. You don't need to restart anything.
 </details>
@@ -358,7 +358,7 @@ DPI, driver mode, and lighting automatically. You don't need to restart anything
 Nothing is ever written to it. Snakecharmer only opens devices whose USB product id is
 in its [supported devices table](docs/SUPPORTED-DEVICES.md). Anything else, Razer or
 not, is never touched, including DeathAdder versions not yet in the table. The daemon
-just waits in its 3-second retry loop for a supported mouse to appear.
+just waits in its retry loop (3 to 30 seconds) for a supported mouse to appear.
 
 It will *name* an unsupported mouse, though. Opening Settings with one plugged in says
 which device it found and offers to open the

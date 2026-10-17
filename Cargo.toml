@@ -30,7 +30,7 @@ serde_json = "1"
 sha2 = "0.10"
 toml = "0.8"
 
-# Footprint-focused release profile (SPEC target: static exe <= 2 MB).
+# Footprint-focused release profile: smallest static exe, no unwinding.
 [profile.release]
 opt-level = "z"
 lto = true

@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Device access for the Razer DeathAdder Elite: open the control collection, send feature reports, read responses."
+description = "Device access for supported Razer mice: open the control collection, send feature reports, read responses."
 
 [dependencies]
 razer-proto = { path = "../razer-proto" }

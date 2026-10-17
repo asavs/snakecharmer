@@ -67,8 +67,8 @@ a mouse. Also:
 crates/
   razer-proto/   # pure protocol: report builder, CRC, commands. No I/O — unit-testable.
   razer-hid/     # device open/enumerate, feature reports, input-report listener
-  platform/      # Win32 FFI: single-instance, keystroke injection, WH_MOUSE_LL hook
-src/             # daemon, tray, native settings window, config, lighting
+  platform/      # Win32 FFI: single-instance, keystroke injection, WH_MOUSE_LL hook, tray, settings window
+src/             # daemon, config, lighting, on-board binds, charmctl
 reference/       # runnable Python recon toolkit — the worked example to adapt for a new device
 ```
 

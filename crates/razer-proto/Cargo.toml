@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Pure Razer HID protocol for the DeathAdder Elite (report builder, CRC, device-mode and DPI commands). No I/O."
+description = "Pure Razer HID protocol for supported mice: report builder, CRC, device specs, and the device-mode, DPI, polling, lighting and on-board keymap commands. No I/O."
 
 [dependencies]
 

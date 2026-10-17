@@ -37,8 +37,8 @@ the one way to actually break someone's hardware.
 ```
 crates/razer-proto/   pure protocol: report building, CRC, commands, DeviceSpec. No I/O.
 crates/razer-hid/     device open/enumerate, feature reports, input-report listener
-crates/platform/      Win32 FFI: single-instance, keystroke injection, mouse hook, settings UI
-src/                  daemon, tray, config, lighting
+crates/platform/      Win32 FFI: single-instance, keystroke injection, mouse hook, tray, settings UI
+src/                  daemon, config, lighting, on-board binds, charmctl
 reference/            runnable Python recon toolkit — poke a device with no compile cycle
 tools/                dev tools: diagram point editor, wishlist generator, Razer audit/removal PowerShell scripts
 ```

@@ -1,7 +1,7 @@
 //! diagram-editor — a dev-only local server for visually editing device
 //! diagrams. Detects the plugged-in mouse, serves its generated SVG with
 //! draggable points in the browser, and on Save writes the new coordinates
-//! back into `crates/razer-proto/src/lib.rs`, regenerates the SVG assets,
+//! back into the device file under `crates/razer-proto/src/devices/`, regenerates the SVG assets,
 //! rebuilds the release daemon, and restarts it.
 //!
 //! Run from the repo root:  cargo run --bin diagram-editor
@@ -121,7 +121,7 @@ fn handle(mut s: TcpStream, name: &str, slug: &str) {
     let _ = s.write_all(&payload);
 }
 
-/// Splice edited coordinates into lib.rs, then run the full pipeline:
+/// Splice edited coordinates into the device source file, then run the full pipeline:
 /// regenerate SVG assets, rebuild release, restart the daemon.
 fn save(body: &[u8]) -> Result<String, String> {
     let v: serde_json::Value =

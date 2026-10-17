@@ -1,7 +1,7 @@
 //! Configuration for the Snakecharmer daemon.
 //!
 //! Persisted as TOML at `%LOCALAPPDATA%\Snakecharmer\config.toml`. Defaults are
-//! written if the file is missing. This seeds the Phase-4 settings window.
+//! written if the file is missing. The settings window edits the same file.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

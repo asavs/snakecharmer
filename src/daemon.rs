@@ -1003,7 +1003,7 @@ fn run_session(
                     last_reassert = Instant::now();
                 } else {
                     // Liveness only: a cheap read that errors out (ending the
-                    // session, triggering the 3s reopen loop) if the device is gone.
+                    // session, triggering the retry loop) if the device is gone.
                     ctrl.get_dpi()?;
                 }
             }
