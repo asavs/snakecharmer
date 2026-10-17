@@ -15,7 +15,8 @@ for those settings. This document describes how it works now. For usage, see the
 - Don't break the mouse. Send only commands documented in
   [OpenRazer](https://github.com/openrazer/openrazer) or seen in a USB capture of Razer's
   own software. Never touch firmware, the bootloader, or DFU.
-- Adding a mouse is a one-file diff. Everything device-specific lives in one `DeviceSpec`.
+- Adding a mouse is mostly one new file. Everything device-specific lives in one
+  `DeviceSpec`; registering it takes a few lines in `devices/mod.rs` and a docs row.
 - Local only. No telemetry, accounts, or network access.
 
 ## Non-goals
