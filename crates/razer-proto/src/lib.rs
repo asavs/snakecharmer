@@ -592,17 +592,6 @@ mod tests {
     }
 
     #[test]
-    fn set_dpi_report_bytes() {
-        // 1600 = 0x0640
-        let r = set_dpi_report(T, 100, 16000, 1600, 1600).unwrap();
-        assert_eq!(&r[0..8], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x07, 0x04, 0x05]);
-        // args: NOSTORE, x_hi, x_lo, y_hi, y_lo, 0, 0
-        assert_eq!(&r[8..15], &[0x00, 0x06, 0x40, 0x06, 0x40, 0x00, 0x00]);
-        // CRC self-consistency
-        assert_eq!(r[88], crc(&r));
-    }
-
-    #[test]
     fn set_dpi_asymmetric() {
         let r = set_dpi_report(T, 100, 16000, 1600, 800).unwrap();
         assert_eq!(&r[9..13], &[0x06, 0x40, 0x03, 0x20]); // 0x0640, 0x0320
@@ -613,32 +602,6 @@ mod tests {
         let r = get_dpi_report(T);
         assert_eq!(&r[0..8], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x07, 0x04, 0x85]);
         assert_eq!(r[88], crc(&r));
-    }
-
-    #[test]
-    fn dpi_range_is_enforced() {
-        // Elite range (100..=16000): reject below/above, accept the endpoints.
-        let (lo, hi) = (DEATHADDER_ELITE.dpi_min, DEATHADDER_ELITE.dpi_max);
-        assert_eq!(set_dpi_report(T, lo, hi, 50, 50), Err(ProtoError::DpiOutOfRange(50)));
-        assert_eq!(set_dpi_report(T, lo, hi, 20000, 1600), Err(ProtoError::DpiOutOfRange(20000)));
-        assert!(set_dpi_report(T, lo, hi, 100, 100).is_ok());
-        assert!(set_dpi_report(T, lo, hi, 16000, 16000).is_ok());
-    }
-
-    /// DeathAdder V3: transaction id 0x1F, and the Focus Pro sensor's 30000
-    /// ceiling permits what the Elite's range rejects.
-    #[test]
-    fn deathadder_v3_spec() {
-        let v = DEATHADDER_V3;
-        let r = set_dpi_report(v.transaction_id, v.dpi_min, v.dpi_max, 1600, 1600).unwrap();
-        assert_eq!(r[1], 0x1F, "V3 transaction id");
-        assert!(set_dpi_report(v.transaction_id, v.dpi_min, v.dpi_max, 30000, 30000).is_ok());
-        assert_eq!(
-            set_dpi_report(v.transaction_id, v.dpi_min, v.dpi_max, 30001, 30001),
-            Err(ProtoError::DpiOutOfRange(30001))
-        );
-        assert!(!v.has_rgb(), "V3 has no lighting hardware");
-        assert!(v.dpi_buttons.is_none(), "V3 has no wheel DPI buttons");
     }
 
     #[test]
@@ -763,24 +726,6 @@ mod tests {
         assert_eq!(
             parse_polling_rate(PollingProtocol::Classic, &[0u8; REPORT_LEN]),
             Err(ProtoError::UnknownPollingRate(0x00))
-        );
-    }
-
-    /// Pin each device's polling capability to its OpenRazer cases
-    /// (`razer_attr_write_polling_rate` uses the classic command on the Elite,
-    /// `..._polling_rate2` on the V3).
-    #[test]
-    fn polling_specs_match_openrazer() {
-        assert_eq!(
-            DEATHADDER_ELITE.polling,
-            PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] }
-        );
-        assert_eq!(
-            DEATHADDER_V3.polling,
-            PollingSpec {
-                protocol: PollingProtocol::Extended,
-                rates: &[125, 500, 1000, 2000, 4000, 8000],
-            }
         );
     }
 

@@ -47,7 +47,10 @@ Fill these in. Together they are the whole "crack":
 - [ ] Added a `DeviceSpec` const and registered it in `SUPPORTED` (`crates/razer-proto/src/devices/mod.rs`, plus the re-export in `lib.rs`).
 - [ ] Added the device's row to `docs/SUPPORTED-DEVICES.md`.
 - [ ] *(Only if you drew a diagram)* Regenerated the SVG (`cargo test -p razer-proto -- --ignored regenerate_diagram_svgs`) and committed `docs/assets/<device>.svg`; the Button maps section embeds it and links the model's official schematic (no bundled PNGs, no trademarked logo). **Shipping `diagram: None` is a complete PR.** Open a follow-up issue so someone can draw it later.
-- [ ] Added a per-device test (assert the transaction id and, if the range differs, the DPI bounds).
+- [ ] Added a `#[cfg(test)] mod tests` to the device file, modeled on `deathadder_elite.rs`: product id, transaction id, DPI range, polling, RGB zones, and a set-DPI report with exact bytes.
+- [ ] The `docs/SUPPORTED-DEVICES.md` row matches the format the `supported_devices_doc_matches_table` test checks: model name, transaction id as `0xNN`, DPI range with an en dash (`100–30000`), polling rates joined by `/`.
+- [ ] Added the PID to `CLAIMED` in `tools/wishlist-from-openrazer.py` and regenerated `docs/DEVICE-WISHLIST.md` (or edited the row by hand).
+- [ ] `dpi_buttons` is `None` unless I read the codes off my own mouse with `reference/button_listener.ps1`.
 - [ ] `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` are green (the commands CI runs; see CONTRIBUTING.md).
 - [ ] **No changes were needed** to `razer-hid` or the daemon. *(If you did have to touch them, say why here. It usually means a generic gap to lift into the shared layer rather than device-specific code.)*
 - [ ] Existing devices are unaffected: the byte-exact report tests still pass unchanged.

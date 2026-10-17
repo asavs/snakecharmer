@@ -159,3 +159,56 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
         ],
     }),
 };
+
+// Per-device tests: each device file checks its own spec values. Copy this
+// module when you add a device, and change the values to match yours. The
+// shared builders (CRC, header layout, polling bytes) are tested in lib.rs.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{crc, set_dpi_report, spec_for, ProtoError};
+
+    #[test]
+    fn spec_values() {
+        let d = DEATHADDER_ELITE;
+        assert_eq!(d.product_id, 0x005C);
+        assert_eq!(d.transaction_id, 0x3F);
+        assert_eq!(d.name, "DeathAdder Elite");
+        assert_eq!(d.rgb_zones, &[led::SCROLL_WHEEL, led::LOGO]);
+        assert!(d.has_rgb());
+        let buttons = d.dpi_buttons.expect("the Elite has wheel DPI buttons");
+        assert_eq!((buttons.up, buttons.down), (0x20, 0x21));
+        assert_eq!((d.dpi_min, d.dpi_max), (100, 16000));
+        // OpenRazer uses the classic polling command (`razer_chroma_misc_set_polling_rate`).
+        assert_eq!(
+            d.polling,
+            PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] }
+        );
+    }
+
+    #[test]
+    fn is_registered_in_supported() {
+        assert_eq!(spec_for(0x005C), Some(DEATHADDER_ELITE));
+    }
+
+    /// A report built from this spec carries its transaction id and matches the
+    /// bytes in OpenRazer's `razer_chroma_misc_set_dpi_xy`. 1600 = 0x0640.
+    #[test]
+    fn set_dpi_report_bytes() {
+        let d = DEATHADDER_ELITE;
+        let r = set_dpi_report(d.transaction_id, d.dpi_min, d.dpi_max, 1600, 1600).unwrap();
+        assert_eq!(&r[0..8], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x07, 0x04, 0x05]);
+        // args: NOSTORE, x_hi, x_lo, y_hi, y_lo, 0, 0
+        assert_eq!(&r[8..15], &[0x00, 0x06, 0x40, 0x06, 0x40, 0x00, 0x00]);
+        assert_eq!(r[88], crc(&r));
+    }
+
+    #[test]
+    fn dpi_range_is_enforced() {
+        let (t, lo, hi) = (DEATHADDER_ELITE.transaction_id, 100, 16000);
+        assert_eq!(set_dpi_report(t, lo, hi, 50, 50), Err(ProtoError::DpiOutOfRange(50)));
+        assert_eq!(set_dpi_report(t, lo, hi, 20000, 1600), Err(ProtoError::DpiOutOfRange(20000)));
+        assert!(set_dpi_report(t, lo, hi, 100, 100).is_ok());
+        assert!(set_dpi_report(t, lo, hi, 16000, 16000).is_ok());
+    }
+}

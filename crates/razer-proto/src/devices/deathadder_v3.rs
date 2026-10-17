@@ -148,3 +148,54 @@ pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
         ],
     }),
 };
+
+// Per-device tests: each device file checks its own spec values. See
+// deathadder_elite.rs for the annotated model to copy.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{set_dpi_report, spec_for, ProtoError};
+
+    #[test]
+    fn spec_values() {
+        let d = DEATHADDER_V3;
+        assert_eq!(d.product_id, 0x00B2);
+        assert_eq!(d.transaction_id, 0x1F);
+        assert_eq!(d.name, "DeathAdder V3");
+        assert!(!d.has_rgb(), "V3 has no lighting hardware");
+        assert!(d.dpi_buttons.is_none(), "V3 has no wheel DPI buttons");
+        assert_eq!((d.dpi_min, d.dpi_max), (100, 30000));
+        // OpenRazer uses `..._polling_rate2`, which reaches 8000 Hz.
+        assert_eq!(
+            d.polling,
+            PollingSpec {
+                protocol: PollingProtocol::Extended,
+                rates: &[125, 500, 1000, 2000, 4000, 8000],
+            }
+        );
+    }
+
+    #[test]
+    fn is_registered_in_supported() {
+        assert_eq!(spec_for(0x00B2), Some(DEATHADDER_V3));
+    }
+
+    /// Same set-DPI layout as every Razer mouse, stamped with this device's
+    /// transaction id. 1600 = 0x0640.
+    #[test]
+    fn set_dpi_report_bytes() {
+        let d = DEATHADDER_V3;
+        let r = set_dpi_report(d.transaction_id, d.dpi_min, d.dpi_max, 1600, 1600).unwrap();
+        assert_eq!(&r[0..8], &[0x00, 0x1F, 0x00, 0x00, 0x00, 0x07, 0x04, 0x05]);
+        assert_eq!(&r[8..15], &[0x00, 0x06, 0x40, 0x06, 0x40, 0x00, 0x00]);
+    }
+
+    /// The Focus Pro sensor's 30000 ceiling permits what the Elite's range rejects.
+    #[test]
+    fn dpi_range_is_enforced() {
+        let (t, lo, hi) = (DEATHADDER_V3.transaction_id, 100, 30000);
+        assert!(set_dpi_report(t, lo, hi, 30000, 30000).is_ok());
+        assert_eq!(set_dpi_report(t, lo, hi, 30001, 30001), Err(ProtoError::DpiOutOfRange(30001)));
+        assert_eq!(set_dpi_report(t, lo, hi, 50, 50), Err(ProtoError::DpiOutOfRange(50)));
+    }
+}

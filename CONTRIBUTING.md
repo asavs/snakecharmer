@@ -40,7 +40,25 @@ Two kinds of contributions are welcome:
    [`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md). `razer-hid` and the daemon
    pick it up from there. If they need changing, say so in the PR (see
    [`AGENTS.md`](AGENTS.md)).
-5. **Open a PR** describing the mouse (VID/PID), the reference you sourced the protocol
+5. **Test and document it.** Add a `#[cfg(test)] mod tests` to your device file, modeled on
+   the one in [`deathadder_elite.rs`](crates/razer-proto/src/devices/deathadder_elite.rs): it
+   checks the product id, transaction id, DPI range, polling rates, and RGB zones, plus a
+   set-DPI report with the exact bytes. Set `dpi_buttons: None` unless you read the codes off
+   your own mouse with [`reference/button_listener.ps1`](reference/button_listener.ps1).
+   Then add your row to `docs/SUPPORTED-DEVICES.md`. A hidden test,
+   `supported_devices_doc_matches_table` (in `crates/razer-proto/src/lib.rs`), fails CI if
+   the row is missing or any value disagrees. It looks for the model name, the transaction id
+   as `0xNN`, the DPI range with an en dash, and the polling rates joined by `/`. For example:
+
+   ```
+   | DeathAdder V3 (wired) | `1532:00B2` | `0x1F` | none | no | 100–30000 | 125/500/1000/2000/4000/8000 | yes |
+   ```
+
+   Finally, add your PID to `CLAIMED` in
+   [`tools/wishlist-from-openrazer.py`](tools/wishlist-from-openrazer.py) and regenerate
+   [`docs/DEVICE-WISHLIST.md`](docs/DEVICE-WISHLIST.md) (or edit your row by hand if you
+   can't fetch the OpenRazer source), so the wishlist shows who cracked it.
+6. **Open a PR** describing the mouse (VID/PID), the reference you sourced the protocol
    from, and what you verified on real hardware.
 
 ### The golden rule (non-negotiable)

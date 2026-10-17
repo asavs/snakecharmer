@@ -88,8 +88,9 @@ straight from OpenRazer:
   `razer_attr_write_dpi()`. `copy Elite` (`0x3F`) and `copy V3` (`0x1F`) mean Snakecharmer
   already speaks that dialect to a shipped device. `new txn path` (`0xFF`) is the legacy
   broadcast id, which works fine in OpenRazer but this daemon has never sent, so verify it
-  more carefully. `legacy byte-DPI` devices take DPI as single bytes through a different
-  command entirely and are the least like anything here.
+  more carefully. Both of these mean protocol work, not a single new file. `legacy byte-DPI`
+  devices take DPI as single bytes through a different command entirely and are the least
+  like anything here.
 - **Max DPI:** `DPI_MAX` from OpenRazer's daemon device class. The minimum is 100 on every
   modern model, but check yours; the settings UI has to stay usable across the whole range.
 - **RGB zones:** which lighting zones the reference implements. `—` means no lighting, and
