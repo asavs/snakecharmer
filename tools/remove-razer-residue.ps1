@@ -55,6 +55,15 @@ function Assert-Owner([bool]$Condition,[string]$Message) { if (-not $Condition) 
 try {
     Write-Host "Mode: $mode. Evidence: $EvidenceDirectory"
 
+    # Windows Update can reinstall Razer's driver and installer on the next device setup
+    # unless driver downloads are off. Report it; changing it is the user's choice.
+    $search = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching' -Name SearchOrderConfig -ErrorAction SilentlyContinue).SearchOrderConfig
+    if ($search -eq 0) {
+        Write-Host 'Device driver downloads: off. Windows will not reinstall the Razer driver.'
+    } else {
+        Write-Host 'Device driver downloads: on. Windows may reinstall the Razer driver and installer the next time it sets up a Razer device. See "Windows puts it back" in docs/RAZER-REMOVAL.md.'
+    }
+
     # Refuse if other Razer software is installed: Cortex, THX, Chroma apps and
     # device software share these roots, drivers and the Chroma SDK DLLs.
     $others = @(foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',

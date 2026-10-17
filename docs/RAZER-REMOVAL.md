@@ -59,6 +59,10 @@ Synapse 3 logs), and the Chroma SDK DLLs `RzChromatic64.dll` and `RzChromatic.dl
 Run everything from an elevated PowerShell in the repository. Each removal script is a dry
 run unless you pass `-Apply`; the dry run prints and records what it would remove.
 
+Windows can download the Razer driver and installer again the next time it sets up a Razer
+device. Read [Windows puts it back](#windows-puts-it-back) first: if you want to stop that,
+change the setting before step 3.
+
 1. **Uninstall Synapse** with its registered uninstaller (Settings → Apps, or the
    `UninstallString` above). The residue and toast scripts refuse to run while Synapse is
    still registered.
@@ -159,3 +163,49 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\audit-razer-suppleme
 
 Expect zero in every vendor section, no pending Razer file operations, no errors, and
 normal mouse and keyboard input.
+
+## Windows puts it back
+
+On 2026-10-17, a day after a clean removal and a reboot, plugging the DeathAdder Elite in
+reinstalled part of Synapse. Nobody ran an installer:
+
+1. Windows set the mouse up as a new device ("Install Related Drivers" in
+   `C:\Windows\INF\setupapi.dev.log`) and downloaded Razer's driver package,
+   `rz005cdev.inf`, from Windows Update.
+2. That package's co-installer ran as part of driver setup. It put back
+   `System32\RazerS2S3CoinstallerEx.dll`, `HKLM\SOFTWARE\RAZERWUD`, the
+   `RzS2S3WizardPkg` and `RzS3WizardS2S3` folders under `Program Files (x86)\Razer`, the
+   RunOnce value, and the installer under `C:\Windows\Installer\Razer`.
+3. Six seconds later it launched RazerInstaller. The installer offered Synapse; nothing was
+   installed because nobody accepted.
+
+A reboot doesn't prevent this. It happens whenever Windows sets up a Razer device: the
+first time you plug one in, on a USB port it hasn't used before, or after a Windows reset.
+Snakecharmer doesn't need the Razer driver; the mice work on Windows' own HID driver.
+
+You have two choices.
+
+**Leave Windows as it is.** Driver downloads keep working for every other device. When the
+Razer installer appears, close it, then run the residue script again; it removes
+everything listed above.
+
+**Stop Windows downloading device drivers and apps.** In Settings → System → About →
+Advanced system settings → Hardware → Device Installation Settings, choose **No**. The
+dialog writes these two values; setting them from an elevated PowerShell does the same:
+
+```powershell
+Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching' SearchOrderConfig 0 -Type DWord
+New-Item 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Metadata' -Force | Out-Null
+Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Metadata' PreventDeviceMetadataFromNetwork 1 -Type DWord
+```
+
+This stops the Razer installer coming back. It doesn't affect Windows updates, security
+patches, Store apps, or the drivers your current devices already have. The cost: a new
+device gets Windows' built-in driver instead of the manufacturer's. That's usually enough,
+but a printer, webcam or controller that needs the vendor's driver then has to be
+installed from the vendor's site, or you can switch the setting back to **Yes** while you
+plug it in. Windows has no switch that blocks one vendor's drivers: blocking the mouse's
+device ID would stop the mouse working, and blocking its driver class would block every
+mouse.
+
+The residue script prints which of the two your PC is set to when it starts.
