@@ -1,0 +1,37 @@
+name: Release
+
+# Pushing a version tag (v0.9.0) builds both exes and attaches them to a
+# draft release. Nothing is public until the draft is reviewed and published.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check the tag matches Cargo.toml
+        shell: bash
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME doesn't match Cargo.toml version $version"
+            exit 1
+          fi
+      - run: cargo test --workspace
+      - run: cargo build --release --bin snakecharmer --bin charmctl
+      - name: Create the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --title "Snakecharmer $GITHUB_REF_NAME" \
+            --notes "Draft: replace with the release notes before publishing." \
+            target/release/snakecharmer.exe target/release/charmctl.exe

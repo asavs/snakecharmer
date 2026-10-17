@@ -132,7 +132,7 @@ list, including the cases where the honest answer is "not this."
 - Windows 10/11
 - A [supported Razer mouse](docs/SUPPORTED-DEVICES.md)
 - To build from source: [Rust](https://rustup.rs/) 1.97+. Or download a prebuilt
-  `snakecharmer.exe` from the Releases page.
+  `snakecharmer.exe` from the [Releases page](https://github.com/asavs/snakecharmer/releases).
 - Optional: Python 3, only if you use the `reference/` toolkit to crack a new device
 
 ## Build
