@@ -85,7 +85,7 @@ Get mode (read): 00  3F  00 00 00    02  00  84  00 00     (78x00)     86  00
 ## Safety
 - Only documented Razer commands (OpenRazer-sourced). No firmware/bootloader/DFU. No
   fuzzing feature reports: a bad write can wedge the user's **only** mouse.
-- Never write left click; touch right click only when the user binds it. Unplug/replug
+- Never rebind left or right click; right click may only be reset to default. Unplug/replug
   undoes everything set live; on-board binds persist until changed or reset.
 
 ## Phasing (multi-session)

@@ -89,8 +89,8 @@ For a device port, just record the mouse's on-board profile count in the PR.
   [`docs/captures/V3-20261016-snakecharmer-write/notes.md`](docs/captures/V3-20261016-snakecharmer-write/notes.md).
 - **Everything else stays read-only.** Adding a mouse or a button to `writable` needs a
   capture of Synapse writing it, recorded in the doc, plus maintainer approval. Never
-  write left, the underside button, or any bind category the doc lists as undecoded, and
-  never sweep ids or arguments to see what a write does. Other mice's keymap write bytes
+  rebind left or right click (right may only be reset to default). Never write the
+  underside button or any bind category the doc lists as undecoded, and never sweep ids or arguments to see what a write does. Other mice's keymap write bytes
   are reference data, not commands.
 
 ## Acceptance

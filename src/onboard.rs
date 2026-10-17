@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use razer_hid::Mouse;
-use razer_proto::keymap::{parse_bind, Binding, KeymapSpec};
+use razer_proto::keymap::{parse_bind, rebinds_main_click, Binding, KeymapSpec, MAIN_CLICKS};
 
 /// The on-board keymap research: what's decoded, for which mice.
 pub const KEYMAP_DOC_URL: &str =
@@ -99,11 +99,18 @@ pub fn parse_config(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Result
             errors.push(format!("{key:?} isn't a button on this mouse"));
             continue;
         };
+        if MAIN_CLICKS.contains(&button) && !km.is_writable(button) {
+            errors.push(format!("{name} click can't be rebound"));
+            continue;
+        }
         if !km.is_writable(button) {
             errors.push(format!("{name} can't be rebound yet"));
             continue;
         }
         match parse_bind(value, button) {
+            Ok(bind) if rebinds_main_click(button, &bind) => {
+                errors.push(format!("{name} click can only be set to \"default\""))
+            }
             Ok(bind) => wanted.push(Wanted { button, name, bind }),
             Err(e) => errors.push(format!("{name} = {value:?}: {e}")),
         }
@@ -157,10 +164,6 @@ fn presets(button: u8) -> Vec<(String, &'static str)> {
         )
         .collect()
 }
-
-/// Left and right click: settable from `charmctl` and `[onboard]`, but not
-/// offered in the settings window, since people rarely remap them.
-const MAIN_CLICKS: [u8; 2] = [0x01, 0x02];
 
 /// The writable buttons in display order, for the settings window. A button
 /// `[onboard]` sets opens on that entry; one it leaves alone opens on what the
@@ -380,15 +383,22 @@ mod tests {
     #[test]
     fn config_resolves_names_and_reports_every_error() {
         let table: BTreeMap<String, String> =
-            [("back", "ctrl+c"), ("wheel-click", "default")].map(|(k, v)| (k.into(), v.into())).into();
+            [("back", "ctrl+c"), ("wheel-click", "default"), ("right", "default")]
+                .map(|(k, v)| (k.into(), v.into()))
+                .into();
         let w = parse_config(v3(), &table).unwrap();
+        assert_eq!(w.len(), 3, "right may go back to default");
         assert_eq!(w[0], Wanted { button: 0x04, name: "back", bind: Binding::Key { modifiers: 1, usage: 0x06 } });
-        assert_eq!(w[1], Wanted { button: 0x03, name: "wheel click", bind: Binding::Mouse(0x03) });
+        assert_eq!(w[1], Wanted { button: 0x02, name: "right", bind: Binding::Mouse(0x02) });
+        assert_eq!(w[2], Wanted { button: 0x03, name: "wheel click", bind: Binding::Mouse(0x03) });
 
         let bad: BTreeMap<String, String> =
-            [("left", "a"), ("thumb", "a"), ("back", "ctrl+nope")].map(|(k, v)| (k.into(), v.into())).into();
+            [("left", "a"), ("right", "disabled"), ("thumb", "a"), ("back", "ctrl+nope")]
+                .map(|(k, v)| (k.into(), v.into()))
+                .into();
         let e = parse_config(v3(), &bad).unwrap_err();
-        assert!(e.contains("left can't be rebound"), "{e}");
+        assert!(e.contains("left click can't be rebound"), "{e}");
+        assert!(e.contains("right click can only be set to \"default\""), "{e}");
         assert!(e.contains("\"thumb\" isn't a button"), "{e}");
         assert!(e.contains("back = \"ctrl+nope\""), "{e}");
     }
@@ -399,7 +409,7 @@ mod tests {
             [("wheel-click", "ctrl+c"), ("back", "f5"), ("left", "a")].map(|(k, v)| (k.into(), v.into())).into();
         let c = controls(v3(), &table, &[]);
         let names: Vec<&str> = c.iter().map(|c| c.name).collect();
-        // The main clicks aren't offered, though right is writable.
+        // The main clicks aren't offered: right is writable only back to default.
         assert_eq!(names, ["wheel click", "back", "forward", "wheel up", "wheel down"]);
         assert_eq!(c[0].text, "Copy (Ctrl+C)", "an entry a preset covers shows the preset");
         assert_eq!(c[1].text, "f5", "anything else shows as typed");

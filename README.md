@@ -200,15 +200,14 @@ wheel_click = "f5"
 forward = "default"       # put it back to how it came
 ```
 
-- **Buttons:** `right`, `wheel_click`, `back`, `forward`, `wheel_up`, `wheel_down`. Left
-  and the underside DPI button are never written. A button you don't list keeps whatever it
-  stores.
+- **Buttons:** `wheel_click`, `back`, `forward`, `wheel_up`, `wheel_down`. Left click and
+  the underside DPI button are never written. Right click can only be set to `default`, to
+  undo a remap Synapse left on it. A button you don't list keeps whatever it stores.
 - **Binds:** `default`, `disabled`, a mouse function (`middle click`), or any key or chord
   on a standard keyboard (`a`, `/`, `f13`, `num7`, `pageup`, `ctrl+shift+t`, `copy`).
 - **Settings window:** each button has a box on the mouse picture. Click it and press the
   key or combo you want, or pick from its list (Alt+Down); it's written right away, then
-  the window asks you to press the button and confirms what the mouse actually sent. Right
-  click is left out of the window, since it's rarely remapped; set it in `[onboard]`.
+  the window asks you to press the button and confirms what the mouse actually sent.
 - **When it's written:** on attach, only when different from what the mouse stores, and
   checked by read-back. The mouse keeps it, so it works with Snakecharmer closed.
 - **Leftovers:** on attach the daemon reads the stored binds. If it finds non-default ones
@@ -313,10 +312,11 @@ Thank you very much to the OpenRazer maintainers! <3
 
 Snakecharmer sends only documented Razer commands (sourced from OpenRazer). It never
 touches firmware, the bootloader, or DFU, and never fuzzes feature reports, because a bad
-write can wedge your only mouse. It never rebinds left click, and right click changes only
-if you bind it yourself. Unplugging and replugging the mouse undoes everything the daemon
-sets live. On-board binds are the exception: they stay on the mouse until you change them
-or run `charmctl keymap reset`.
+write can wedge your only mouse. It never rebinds left or right click, so you can't lock
+yourself out of the mouse; the only write right click accepts is a reset to default.
+Unplugging and replugging the mouse undoes everything the daemon sets live. On-board
+binds are the exception: they stay on the mouse until you change them or run
+`charmctl keymap reset`.
 
 Staying in userland with documented commands is deliberate. For the full argument, and
 what each level of "going deeper" would actually mean, see

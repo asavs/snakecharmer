@@ -12,7 +12,8 @@ back to default, `charmctl keymap set <button> <bind>` writes one, and the confi
 `[onboard]` table is written to the mouse on attach. The maintainer approved the V3 write
 path on 2026-10-16. Writes cover the six controls in `KeymapSpec::writable` (right, wheel
 click, back, forward, wheel up, wheel down) and replay the layouts Synapse was captured
-sending. The first Snakecharmer write, with the physical check and the reset, is in
+sending. Right click is written only back to its default: rebinding a main click
+could leave the mouse unable to fix itself. The first Snakecharmer write, with the physical check and the reset, is in
 [`captures/V3-20261016-snakecharmer-write/notes.md`](captures/V3-20261016-snakecharmer-write/notes.md).
 The Elite session recorded only streamed lighting while button assignments were
 saved, which points to software remapping in this version. Synapse 4 remaps the Elite in

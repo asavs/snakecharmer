@@ -76,6 +76,16 @@ impl KeymapSpec {
     }
 }
 
+/// Left and right click. They are never rebound: a mouse without them is one
+/// you can't use to fix it. Right can only be written back to its default, so
+/// a remap Synapse left there can still be undone.
+pub const MAIN_CLICKS: [u8; 2] = [0x01, 0x02];
+
+/// Whether writing `bind` to `button` would rebind a main click.
+pub fn rebinds_main_click(button: u8, bind: &Binding) -> bool {
+    MAIN_CLICKS.contains(&button) && Binding::default_for(button).as_ref() != Some(bind)
+}
+
 fn squash(s: &str) -> String {
     s.chars().filter(|c| !matches!(c, ' ' | '-' | '_')).flat_map(char::to_lowercase).collect()
 }
@@ -87,9 +97,9 @@ pub fn read_binding_report(transaction_id: u8, button: u8) -> [u8; REPORT_LEN] {
         .expect("3 args always valid")
 }
 
-/// The write for one button. Refuses a button whose write wasn't captured, an
-/// undecoded category, a mouse function never seen, and a key outside the
-/// named list.
+/// The write for one button. Refuses a button whose write wasn't captured, a
+/// main click set to anything but its default, an undecoded category, a mouse
+/// function never seen, and a key outside the named list.
 pub fn write_binding_report(
     km: &KeymapSpec,
     transaction_id: u8,
@@ -100,6 +110,11 @@ pub fn write_binding_report(
         return Err(ProtoError::KeymapNotWritable(format!(
             "no captured write for button 0x{button:02x}"
         )));
+    }
+    if rebinds_main_click(button, bind) {
+        return Err(ProtoError::KeymapNotWritable(
+            "left and right click can only be reset to default".into(),
+        ));
     }
     let tail: Vec<u8> = match bind {
         Binding::Disabled => vec![0x00, 0x00],
@@ -395,7 +410,7 @@ mod tests {
     #[test]
     fn write_matches_capture() {
         let one = Binding::Key { modifiers: 0, usage: 0x1E };
-        let cases: [(u8, Binding, [u8; 7]); 16] = [
+        let cases: [(u8, Binding, [u8; 7]); 15] = [
             (0x04, one.clone(), [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x1E]),
             (0x04, Binding::Key { modifiers: 0, usage: 0x1F }, [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x1F]),
             (0x04, Binding::Key { modifiers: 0, usage: 0x04 }, [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x04]),
@@ -407,7 +422,6 @@ mod tests {
             (0x04, Binding::Mouse(0x04), [0x01, 0x04, 0x00, 0x01, 0x01, 0x04, 0x00]),
             (0x03, one.clone(), [0x01, 0x03, 0x00, 0x02, 0x02, 0x00, 0x1E]),
             (0x03, Binding::Mouse(0x03), [0x01, 0x03, 0x00, 0x01, 0x01, 0x03, 0x00]),
-            (0x02, one.clone(), [0x01, 0x02, 0x00, 0x02, 0x02, 0x00, 0x1E]),
             (0x02, Binding::Mouse(0x02), [0x01, 0x02, 0x00, 0x01, 0x01, 0x02, 0x00]),
             (0x09, one.clone(), [0x01, 0x09, 0x00, 0x02, 0x02, 0x00, 0x1E]),
             (0x09, Binding::Mouse(0x09), [0x01, 0x09, 0x00, 0x01, 0x01, 0x09, 0x00]),
@@ -423,6 +437,24 @@ mod tests {
         // And the wheel-down default, the last of the 2026-10-16 writes.
         let r = write_binding_report(v3(), 0x1F, 0x0A, &Binding::Mouse(0x0A)).unwrap();
         assert_eq!(&r[8..14], &[0x01, 0x0A, 0x00, 0x01, 0x01, 0x0A]);
+        // Synapse also wrote key 1 to right click, which Snakecharmer refuses.
+        assert!(write_binding_report(v3(), 0x1F, 0x02, &one_key()).is_err());
+    }
+
+    fn one_key() -> Binding {
+        Binding::Key { modifiers: 0, usage: 0x1E }
+    }
+
+    #[test]
+    fn main_clicks_only_go_back_to_default() {
+        let w = |bind: Binding| write_binding_report(v3(), 0x1F, 0x02, &bind);
+        assert!(w(Binding::Mouse(0x02)).is_ok(), "right back to right click");
+        assert!(w(Binding::Disabled).is_err());
+        assert!(w(Binding::Mouse(0x03)).is_err());
+        assert!(w(one_key()).is_err());
+        assert!(rebinds_main_click(0x01, &Binding::Disabled));
+        assert!(!rebinds_main_click(0x01, &Binding::Mouse(0x01)));
+        assert!(!rebinds_main_click(0x04, &Binding::Disabled), "back isn't a main click");
     }
 
     #[test]
