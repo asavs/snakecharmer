@@ -694,7 +694,7 @@ fn service_retry_gap(
             return;
         }
         match rx.recv_timeout(remaining) {
-            Ok(Event::Menu(MenuAction::Quit)) => shutdown(log, health),
+            Ok(Event::Menu(MenuAction::Quit)) => shutdown(log, health, None),
             Ok(Event::Menu(MenuAction::OpenSettings)) => {
                 if *settings_open {
                     // A window from the previous session is still up; surface
@@ -795,9 +795,17 @@ fn service_retry_gap(
 }
 
 /// Clean daemon exit, shared by the in-session and no-device Quit paths:
+/// put the mouse back in hardware mode (`driver`: the session switched it to
+/// driver mode, so without this its DPI buttons go dead until a replug),
 /// publish the stopped capsule, remove the global mouse hook, end the process.
-fn shutdown(log: &Logger, health: &mut crate::health::HealthReporter) -> ! {
+fn shutdown(log: &Logger, health: &mut crate::health::HealthReporter, driver: Option<&Mouse>) -> ! {
     log.log("Quit selected; removing mouse hook and exiting.");
+    if let Some(ctrl) = driver {
+        match ctrl.set_device_mode(DeviceMode::Hardware) {
+            Ok(_) => log.log("Hardware mode restored."),
+            Err(e) => log.log(&format!("WARN could not restore hardware mode (replug to reset): {e}")),
+        }
+    }
     if let Err(error) = health.stopped() {
         log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
     }
@@ -974,7 +982,7 @@ fn run_session(
             }
             Ok(Event::Menu(action)) => {
                 if handle_menu(action, &ctrl, cfg, bindings, log, health)? {
-                    shutdown(log, health);
+                    shutdown(log, health, spec.dpi_buttons.is_some().then_some(&ctrl));
                 }
             }
             Ok(Event::ListenerClosed) => {
