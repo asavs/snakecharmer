@@ -88,8 +88,8 @@ Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI
 
 Snakecharmer supports a short, deliberate list of devices, listed in the
 [supported devices table](docs/SUPPORTED-DEVICES.md). Each device is described by a small
-`DeviceSpec`, so adding another mouse is a one-file diff. It's a contained job and a good
-one to hand an AI coding agent.
+`DeviceSpec`, so adding another mouse is a small, contained diff: one new device file, a
+couple of registration lines, and a docs row. It's a good job to hand an AI coding agent.
 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): how to contribute.
 - [`CRACKING-MICE-GUIDE.md`](docs/CRACKING-MICE-GUIDE.md): how to work out a mouse's protocol.
@@ -158,6 +158,21 @@ Upgrading from a build that used `scripts\install-autostart.ps1`? Delete the lef
 (`Win+R` → `shell:startup`), or the daemon launches twice at login. That's harmless,
 since the second instance exits on the single-instance mutex, but it clutters the log.
 
+## Uninstall
+
+There is no installer, so there is nothing to run. To remove Snakecharmer completely:
+
+1. DeathAdder V3 only: if you wrote on-board binds, run `charmctl keymap reset` first.
+   The binds live in the mouse and stay there otherwise.
+2. Turn off **Start with Windows** in the tray menu (or in Task Manager → Startup apps).
+   You can also delete the `Snakecharmer` value under
+   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+3. Choose **Quit** from the tray menu. Quit puts the mouse back in its hardware mode.
+4. Delete `%LOCALAPPDATA%\Snakecharmer` (config, log, and the PC Vitals salt).
+5. Delete `%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`, the
+   [PC Vitals capsule](#pc-vitals-health-capsule).
+6. Delete `snakecharmer.exe` and `charmctl.exe`.
+
 ## Configuration
 
 Config lives at `%LOCALAPPDATA%\Snakecharmer\config.toml`, written with defaults on first
@@ -224,6 +239,11 @@ Snakecharmer itself was checked on hardware
 capture first; see [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md).
 
 ### PC Vitals health capsule
+
+PC Vitals is a separate local app, and the capsule is how Snakecharmer reports its
+status to it. It is only a file on disk. Snakecharmer sends it nowhere and makes no network
+connections, and nothing reads it unless PC Vitals is installed. It is safe to delete; the
+daemon writes a new one at its next event.
 
 Snakecharmer writes a small status file (a "capsule") for PC Vitals at
 `%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`. It is written only on events:
@@ -300,7 +320,7 @@ Snakecharmer's protocol knowledge (the report layout, command classes, CRC, tran
 IDs, and Chroma effect encodings) comes from
 **[OpenRazer](https://github.com/openrazer/openrazer)** (`driver/razercommon.*`,
 `razerchromacommon.c`, `razermouse_driver.c`). OpenRazer did the hard reverse-engineering;
-Snakecharmer ports the DeathAdder Elite slice of it to Windows.
+Snakecharmer ports the slice of it that covers the supported mice to Windows.
 
 That makes Snakecharmer a derivative work of OpenRazer, so it carries the same copyleft:
 the **GNU General Public License v2.0 or later**. See [`LICENSE`](LICENSE) and

@@ -47,6 +47,12 @@ to unclaimed, with no hard feelings.
 - [`needs-hardware`](https://github.com/asavs/snakecharmer/labels/needs-hardware): the code
   is written and is waiting for someone who owns the mouse to press a button.
 
+## Test builds
+
+A pre-release test build for the DeathAdder V4 Pro, [Test build: DeathAdder V4 Pro](https://github.com/asavs/snakecharmer/releases/tag/test-deathadder-v4-pro-1),
+exists so owners can try it for [issue #13](https://github.com/asavs/snakecharmer/issues/13).
+The V4 Pro is not supported yet.
+
 ## Adding your mouse with an AI assistant
 
 You don't need a particular tool or a paid model; the repo does the hard part. Paste this

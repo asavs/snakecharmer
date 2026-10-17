@@ -2,7 +2,7 @@
 
 Two kinds of contributions are welcome:
 
-1. **Improving DeathAdder Elite support:** bug fixes, settings-window polish, smaller
+1. **Improving existing support:** bug fixes, settings-window polish, smaller
    footprint, more remap actions.
 2. **Teaching Snakecharmer a new mouse:** the fun one, described below.
 
@@ -34,10 +34,12 @@ Two kinds of contributions are welcome:
 3. **Have it produce a protocol module and byte-exact tests,** following `crates/razer-proto`:
    pure, no-I/O report building with unit tests that assert the exact bytes/CRC against the
    FOSS reference (see the `*_matches_openrazer` tests for the pattern).
-4. **Register it:** add the device file to `SUPPORTED` in `crates/razer-proto/src/devices/`
-   and its row to [`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md). That's the whole
-   port; `razer-hid` and the daemon pick it up from there. If they need changing, say so in
-   the PR (see [`AGENTS.md`](AGENTS.md)).
+4. **Register it:** a new device is one new file in `crates/razer-proto/src/devices/`, two
+   lines in `devices/mod.rs` (`mod` and `pub use`, then add it to `SUPPORTED`), the
+   re-export in `crates/razer-proto/src/lib.rs`, and a row in
+   [`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md). `razer-hid` and the daemon
+   pick it up from there. If they need changing, say so in the PR (see
+   [`AGENTS.md`](AGENTS.md)).
 5. **Open a PR** describing the mouse (VID/PID), the reference you sourced the protocol
    from, and what you verified on real hardware.
 
@@ -76,10 +78,15 @@ amount of wiring. Keep unsafe code confined to `platform`.
 ## Dev setup
 
 ```powershell
-cargo build --release      # produces snakecharmer.exe + charmctl.exe
-cargo test --release       # unit tests (protocol/CRC/config/lighting)
-cargo clippy --release --all-targets   # keep it warning-clean
+cargo build --release                                     # release exes
+cargo test --workspace                                    # what CI runs
+cargo clippy --workspace --all-targets -- -D warnings     # what CI runs; no warnings allowed
 ```
+
+The build produces `snakecharmer.exe` (the daemon) and `charmctl.exe` (the CLI) in
+`targetelease`, plus `diagram-editor.exe`, a dev tool for drawing button maps. These are
+the same test and clippy commands CI runs (`.github/workflows/ci.yml`), so run them before
+you push.
 
 Keep it small: the release exe is under 1 MB and idle RAM about 17 MB. Weigh new
 dependencies against that (`docs/SPEC.md` has the targets).
@@ -96,7 +103,7 @@ attribution does.
 
 ## PR checklist
 
-- [ ] `cargo test` and `cargo clippy` are clean.
+- [ ] `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` are clean (see Dev setup).
 - [ ] New protocol code has **byte-exact tests** against the reference implementation.
 - [ ] You verified on **real hardware**, and unplug/replug restores the mouse's normal behavior.
 - [ ] `NOTICE` credits any project you sourced the protocol from.

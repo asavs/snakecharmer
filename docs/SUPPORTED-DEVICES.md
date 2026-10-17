@@ -1,7 +1,7 @@
 # Supported devices
 
 Every device Snakecharmer can drive. The source of truth is the `SUPPORTED` table in
-[`crates/razer-proto/src/lib.rs`](../crates/razer-proto/src/lib.rs); this page is the
+[`crates/razer-proto/src/devices/mod.rs`](../crates/razer-proto/src/devices/mod.rs); this page is the
 readable copy, and a test (`supported_devices_doc_matches_table`) fails CI if the two
 disagree. All protocol knowledge comes from
 [OpenRazer](https://github.com/openrazer/openrazer) (`driver/razermouse_driver.c`).

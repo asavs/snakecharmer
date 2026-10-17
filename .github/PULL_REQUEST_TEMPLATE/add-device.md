@@ -3,10 +3,11 @@ Adding support for a new device? This is the template for you.
 Open your PR with:  ?template=add-device.md  appended to the compare URL,
 or pick "add-device" from the template dropdown.
 
-The PR to copy: the DeathAdder V3 PR (#3). Adding a device is meant to be
-a small diff: a DeviceSpec const, a line in SUPPORTED, a test, and a row in
-docs/SUPPORTED-DEVICES.md. One code file total.
-If your PR is bigger than that, something generic is missing from the crates;
+The PR to copy: the DeathAdder V3 PR, https://github.com/asavs/snakecharmer/pull/3.
+Adding a device is a small diff: one new file in crates/razer-proto/src/devices/
+(the DeviceSpec const and its test), the registration lines in devices/mod.rs
+and the re-export in lib.rs, and a row in docs/SUPPORTED-DEVICES.md.
+If your PR touches more than that, something generic is missing from the crates;
 flag it in the PR and we'll pull it up into the shared layer.
 -->
 
@@ -43,11 +44,11 @@ Fill these in. Together they are the whole "crack":
 
 ## Checklist
 
-- [ ] Added a `DeviceSpec` const and registered it in `SUPPORTED` (`crates/razer-proto/src/lib.rs`).
+- [ ] Added a `DeviceSpec` const and registered it in `SUPPORTED` (`crates/razer-proto/src/devices/mod.rs`, plus the re-export in `lib.rs`).
 - [ ] Added the device's row to `docs/SUPPORTED-DEVICES.md`.
 - [ ] *(Only if you drew a diagram)* Regenerated the SVG (`cargo test -p razer-proto -- --ignored regenerate_diagram_svgs`) and committed `docs/assets/<device>.svg`; the Button maps section embeds it and links the model's official schematic (no bundled PNGs, no trademarked logo). **Shipping `diagram: None` is a complete PR.** Open a follow-up issue so someone can draw it later.
 - [ ] Added a per-device test (assert the transaction id and, if the range differs, the DPI bounds).
-- [ ] `cargo test --workspace` is green.
+- [ ] `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` are green (the commands CI runs; see CONTRIBUTING.md).
 - [ ] **No changes were needed** to `razer-hid` or the daemon. *(If you did have to touch them, say why here. It usually means a generic gap to lift into the shared layer rather than device-specific code.)*
 - [ ] Existing devices are unaffected: the byte-exact report tests still pass unchanged.
 

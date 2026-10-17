@@ -2,7 +2,7 @@
 //! (XBUTTON1 = Back, XBUTTON2 = Forward) to keystrokes, suppressing the native
 //! Back/Forward action.
 //!
-//! # Contract & safety (see docs/P5-HANDOFF.md)
+//! # Contract & safety (also summarized in the README, "I configure a thumb-button remap")
 //! * **The hook exists only while a remap is configured.** A `WH_MOUSE_LL`
 //!   hook makes Windows route *every* mouse event (including moves, at the
 //!   full polling rate) through a cross-thread round-trip, so with both thumb

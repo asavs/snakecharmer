@@ -8,7 +8,7 @@ main job people bring here does not need a frontier model.
 
 Snakecharmer is a Windows daemon that configures Razer mice over USB HID (DPI, polling
 rate, RGB, button remapping) as a replacement for Razer Synapse. It is Rust, Windows-only,
-and deliberately small: one static ~600 KB exe, under 10 MB idle.
+and deliberately small: one static ~0.6 MB exe, about 17 MB idle (measured).
 
 All protocol knowledge comes from [OpenRazer](https://github.com/openrazer/openrazer). This
 project ports slices of it to Windows; it does not invent protocol.
@@ -49,7 +49,8 @@ Unsafe code stays confined to `crates/platform`.
 
 ## The common task: add support for a mouse
 
-This is a **one-file diff** and should stay one. If you find yourself editing `razer-hid` or
+This should stay a small diff: one new device file, its registration lines in `devices/mod.rs`
+and the re-export in `lib.rs`, and a docs row. If you find yourself editing `razer-hid` or
 the daemon, stop and say so in the PR. It means something generic is missing from the
 shared layer, and that is a different change.
 
@@ -97,9 +98,11 @@ For a device port, just record the mouse's on-board profile count in the PR.
 
 ```
 cargo test --workspace
-cargo clippy --release --all-targets     # keep it warning-clean
+cargo clippy --workspace --all-targets -- -D warnings
 cargo build --release
 ```
+
+These match CI; [`CONTRIBUTING.md`](CONTRIBUTING.md) has the same block.
 
 A change is not done until those are green. Tests for protocol code assert **exact bytes**
 against the OpenRazer reference. See the `*_matches_openrazer` tests for the pattern.
@@ -119,4 +122,4 @@ against the OpenRazer reference. See the `*_matches_openrazer` tests for the pat
 - A command's behavior is not documented in a reference implementation.
 - A device does something the tests can't check: anything requiring a button press, a
   plug/unplug, or a look at a rendered window.
-- The change would grow beyond one device file.
+- The change would grow beyond the small diff described above.
