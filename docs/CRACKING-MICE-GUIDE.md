@@ -230,6 +230,7 @@ Run this exact sequence for any new mouse:
 9. **Button-map diagram:** draw the `DeviceSpec::diagram` shape data from the model's
    official schematic. See [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md)
    for the full workflow (finding the schematic, drawing guidelines, the DSL, verification).
+10. **Optional: on-board binds,** only if Synapse saves binds to this mouse. See below.
 
 ### How other brands differ
 - **Razer:** 90-byte Feature report, XOR CRC, per-model transaction_id. As above.
@@ -242,6 +243,33 @@ Run this exact sequence for any new mouse:
   app's real traffic with **Wireshark + USBPcap** (Win) / `usbmon` (Linux) and match
   packets to actions. That is observing what the vendor's own app sends, and it is still
   **not** fuzzing.
+
+### Optional: on-board binds
+
+A port doesn't need this. DPI, polling, lighting and the DPI buttons work without it.
+
+Some mice store button binds in their own memory, and Snakecharmer can write them on a mouse
+whose writes have been recorded (today only the DeathAdder V3). Binds stored that way work
+with Snakecharmer closed. Other mice, such as the DeathAdder Elite under Synapse 4, are
+remapped in software, so there is nothing on the mouse to write.
+
+OpenRazer doesn't document these writes, so the evidence has to come from Synapse itself:
+
+1. **Capture Synapse saving binds** with
+   [`reference/capture_session.ps1`](../reference/capture_session.ps1), following the
+   [capture runbook](ONBOARD-KEYMAP.md#running-a-capture-session). If Synapse sends no
+   keymap write when you save, the mouse is remapped in software; stop here.
+2. **Decode** the session with [`reference/keymap_diff.py`](../reference/keymap_diff.py)
+   and check the bytes against the [V3 findings](ONBOARD-KEYMAP.md#findings). Don't assume
+   the same layout because the framing matches; each button you want writable needs its
+   own captured write.
+3. **Add a `KeymapSpec` entry** in `crates/razer-proto/src/keymap.rs` listing the mouse's
+   buttons and the ones you captured writes for, and give each writable button a
+   `CalloutSlot::Button` callout on the diagram so the settings window can show it.
+4. **Verify on hardware:** write a bind, check it by read-back, press the button and
+   confirm what it sends, then power-cycle the mouse and check again.
+5. **Get maintainer approval.** [AGENTS.md](../AGENTS.md) only allows writes to buttons in
+   `KeymapSpec::writable`, and adding a mouse to that list needs the maintainer's sign-off.
 
 ---
 
