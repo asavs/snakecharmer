@@ -8,6 +8,7 @@ use crate::{DeviceSpec, PollingProtocol, PollingSpec};
 /// DeathAdder V3 wired (`PID 0x00B2`): no lighting, no wheel DPI buttons, 30000 DPI.
 /// Protocol per openrazer `razermouse_driver.c` (transaction_id `0x1F`).
 pub const DEATHADDER_V3: DeviceSpec = DeviceSpec {
+    product_ids: &[0x00B2],
     product_id: 0x00B2,
     transaction_id: 0x1F,
     name: "DeathAdder V3",

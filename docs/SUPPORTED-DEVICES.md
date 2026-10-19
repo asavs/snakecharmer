@@ -10,10 +10,14 @@ disagree. All protocol knowledge comes from
 |---|---|---|---|---|---|---|---|
 | DeathAdder Elite | `1532:005C` | `0x3F` | scroll wheel, logo | yes (`0x20`/`0x21`) | 100–16000 | 125/500/1000 | yes |
 | DeathAdder V3 (wired) | `1532:00B2` | `0x1F` | none | no | 100–30000 | 125/500/1000/2000/4000/8000 | yes |
+| DeathAdder V4 Pro | `1532:00BE` (wired), `1532:00BF` (wireless) | `0x1F` | none | no | 100–45000 | 125/500/1000/2000/4000/8000 | yes |
 
 ### Column notes
 
 - **txn:** the `transaction_id` byte stamped into every 90-byte control report.
+- **USB id:** one row per model. A model that enumerates under two ids (wired and
+  through its own dongle) gets one row and one spec, because both ids take the same
+  commands. `DeviceSpec::product_ids` holds every id; `product_id` is the canonical one.
 - **RGB zones:** the addressable lighting zones that effects apply to. "none" means the
   model has no lighting hardware, and lighting commands do nothing.
 - **DPI buttons:** whether the model has the wheel DPI buttons that send private vendor
@@ -84,6 +88,48 @@ listened to, so Snakecharmer never touches it (driver mode and the vendor-code
 listeners are skipped entirely on this model).
 
 *Provenance:* protocol ported from OpenRazer by Claude Opus 4.8 (high).
+
+### DeathAdder V4 Pro (wired and wireless)
+
+**No button map yet** — the settings window lists this device's controls as labeled rows
+instead of callouts on a picture. Drawing one is a separate, hardware-free contribution;
+see [`DRAWING-MICE-GUIDE.md`](DRAWING-MICE-GUIDE.md).
+
+One mouse with two USB ids: `1532:00BE` on the cable and `1532:00BF` over its wireless
+dongle. In `razermouse_driver.c`, every command Snakecharmer sends tests both PIDs in the
+same case arm, so the two are one row, one spec, and one transaction id. How the mouse is
+attached changes where it enumerates, not which commands it takes. If both are plugged in
+at once (charging on the cable with the dongle connected), Snakecharmer opens the wired
+one.
+
+Which of the two you are actually talking to is visible where it matters: the daemon's
+`Opened …` log line and `charmctl devices` both report the id the unit enumerated as, so a
+dongle-attached mouse shows `0x00BF` and a wired one `0x00BE`. The table row above carries
+the wired id as the model's canonical one.
+
+Like the V3 it has no lighting and no wheel DPI buttons: its DPI control is a single
+underside button that cycles onboard stages in firmware, and `razermouse_probe` creates no
+lighting or `dpi_buttons` file for the mouse in OpenRazer. (The dongle has indicator LEDs of
+its own, which Snakecharmer doesn't drive.) What it adds over the V3 is the sensor
+ceiling — 45000 DPI, on the same extended polling command family, so all six rates through
+8000 Hz.
+
+Its protocol was ported from OpenRazer and confirmed against real hardware — a wireless
+unit (`0x00BF`) answered every read and both writes on transaction `0x1F`:
+
+| Check | Result |
+|---|---|
+| `charmctl devices` / `status` reads (mode, DPI, polling) | `0x1F` accepted, values read |
+| DPI write round-trip | 1800 → `set-dpi 1600` → read back 1600 |
+| Polling write round-trip (extended `..._rate2`) | 1000 → `set-poll 2000` → read back 2000 |
+
+The daemon also opened it, locked DPI, and correctly **skipped** driver mode and the
+vendor-code listeners (no `attr_dpi_buttons` on this model), which is the feature gating
+the column asks about. It did so over both attach paths — `0x00BF` on the dongle and
+`0x00BE` on the cable — so the two ids are confirmed to be one protocol, not just one
+`case` arm.
+
+*Provenance:* protocol ported from OpenRazer by Claude Opus 5.
 
 ## Not on the list?
 

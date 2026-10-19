@@ -115,6 +115,15 @@ before you write anything. The driver has real asymmetries (the Viper V3 Pro's w
 takes `Classic` polling while its wireless PID takes `Extended`), and copying a hint without
 checking it is exactly what the golden rule forbids.
 
+**A row is a model, not a USB id.** A mouse that enumerates twice — wired and through its
+own wireless dongle — gets one row carrying both ids, because the question this page
+answers is "which commands does this mouse take", and a dongle changes where a device
+enumerates rather than what it accepts. That is a claim you still have to check: the V4 Pro's
+two PIDs sit in the same case arm of every command Snakecharmer sends, but the Viper V3
+Pro's two do not, which is why *that* pair is two rows. The pairing itself is data — `ALIAS_PIDS` at the top of
+the generator — so a model OpenRazer ships as a wired/wireless class pair gets one row only
+once someone has checked its case arms and added it there.
+
 <!-- BEGIN GENERATED TABLES -->
 
 ### DeathAdder
@@ -141,8 +150,7 @@ checking it is exactly what the golden rule forbids.
 | DeathAdder V3 | `1532:00B2` | `0x1F`<br><sub>copy V3</sub> | 30000 | — | Extended<br><sub>→ 8000 Hz</sub> | ✅ cracked by [@asavs](https://github.com/asavs) · [#3](https://github.com/asavs/snakecharmer/pull/3)<br><sub>Claude Opus 4.8 (high)</sub> |
 | DeathAdder V3 Pro (Wired) | `1532:00B6` | `0x1F`<br><sub>copy V3</sub> | 35000 | — | Classic | open |
 | DeathAdder V3 Pro (Wireless) | `1532:00B7` | `0x1F`<br><sub>copy V3</sub> | 35000 | — | Classic | open |
-| DeathAdder V4 Pro (Wired) | `1532:00BE` | `0x1F`<br><sub>copy V3</sub> | 45000 | — | Extended<br><sub>→ 8000 Hz</sub> | open |
-| DeathAdder V4 Pro (Wireless) | `1532:00BF` | `0x1F`<br><sub>copy V3</sub> | 45000 | — | Extended<br><sub>→ 8000 Hz</sub> | open |
+| DeathAdder V4 Pro (Wired) | `1532:00BE` / `1532:00BF` | `0x1F`<br><sub>copy V3</sub> | 45000 | — | Extended<br><sub>→ 8000 Hz</sub> | ✅ cracked by [@YUZHEthefool](https://github.com/YUZHEthefool) · [#14](https://github.com/asavs/snakecharmer/pull/14)<br><sub>Claude Opus 5</sub> |
 | DeathAdder V3 Pro (Wired) | `1532:00C2` | `0x1F`<br><sub>copy V3</sub> | 35000 | — | Classic | open |
 | DeathAdder V3 Pro (Wireless) | `1532:00C3` | `0x1F`<br><sub>copy V3</sub> | 35000 | — | Classic | open |
 | DeathAdder V3 HyperSpeed (Wired) | `1532:00C4` | `0x1F`<br><sub>copy V3</sub> | 26000 | — | Classic | open |
@@ -353,4 +361,4 @@ python tools/wishlist-from-openrazer.py
 ```
 
 Shipped and claimed rows are recorded in the `CLAIMED` table at the top of that script, so
-regenerating never clobbers credit. Last generated: 2026-08-23.
+regenerating never clobbers credit. Last generated: 2026-09-17.

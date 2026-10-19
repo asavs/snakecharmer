@@ -28,7 +28,18 @@ CLAIMED = {
              "[@asavs](https://github.com/asavs) · "
              "[#3](https://github.com/asavs/snakecharmer/pull/3)",
              "Claude Opus 4.8 (high)"),
+    0x00BE: ("shipped",
+             "[@YUZHEthefool](https://github.com/YUZHEthefool) · "
+             "[#13](https://github.com/asavs/snakecharmer/issues/13)",
+             "Claude Opus 5"),
 }
+
+# Models OpenRazer ships as two driver classes -- one per attach method -- that
+# share every per-command case arm and therefore the same commands. Rendering
+# them as one row (the first pid's) keeps this page a list of protocols, which
+# is what a porter needs; the pair is named in the USB id cell so neither id
+# goes missing.
+ALIAS_PIDS = {0x00BF: 0x00BE}
 
 RAW = "https://raw.githubusercontent.com/openrazer/openrazer/master/"
 SOURCES = {
@@ -196,6 +207,18 @@ def render(devices, txn, poll):
     def family(name):
         return next((f for f in FAMILIES if name.startswith(f)), "Other")
 
+    def aliases_of(pid):
+        """The other pids of `pid`'s model, whether it is the base or the sibling."""
+        if pid in ALIAS_PIDS:
+            return [ALIAS_PIDS[pid]]
+        return sorted(other for other, first in ALIAS_PIDS.items() if first == pid)
+
+    def pid_cell(device):
+        pid = device["pid"]
+        # a paired model renders as one row, on the pid its sibling inherits
+        # from (mouse.py declares the wired class first), naming both ids
+        return " / ".join("`1532:%04X`" % p for p in [pid] + aliases_of(pid))
+
     def row(device):
         pid = device["pid"]
         transaction = txn.get(pid)
@@ -216,8 +239,8 @@ def render(devices, txn, poll):
                 status += "<br><sub>%s</sub>" % agent
         else:
             status = "open"
-        return "| %s | `1532:%04X` | %s | %s | %s | %s | %s |" % (
-            device["name"], pid, txn_cell, device["dpi_max"] or "?",
+        return "| %s | %s | %s | %s | %s | %s | %s |" % (
+            device["name"], pid_cell(device), txn_cell, device["dpi_max"] or "?",
             ", ".join(device["zones"]) or "—", polling, status)
 
     head = ("| Model | USB id | txn | Max DPI | RGB zones | Polling | Status |\n"
@@ -228,7 +251,10 @@ def render(devices, txn, poll):
     sections = []
     for name in FAMILIES:
         if name in groups:
-            rows = sorted(groups[name], key=lambda d: d["pid"])
+            # a paired model's sibling class sorts last but renders no row of
+            # its own: its pid is already in the base row's USB id cell
+            rows = sorted((d for d in groups[name] if d["pid"] not in ALIAS_PIDS),
+                          key=lambda d: d["pid"])
             sections.append("### %s\n\n%s\n%s\n" % (TITLES.get(name, name), head,
                                                     "\n".join(row(d) for d in rows)))
     return "\n".join(sections)

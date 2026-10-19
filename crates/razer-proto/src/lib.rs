@@ -29,7 +29,7 @@ pub mod devices;
 pub mod diagram;
 pub mod keymap;
 
-pub use devices::{DEATHADDER_ELITE, DEATHADDER_V3, SUPPORTED};
+pub use devices::{DEATHADDER_ELITE, DEATHADDER_V3, DEATHADDER_V4_PRO, SUPPORTED};
 use diagram::Diagram;
 
 /// USB vendor id for Razer.
@@ -76,7 +76,22 @@ pub struct PollingSpec {
 /// adding one of these to [`SUPPORTED`] — see `docs/SUPPORTED-DEVICES.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceSpec {
-    /// USB product id.
+    /// Every USB product id this spec covers.
+    ///
+    /// Usually one. A model that enumerates under a different PID depending on
+    /// how it is attached — the DeathAdder V4 Pro is a distinct USB device
+    /// wired (`0x00BE`) and over its wireless dongle (`0x00BF`) — lists both
+    /// here and shares one spec, because OpenRazer's cases for the two PIDs are
+    /// identical. Extra ids are an enumeration alias, not a second protocol.
+    pub product_ids: &'static [u16],
+    /// The model's canonical USB product id, used to look up per-model data
+    /// such as its keymap.
+    ///
+    /// For a multi-PID device this is the id OpenRazer's `read_device_type` case
+    /// names first — the wired one, for the V4 Pro. It is *not* necessarily the
+    /// id a given unit enumerated as: logs report the enumerated id
+    /// (`razer_hid::Mouse::product_id`), and code that opens the device's
+    /// collections by id must take the id from the bus instead.
     pub product_id: u16,
     /// transaction_id byte (offset 1 of every report); varies by model
     /// generation. Find it in the device's cases in OpenRazer's
@@ -117,11 +132,16 @@ impl DeviceSpec {
     pub fn has_rgb(&self) -> bool {
         !self.rgb_zones.is_empty()
     }
+
+    /// Whether this spec covers the given USB product id.
+    pub fn covers(&self, product_id: u16) -> bool {
+        self.product_ids.contains(&product_id)
+    }
 }
 
 /// Look up the [`DeviceSpec`] for a USB product id, if it's supported.
 pub fn spec_for(product_id: u16) -> Option<DeviceSpec> {
-    SUPPORTED.iter().copied().find(|s| s.product_id == product_id)
+    SUPPORTED.iter().copied().find(|s| s.covers(product_id))
 }
 
 /// Length of a Razer control report / response, in bytes.
@@ -552,6 +572,7 @@ mod tests {
     /// A synthetic second device for exercising per-device behavior without
     /// depending on any real spec beyond the Elite.
     const TEST_MOUSE: DeviceSpec = DeviceSpec {
+        product_ids: &[0xFFFE],
         product_id: 0xFFFE,
         transaction_id: 0x1F,
         name: "Test Mouse",
@@ -821,12 +842,18 @@ mod tests {
             .replace("\r\n", "\n"); // normalize CRLF checkouts before verbatim matching
 
         for spec in SUPPORTED {
-            let pid = format!("1532:{:04X}", spec.product_id);
-            let row = doc
-                .lines()
-                .find(|l| l.starts_with('|') && l.contains(&pid))
+            let row = spec
+                .product_ids
+                .iter()
+                .find_map(|pid| {
+                    let pid = format!("1532:{pid:04X}");
+                    doc.lines().find(|l| l.starts_with('|') && l.contains(&pid))
+                })
                 .unwrap_or_else(|| {
-                    panic!("docs/SUPPORTED-DEVICES.md has no row for {} (`{pid}`) — add one", spec.name)
+                    panic!(
+                        "docs/SUPPORTED-DEVICES.md has no row for {} (any of {:04X?}) — add one",
+                        spec.name, spec.product_ids
+                    )
                 });
             for (what, needle) in [
                 ("model name", spec.name.to_string()),
@@ -844,7 +871,8 @@ mod tests {
             ] {
                 assert!(
                     row.contains(&needle),
-                    "doc row for {pid} is missing the {what} {needle:?}:\n  {row}"
+                    "doc row for 0x{:04X} is missing the {what} {needle:?}:\n  {row}",
+                    spec.product_id
                 );
             }
 
