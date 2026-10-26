@@ -128,6 +128,16 @@ response, or verification failure, including commands on another handle or the r
 notice thread. A mutex serializes complete read/write/read-back operations. Invalid
 local values are rejected before I/O and do not trip the latch.
 
+A global named-object lease permits only one Snakecharmer process to hold
+control handles, across Windows login sessions. It is acquired after read-only
+enumeration and before opening the endpoint, shared by handles in the same
+process, and released after the last control handle closes or the process exits.
+The CLI fails clearly while the daemon owns the mouse; quit the daemon before
+standalone device commands. Enumeration needs no lease. This coordinates
+participating Snakecharmer binaries only; other vendor or reference tools must
+be closed separately. Ownership contention and OS acquisition failures send no
+device commands and do not trip the device-failure latch.
+
 Mode, DPI, polling-rate, and on-board bind setters read their corresponding command
 before writing and verify it afterward. Lighting has no effect-read command; it confirms
 the control channel with the existing DPI read and checks the effect acknowledgement.

@@ -76,7 +76,8 @@ shared layer, and that is a different change.
    [`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md). A test fails if the doc and the
    table disagree.
 5. **Verify on hardware.** This part needs the human who owns the mouse. Ask them to run
-   the daemon and confirm the log line, then `charmctl set-dpi <n>` and `charmctl status`
+   the daemon and confirm the log line, quit it from the tray to release device control,
+   then run `charmctl set-dpi <n>` and `charmctl status`
    round-trip, including a value near the device's maximum. Do not mark a device verified
    on hardware because the tests passed; that column means a person plugged it in.
 

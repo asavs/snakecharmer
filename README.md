@@ -162,12 +162,13 @@ since the second instance exits on the single-instance mutex, but it clutters th
 
 There is no installer, so there is nothing to run. To remove Snakecharmer completely:
 
-1. DeathAdder V3 only: if you wrote on-board binds, run `charmctl keymap reset` first.
-   The binds live in the mouse and stay there otherwise.
-2. Turn off **Start with Windows** in the tray menu (or in Task Manager → Startup apps).
+1. Turn off **Start with Windows** in the tray menu (or in Task Manager → Startup apps).
    You can also delete the `Snakecharmer` value under
    `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
-3. Choose **Quit** from the tray menu. Quit puts the mouse back in its hardware mode.
+2. Choose **Quit** from the tray menu. Quit puts the mouse back in its hardware mode
+   and releases device control for the CLI.
+3. DeathAdder V3 only: if you wrote on-board binds, run `charmctl keymap reset`.
+   The binds live in the mouse and stay there otherwise.
 4. Delete `%LOCALAPPDATA%\Snakecharmer` (config, log, and the PC Vitals salt).
 5. Delete `%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`, the
    [PC Vitals capsule](#pc-vitals-health-capsule).
@@ -258,6 +259,17 @@ episodes are kept for at most 24 hours and keep immutable IDs and start times. T
 published capsule is output only; the daemon does not trust it as its own memory.
 
 ## `charmctl`: command-line control
+
+Quit the daemon from its tray menu before running device commands, including
+`status` and `keymap`. The daemon and CLI open the mouse directly; only one
+Snakecharmer process may own device control at a time. A second process fails
+before opening the control endpoint. `devices` only enumerates USB descriptors
+and remains available while the daemon runs.
+
+CLI changes do not update the daemon's config. When you restart the daemon, it
+reapplies its configured settings. Use the settings window for persistent changes.
+The ownership guard coordinates updated Snakecharmer binaries, not Synapse or
+the Python reference scripts; close other device-control software too.
 
 ```
 charmctl devices                         list Razer mice plugged in, supported or not

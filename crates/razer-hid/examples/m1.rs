@@ -1,6 +1,6 @@
 //! Minimal example of driving the mouse straight through `razer-hid`.
-//! Read-only: prints the current device mode, DPI, and polling rate. Safe to
-//! run any time.
+//! Read-only: prints the current device mode, DPI, and polling rate. Quit the
+//! daemon first: device control is exclusive even for reads.
 //!
 //!   cargo run -p razer-hid --example m1
 

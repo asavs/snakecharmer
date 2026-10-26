@@ -60,7 +60,7 @@ Fill these in. Together they are the whole "crack":
 Adding a device to the table is a claim about real hardware. Back it up.
 
 - [ ] Plugged the device in and ran the daemon; the log shows `Opened <model> (PID …, txn …; rgb=…, dpi_buttons=…)` with the expected values and **no crash-loop**.
-- [ ] Ran `charmctl set-dpi <n>`, then `charmctl status`. DPI applies and reads back, including a value near the device's max.
+- [ ] Quit the daemon from its tray menu to release device control, then ran `charmctl set-dpi <n>` and `charmctl status`. DPI applies and reads back, including a value near the device's max.
 - [ ] Feature flags behave: RGB works (or is correctly skipped), DPI-button remap works (or is correctly absent).
 
 <!-- Paste the relevant daemon.log lines / charmctl output here. -->

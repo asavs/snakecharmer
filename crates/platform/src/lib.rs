@@ -14,6 +14,7 @@ pub mod autostart;
 pub mod diagram;
 pub mod icon;
 pub mod mouse_hook;
+pub mod process_lease;
 pub mod settings;
 pub mod tray;
 

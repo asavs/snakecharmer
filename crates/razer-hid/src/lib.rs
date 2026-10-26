@@ -10,7 +10,7 @@
 //! collections reject `HidD_SetFeature` with "Incorrect function".
 
 use std::ffi::CString;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, Weak};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -34,6 +34,8 @@ pub enum Error {
     Hid(hidapi::HidError),
     /// No supported mouse's control interface was found (mouse unplugged?).
     DeviceNotFound,
+    /// Another process owns control access, or the OS could not establish ownership.
+    ControlOwnership(platform::process_lease::Error),
     /// A protocol-level error (bad response, device status, etc.).
     Proto(proto::ProtoError),
     /// A prior command failed; no more device commands are permitted this run.
@@ -55,6 +57,9 @@ impl std::fmt::Display for Error {
                 )
             }
             Error::Proto(e) => write!(f, "protocol error: {e}"),
+            Error::ControlOwnership(platform::process_lease::Error::Busy) => write!(f,
+                "another Snakecharmer process owns device control; quit the daemon from its tray menu before using charmctl device commands"),
+            Error::ControlOwnership(e) => write!(f, "device control access denied: {e}"),
             Error::SafetyStop(reason) => write!(f, "device commands stopped: {reason}"),
             Error::Verify(m) => write!(f, "verification failed: {m}"),
         }
@@ -100,6 +105,25 @@ type Result<T> = std::result::Result<T, Error>;
 // All handles, including the on-board reset thread, share one latch. Hold this
 // lock through read/write/read-back so their feature reports cannot interleave.
 static COMMANDS: Mutex<SafetyGate> = Mutex::new(SafetyGate { stopped: None });
+
+// All supported mice share one owner: the application supports one active
+// mouse. Global scope also excludes a second Windows login session. Weak
+// ownership lets notice-thread handles share the lease without retaining it
+// after the last control handle closes.
+const CONTROL_LEASE_NAME: &str = "Global\\SnakecharmerDeviceControl";
+static CONTROL_LEASE: Mutex<Weak<platform::process_lease::ProcessLease>> = Mutex::new(Weak::new());
+
+fn control_lease() -> Result<Arc<platform::process_lease::ProcessLease>> {
+    let mut slot = CONTROL_LEASE.lock()
+        .map_err(|_| Error::SafetyStop("control ownership lock poisoned".into()))?;
+    if let Some(lease) = slot.upgrade() {
+        return Ok(lease);
+    }
+    let lease = Arc::new(platform::process_lease::ProcessLease::acquire(CONTROL_LEASE_NAME)
+        .map_err(Error::ControlOwnership)?);
+    *slot = Arc::downgrade(&lease);
+    Ok(lease)
+}
 
 struct SafetyGate {
     stopped: Option<String>,
@@ -225,6 +249,9 @@ pub struct Mouse {
     /// with aliases (the DeathAdder V4 Pro wired vs. wireless) reports one of
     /// several. Anything that re-enumerates the bus *by id* must use this one.
     product_id: u16,
+    // Fields drop in declaration order: close the HID handle before releasing
+    // ownership, even if the last handle is dropped on a different thread.
+    _control_lease: Arc<platform::process_lease::ProcessLease>,
 }
 
 impl Mouse {
@@ -248,6 +275,9 @@ impl Mouse {
     /// charging on its cable with the dongle plugged in). Then the id listed
     /// first in [`proto::DeviceSpec::product_ids`] wins, which is the wired one: the
     /// dongle may have no mouse on the other end.
+    ///
+    /// A process lease is acquired before opening the endpoint. Other processes
+    /// receive [`Error::ControlOwnership`]; handles in this process share it.
     pub fn open_with(api: &HidApi) -> Result<Mouse> {
         ensure_active()?;
         let info = api
@@ -266,8 +296,11 @@ impl Mouse {
             .ok_or(Error::DeviceNotFound)?;
         let spec = proto::spec_for(info.product_id()).expect("filtered on a supported product id");
         let product_id = info.product_id();
+        // Enumeration is read-only. Acquire ownership only after locating a
+        // supported device, but before opening its control endpoint.
+        let lease = control_lease()?;
         let dev = info.open_device(api)?;
-        Ok(Mouse { dev, spec, product_id })
+        Ok(Mouse { dev, spec, product_id, _control_lease: lease })
     }
 
     /// The matched device's [`DeviceSpec`] — name, transaction id, and which

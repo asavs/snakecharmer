@@ -273,6 +273,9 @@ fn parser_failures_stop_and_local_validation_does_not() {
         .is_err());
     assert!(safety.check().is_ok());
     assert!(!Error::DeviceNotFound.requires_stop());
+    assert!(!Error::ControlOwnership(platform::process_lease::Error::Busy).requires_stop());
+    assert!(!Error::ControlOwnership(platform::process_lease::Error::Os(
+        std::io::Error::other("ownership unavailable"))).requires_stop());
     assert!(Error::Verify("input collection closed".into()).requires_stop());
 }
 
