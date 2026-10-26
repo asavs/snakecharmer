@@ -16,3 +16,5 @@ jobs:
       # SUPPORTED-DEVICES.md drift check.
       - run: cargo test --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The Pages site is built from the docs; fail here, not after merge.
+      - run: python tools/build-site.py _site

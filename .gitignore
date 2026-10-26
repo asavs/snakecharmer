@@ -11,3 +11,6 @@ tools/diagram-finish.signal
 __pycache__/
 *.pyc
 .claude/settings.local.json
+
+# Built Pages site (tools/build-site.py)
+/_site
