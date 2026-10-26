@@ -217,6 +217,37 @@ pub struct LightingZoneInit {
     pub color: (u8, u8, u8),
 }
 
+/// USB identity whose keyboard/mouse collections may confirm an on-board bind.
+/// The application supplies the identity of the device it opened; the window
+/// does not infer it from a product name or accept every device of one vendor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UsbDeviceId {
+    pub vendor_id: u16,
+    pub product_id: u16,
+}
+
+impl UsbDeviceId {
+    fn matches_device_path(self, path: &str) -> bool {
+        // Device-interface paths put the hardware id between the first two
+        // '#': never match an incidental VID/PID in the instance or class id.
+        let Some(hardware) = path.split('#').nth(1) else { return false };
+        let mut vendor = None;
+        let mut product = None;
+        for field in hardware.split('&') {
+            let slot = match field.get(..4) {
+                Some(prefix) if prefix.eq_ignore_ascii_case("VID_") => &mut vendor,
+                Some(prefix) if prefix.eq_ignore_ascii_case("PID_") => &mut product,
+                _ => continue,
+            };
+            if slot.replace(field).is_some() {
+                return false;
+            }
+        }
+        vendor.is_some_and(|id| id.eq_ignore_ascii_case(&format!("VID_{:04X}", self.vendor_id)))
+            && product.is_some_and(|id| id.eq_ignore_ascii_case(&format!("PID_{:04X}", self.product_id)))
+    }
+}
+
 /// Initial values to populate the window.
 pub struct SettingsInit {
     /// Shown in the title bar: `Snakecharmer Settings — <device_name>`
@@ -245,6 +276,9 @@ pub struct SettingsInit {
     /// recorded keymap. On a mouse that has one, these replace the thumb-button
     /// dropdowns.
     pub onboard: Option<Vec<OnboardButton>>,
+    /// Source of raw input for the on-board test step. `None` disables input
+    /// registration and verification, as in a settings-only preview.
+    pub input_device: Option<UsbDeviceId>,
 }
 
 /// One button whose bind is stored in the mouse's own memory: an editable
@@ -424,10 +458,11 @@ struct WindowState {
     testing: Option<(usize, Expect)>,
     /// The on-board combo focus left after a write, so Tab resumes there.
     return_focus: Option<HWND>,
-    /// Raw-input device handle -> whether it's a Razer device (VID 1532).
-    razer_devices: std::collections::HashMap<isize, bool>,
-    /// Modifiers held on Razer keyboard interfaces (the mouse's chord keys).
-    razer_mods: Mods,
+    input_device: Option<UsbDeviceId>,
+    /// Raw-input device handle -> whether it matches the supplied identity.
+    input_devices: std::collections::HashMap<isize, bool>,
+    /// Modifiers held on the selected device's keyboard interfaces.
+    input_mods: Mods,
     /// Owned UI font (Segoe UI 9 pt) shared by all controls.
     ui_font: HFONT,
     /// Runtime-drawn titlebar/taskbar icon (freed on `WM_NCDESTROY`); null if
@@ -1060,8 +1095,9 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             status,
             testing: None,
             return_focus: None,
-            razer_devices: std::collections::HashMap::new(),
-            razer_mods: Mods::default(),
+            input_device: init.input_device,
+            input_devices: std::collections::HashMap::new(),
+            input_mods: Mods::default(),
             ui_font,
             hicon,
             pane,
@@ -1095,7 +1131,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
 
         // Keyboard and mouse raw input while the window is in front, so the
         // on-board test step sees what the mouse itself sends.
-        if !onboard.is_empty() {
+        if !onboard.is_empty() && init.input_device.is_some() {
             let rid = [
                 RAWINPUTDEVICE { usUsagePage: 1, usUsage: 6, dwFlags: 0, hwndTarget: hwnd }, // keyboard
                 RAWINPUTDEVICE { usUsagePage: 1, usUsage: 2, dwFlags: 0, hwndTarget: hwnd }, // mouse
@@ -1310,13 +1346,13 @@ unsafe fn apply_onboard(hwnd: HWND, combo: HWND, text: String) {
     }
 }
 
-/// Read one raw input and return what a Razer device sent, if it's a press the
+/// Read one raw input and return what the selected device sent, if it's a press the
 /// test step cares about: a key or chord (with the modifiers the mouse holds),
-/// or a mouse button or scroll. Movement, releases and other vendors' devices
+/// or a mouse button or scroll. Movement, releases and other devices
 /// give `None`.
 ///
 /// SAFETY: `lparam` is the HRAWINPUT of a WM_INPUT message.
-unsafe fn read_razer_input(hwnd: HWND, lparam: LPARAM) -> Option<Got> {
+unsafe fn read_test_input(hwnd: HWND, lparam: LPARAM) -> Option<Got> {
     let mut raw: RAWINPUT = std::mem::zeroed();
     let mut size = std::mem::size_of::<RAWINPUT>() as u32;
     let n = GetRawInputData(
@@ -1330,12 +1366,15 @@ unsafe fn read_razer_input(hwnd: HWND, lparam: LPARAM) -> Option<Got> {
         return None;
     }
     let device = raw.header.hDevice as isize;
-    let known = with_state(hwnd, |st| st.razer_devices.get(&device).copied()).flatten();
-    let razer = known.unwrap_or_else(|| is_razer_device(raw.header.hDevice));
+    let (identity, known) = with_state(hwnd, |st| {
+        (st.input_device, st.input_devices.get(&device).copied())
+    })?;
+    let identity = identity?;
+    let accepted = known.unwrap_or_else(|| input_device_matches(raw.header.hDevice, identity));
     with_state(hwnd, |st| {
-        st.razer_devices.insert(device, razer);
-        if razer {
-            interpret_razer_input(st, &raw)
+        st.input_devices.insert(device, accepted);
+        if accepted {
+            interpret_test_input(st, &raw)
         } else {
             None
         }
@@ -1344,12 +1383,12 @@ unsafe fn read_razer_input(hwnd: HWND, lparam: LPARAM) -> Option<Got> {
 }
 
 /// Interpret an already-read report without calling back into Windows.
-unsafe fn interpret_razer_input(st: &mut WindowState, raw: &RAWINPUT) -> Option<Got> {
+unsafe fn interpret_test_input(st: &mut WindowState, raw: &RAWINPUT) -> Option<Got> {
     match raw.header.dwType {
         RIM_TYPEKEYBOARD => {
             let kb = raw.data.keyboard;
             let up = (kb.Flags as u32 & RI_KEY_BREAK) != 0;
-            let m = &mut st.razer_mods;
+            let m = &mut st.input_mods;
             match kb.VKey {
                 0x10 | 0xA0 | 0xA1 => m.shift = !up,
                 0x11 | 0xA2 | 0xA3 => m.ctrl = !up,
@@ -1390,10 +1429,10 @@ unsafe fn interpret_razer_input(st: &mut WindowState, raw: &RAWINPUT) -> Option<
     }
 }
 
-/// Whether a raw-input device is Razer's (USB vendor 1532), by its device path.
+/// Whether a raw-input collection has the app-supplied USB identity.
 ///
 /// SAFETY: `device` comes from a RAWINPUTHEADER.
-unsafe fn is_razer_device(device: HANDLE) -> bool {
+unsafe fn input_device_matches(device: HANDLE, identity: UsbDeviceId) -> bool {
     let mut len = 0u32;
     GetRawInputDeviceInfoW(device, RIDI_DEVICENAME, std::ptr::null_mut(), &mut len);
     if len == 0 || len > 1024 {
@@ -1403,7 +1442,7 @@ unsafe fn is_razer_device(device: HANDLE) -> bool {
     if GetRawInputDeviceInfoW(device, RIDI_DEVICENAME, buf.as_mut_ptr() as *mut _, &mut len) == u32::MAX {
         return false;
     }
-    String::from_utf16_lossy(&buf).to_ascii_uppercase().contains("VID_1532")
+    identity.matches_device_path(&String::from_utf16_lossy(&buf))
 }
 
 /// Set a control's text.
@@ -1474,7 +1513,7 @@ unsafe extern "system" fn wnd_proc(
         }
         WM_INPUT => {
             if with_state(hwnd, |st| st.testing.is_some()) == Some(true) {
-                if let Some(got) = read_razer_input(hwnd, lparam) {
+                if let Some(got) = read_test_input(hwnd, lparam) {
                     let update = with_state(hwnd, |st| {
                         let (k, expect) = st.testing.as_ref()?;
                         let (text, done) = verdict(&st.onboard_edits[*k].label, expect, &got)?;
@@ -1768,6 +1807,49 @@ unsafe fn choose_color(owner: HWND, initial: (u8, u8, u8)) -> Option<(u8, u8, u8
 mod tests {
     use super::*;
 
+    #[test]
+    fn input_identity_accepts_all_collections_of_the_selected_product_only() {
+        let mouse = UsbDeviceId { vendor_id: 0x1234, product_id: 0x00AB };
+        for collection in ["MI_00&Col01", "mi_01&col02"] {
+            let path = format!(r"\\?\HID#vid_1234&pid_00ab&{collection}#instance#class");
+            assert!(mouse.matches_device_path(&path));
+        }
+        // A keyboard from the same vendor must not confirm a mouse bind.
+        assert!(!mouse.matches_device_path(r"\\?\HID#VID_1234&PID_0200&MI_01#instance#class"));
+        assert!(!mouse.matches_device_path(r"\\?\HID#VID_4321&PID_00AB&MI_01#instance#class"));
+    }
+
+    #[test]
+    fn input_identity_requires_exact_hardware_id_fields() {
+        let device = UsbDeviceId { vendor_id: 0x1234, product_id: 0x00AB };
+        for path in [
+            r"\\?\HID#VID_1234&PID_00AB0#instance#class",
+            r"\\?\HID#XVID_1234&PID_00AB#instance#class",
+            r"\\?\HID#VID_1234&PID_+0AB#instance#class",
+            r"\\?\HID#VID_1234#instance&PID_00AB#class",
+            r"\\?\HID#VID_0000&PID_0000#VID_1234&PID_00AB#class",
+            r"\\?\HID#VID_1234&VID_0000&PID_00AB#instance#class",
+            r"\\?\HID#VID_1234&PID_00AB&PID_0000#instance#class",
+            "VID_1234&PID_00AB",
+            "",
+        ] {
+            assert!(!device.matches_device_path(path), "{path}");
+        }
+    }
+
+    #[test]
+    fn input_identity_uses_the_enumerated_alias() {
+        // The app supplies whichever attachment it opened. Neither path is
+        // hardcoded by the platform or substituted with a canonical model id.
+        for product_id in [0x00BE, 0x00BF] {
+            let device = UsbDeviceId { vendor_id: 0x1234, product_id };
+            let path = format!(r"\\?\HID#VID_1234&PID_{product_id:04X}&MI_01#instance#class");
+            assert!(device.matches_device_path(&path));
+            let other = UsbDeviceId { product_id: product_id ^ 1, ..device };
+            assert!(!other.matches_device_path(&path));
+        }
+    }
+
     fn v(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
     }
@@ -1821,8 +1903,9 @@ mod tests {
             status: hwnd,
             testing: None,
             return_focus: None,
-            razer_devices: Default::default(),
-            razer_mods: Mods::default(),
+            input_device: None,
+            input_devices: Default::default(),
+            input_mods: Mods::default(),
             ui_font: std::ptr::null_mut(),
             hicon: std::ptr::null_mut(),
             pane: None,

@@ -233,6 +233,7 @@ fn onboard_label(name: &str) -> String {
 fn open_settings_window(
     cfg: &Config,
     spec: DeviceSpec,
+    product_id: u16,
     stored: &[crate::onboard::StoredBind],
     tx: &Sender<Event>,
 ) {
@@ -298,6 +299,11 @@ fn open_settings_window(
         wheel: ActionCombo { labels: vec!["Middle click (default)".to_string()], index: 0 },
         lighting,
         onboard,
+        // Use the bus identity, including its current attach-method alias.
+        input_device: Some(platform::settings::UsbDeviceId {
+            vendor_id: razer_proto::VENDOR_ID,
+            product_id,
+        }),
     };
     let tx = tx.clone();
     thread::spawn(move || {
@@ -1086,7 +1092,7 @@ fn run_session(
                         .map(|km| crate::onboard::read_binds(&ctrl, km))
                         .transpose()?
                         .unwrap_or_default();
-                    open_settings_window(cfg, spec, &stored, tx);
+                    open_settings_window(cfg, spec, pid, &stored, tx);
                     log.log("Opened settings window.");
                 }
             }

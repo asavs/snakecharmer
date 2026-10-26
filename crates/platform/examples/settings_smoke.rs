@@ -321,6 +321,7 @@ fn main() {
         // A V3-like device: no lighting, no wheel DPI buttons, 8 kHz polling.
         SettingsInit {
             device_name: "Sample Mouse (minimal)".to_string(),
+            input_device: None, // Preview only: no device input is registered.
             diagram: (!no_diagram).then(diagram_minimal),
             dpi: 1800,
             dpi_min: 100,
@@ -359,6 +360,7 @@ fn main() {
         // An Elite-like device: everything on.
         SettingsInit {
             device_name: "Sample Mouse (full)".to_string(),
+            input_device: None,
             diagram: (!no_diagram).then(diagram_full),
             dpi: 1800,
             dpi_min: 100,

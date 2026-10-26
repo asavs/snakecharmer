@@ -242,6 +242,9 @@ drawn with GDI+, with each button's control placed on the schematic at its callo
 window doesn't create controls for features the device lacks. Every change goes to the
 mouse and the config file right away. After writing an on-board bind, the window asks you
 to press the button and uses raw input to confirm what the mouse actually sent.
+The app supplies the opened device's USB vendor and product ids to that test;
+another product from the same vendor cannot satisfy it. The platform reader has
+no built-in vendor selection, and settings-only previews do not register raw input.
 
 ### Start with Windows
 
