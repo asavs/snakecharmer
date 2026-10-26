@@ -226,9 +226,6 @@ fn open_settings_window(
         }),
         thumb_back: ActionCombo { labels: back_labels, index: back_index },
         thumb_forward: ActionCombo { labels: fwd_labels, index: fwd_index },
-        // Scroll-wheel remap is scaffolded, not implemented: a single identity
-        // entry, mounted disabled by the window. No config key, no events.
-        wheel: ActionCombo { labels: vec!["Middle click (default)".to_string()], index: 0 },
         lighting,
         onboard,
         // Use the bus identity, including its current attach-method alias.

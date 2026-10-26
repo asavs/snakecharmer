@@ -46,7 +46,7 @@ use windows_sys::Win32::UI::Controls::{
     TB_THUMBPOSITION, TB_TOP, WM_MOUSELEAVE,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    EnableWindow, GetFocus, GetKeyState, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
+    GetFocus, GetKeyState, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
 };
 use windows_sys::Win32::UI::Input::{
     GetRawInputData, GetRawInputDeviceInfoW, RegisterRawInputDevices, HRAWINPUT, RAWINPUT,
@@ -119,7 +119,6 @@ const ID_CB_DOWN: u16 = 104;
 const ID_CB_THUMB_BACK: u16 = 111;
 const ID_CB_THUMB_FWD: u16 = 112;
 const ID_CB_POLL: u16 = 113;
-const ID_CB_WHEEL: u16 = 114;
 const ID_BTN_DPI_MINUS: u16 = 115;
 const ID_BTN_DPI_PLUS: u16 = 116;
 const ID_BTN_SAVE: u16 = 109;
@@ -264,12 +263,6 @@ pub struct SettingsInit {
     pub dpi_buttons: Option<DpiButtonsInit>,
     pub thumb_back: ActionCombo,
     pub thumb_forward: ActionCombo,
-    /// The scroll-wheel / middle-click dropdown. Scaffold only: it carries a
-    /// single identity entry and is mounted *disabled* at the wheel callout —
-    /// middle-click remap is not implemented, so it previews the future
-    /// without pretending to be functional. Ignored if the diagram has no
-    /// [`CalloutSlot::Wheel`].
-    pub wheel: ActionCombo,
     /// One lighting row per zone, in device order (empty = no lighting).
     pub lighting: Vec<LightingZoneInit>,
     /// Buttons whose bind is stored on the mouse; `None` = this mouse has no
@@ -1004,16 +997,6 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                         onboard_edits.push(make_onboard(k, b, px, py, pw));
                     }
                 }
-            }
-            // The wheel dropdown is a scaffold: mounted at the wheel callout but
-            // DISABLED (identity-only), so it previews a future middle-click
-            // remap without claiming a capability that doesn't exist yet.
-            if let Some((cx, cy, cw, _)) = slot_rect(CalloutSlot::Wheel) {
-                let px = pane_origin.0 + (((cx - bx0) as f32) * scale).round() as i32;
-                let py = pane_origin.1 + (((cy - by0) as f32) * scale).round() as i32;
-                let pw = ((cw as f32) * scale).round() as i32;
-                let cb = make_combo(ID_CB_WHEEL, px, py, pw, &init.wheel.labels, init.wheel.index);
-                EnableWindow(cb, 0);
             }
             // Lighting clusters, one per zone, mounted beside their zone
             // markers: effect dropdown, color swatch, picker button in a row.

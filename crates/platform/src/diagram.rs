@@ -23,9 +23,8 @@ use windows_sys::Win32::Graphics::GdiPlus::{
 
 pub use device_diagram::{Anchor, CalloutSlot, Curve, Diagram, Role, Shape};
 
-/// Width of the dropdown a callout reserves space for (design units). Wide
-/// enough for the longest self-identifying entry ("Middle click (default)")
-/// without clipping.
+/// Width of the dropdown a callout reserves space for (design units), sized
+/// for the self-identifying entries and action presets.
 pub const CALLOUT_COMBO_W: i32 = 145;
 /// A [`CalloutSlot::Lighting`] cluster's parts, left to right: effect
 /// dropdown, then the color swatch (itself the picker trigger — see
@@ -433,7 +432,7 @@ mod tests {
         height: 100,
         shapes: &[
             Shape::Callout {
-                slot: CalloutSlot::Wheel,
+                slot: CalloutSlot::Button(0x03),
                 at: (100, 93),
                 anchor: Anchor::End,
                 label: "Middle click",
@@ -464,7 +463,7 @@ mod tests {
         // These are the old native mapper's rectangles after it stripped SVG
         // captions. Sharing the original captioned shapes must not move them.
         assert_eq!(callout_combo_rects(&CAPTIONED), vec![
-            (CalloutSlot::Wheel, (-45, 89, 145, 24)),
+            (CalloutSlot::Button(0x03), (-45, 89, 145, 24)),
             (CalloutSlot::Lighting(0), (402, 89, 154, 24)),
             (CalloutSlot::DpiUp, (156, 150, 145, 24)),
         ]);

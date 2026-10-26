@@ -269,13 +269,16 @@ Each feature gets a two-line caption block, baseline 3 units above the lead's y,
 line +16:
 
 - **`Label` line, the config-key fact**: `dpi_up — default: copy`,
-  `scroll wheel — middle click`, `"forward"`.
+  `wheel_click — default: middle click`, `"forward"`.
 - **Accent/`Note` line, the context**: vendor code, zone id, and *positional
   description* so a human can find the physical button: `code 0x20 · front button,
   nearer the wheel`, `RGB zone 0x01`, `XBUTTON2`.
 
 Annotation content rules:
 
+- Use a `Callout` only for an implemented setting. Draw other physical controls
+  as artwork, with a static `Text` label when useful; do not add disabled controls
+  for future features. On-board wheel binds use their supported `Button` slots.
 - Name the **config key** exactly (`dpi_up`, not "DPI+ button").
 - Include the **vendor code / zone id** where one exists. It ties the picture to the
   protocol doc.

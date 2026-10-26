@@ -65,10 +65,6 @@ pub enum CalloutSlot {
     DpiDown,
     ThumbBack,
     ThumbForward,
-    /// The scroll wheel / middle click. Scaffold only: the settings window
-    /// mounts a disabled, identity-only dropdown here (middle-click remap is
-    /// not yet implemented).
-    Wheel,
     /// A lighting zone's controls (effect dropdown + color swatch + picker),
     /// mounted beside that zone's marker on the schematic. Carries the zone's
     /// index into the application's lighting zones (= the settings window's
@@ -267,7 +263,7 @@ impl Diagram {
                 }
                 // A static picture has no dropdown to mount, so a callout is
                 // simply its caption: label line + note line (each emitted only
-                // when non-empty, e.g. the wheel callout carries a label only).
+                // when non-empty).
                 Shape::Callout { at, anchor, label, note, note_role, .. } => {
                     if !label.is_empty() {
                         out.push_str(&svg_text(text_class(Role::Label), at, anchor, label));

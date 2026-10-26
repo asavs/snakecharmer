@@ -101,13 +101,7 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
             Shape::Polyline { role: Role::Detail, points: &[(219, 105), (237, 105)] },
             Shape::Polyline { role: Role::Detail, points: &[(219, 115), (237, 115)] },
             Shape::Polyline { role: Role::Detail, points: &[(219, 125), (237, 125)] },
-            // Keybind rides the LEFT arm, RGB rides the RIGHT — same split as
-            // the DPI/thumb keybinds vs. the logo's RGB below, so each side
-            // of the mouse carries 3 balanced callouts (Wheel/ThumbForward/
-            // ThumbBack left; Lighting(0)+DPI pair+Lighting(1) right).
-            Shape::Polyline { role: Role::Lead, points: &[(212, 98), (104, 98)] },
-            Shape::Callout { slot: CalloutSlot::Wheel, at: (100, 95), anchor: Anchor::End,
-                label: "scroll wheel — middle click", note: "", note_role: Role::Note },
+            // The wheel's lighting controls sit on the right arm.
             Shape::Polyline { role: Role::Lead, points: &[(241, 98), (396, 98)] },
             Shape::Callout { slot: CalloutSlot::Lighting(0), at: (402, 95), anchor: Anchor::Start,
                 label: "", note: "", note_role: Role::Note },

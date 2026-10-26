@@ -81,7 +81,6 @@ fn main() {
             dpi_buttons: None,
             thumb_back: combo("\u{2190} Back (default)", 3),
             thumb_forward: combo("\u{2192} Forward (default)", 0),
-            wheel: ActionCombo { labels: strings(&["Middle click (default)"]), index: 0 },
             lighting: vec![],
             // V3-like: every writable button is an on-board control at its
             // CalloutSlot::Button, so the thumb dropdowns above aren't mounted.
@@ -120,7 +119,6 @@ fn main() {
             }),
             thumb_back: combo("\u{2190} Back (default)", 3),
             thumb_forward: combo("\u{2192} Forward (default)", 0),
-            wheel: ActionCombo { labels: strings(&["Middle click (default)"]), index: 0 },
             // Two zones (wheel + logo), independently colored like the Elite.
             lighting: vec![
                 LightingZoneInit {
