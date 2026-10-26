@@ -255,8 +255,13 @@ The tray check reads the registry, which is the only source of truth.
 
 ### PC Vitals health capsule
 
+The `pc-vitals` Cargo feature enables this integration and its SHA-256 dependency.
+It is disabled by default, including in release artifacts. The disabled reporter is
+zero-sized: lifecycle calls do nothing and its lease deadline is `Duration::MAX`, so
+default builds perform no health file I/O or lease time checks. CI tests and builds both modes.
+
 PC Vitals is a separate local health monitor that reads status files from provider apps.
-Snakecharmer is one provider: it writes a JSON capsule to
+With the feature enabled, Snakecharmer is one provider: it writes a JSON capsule to
 `%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`. The file is written only on events
 (start, connect, session failure, polling change, quit). A lease refresh every 45 minutes
 runs inside the session loop's existing wait, so it adds no thread and no device I/O. The
@@ -287,7 +292,7 @@ Measured figures, from the [README](../README.md#why):
 
 | | Measured |
 |---|---|
-| Exe size | 0.83 MB (828,416 bytes), x64 MSVC release with static CRT (`opt-level = "z"`, LTO, `panic = "abort"`, stripped) |
+| Exe size | 0.74 MB (738,304 bytes), default x64 MSVC release with static CRT (`opt-level = "z"`, LTO, `panic = "abort"`, stripped) |
 | Idle RAM | 17 MB working set, 2.5 MB private |
 | Idle CPU | about 0.06 CPU-hours per day |
 | Processes | 1 |
@@ -299,6 +304,9 @@ CI and release builds inspect both shipped executables with
 delay-loaded imports of the dynamic Microsoft CRT. Windows system DLLs are
 still required. Executable size was measured on 2026-10-26; RAM and CPU remain
 the earlier runtime measurements.
+
+Enabling `pc-vitals` produces an 828,416-byte daemon in the same build, adding
+90,112 bytes. RAM and CPU have not been remeasured for the feature split.
 
 Weigh every new dependency against these numbers. The app uses raw `windows-sys` instead
 of a GUI framework, draws with the GDI+ that ships in Windows, and has no async runtime.

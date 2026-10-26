@@ -8,6 +8,9 @@ on:
 jobs:
   test:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        features: ["", "--features pc-vitals"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -19,8 +22,8 @@ jobs:
       - run: python reference/keymap_diff.py --self-test
       # The full gate for add-device PRs: byte-exact protocol tests plus the
       # SUPPORTED-DEVICES.md drift check.
-      - run: cargo test --workspace
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo build --release
+      - run: cargo test --workspace ${{ matrix.features }}
+      - run: cargo clippy --workspace --all-targets ${{ matrix.features }} -- -D warnings
+      - run: cargo build --release ${{ matrix.features }}
       - name: Verify static CRT linkage
         run: python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe

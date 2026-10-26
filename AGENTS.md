@@ -8,7 +8,7 @@ main job people bring here does not need a frontier model.
 
 Snakecharmer is a Windows daemon that configures Razer mice over USB HID (DPI, polling
 rate, RGB, button remapping) as a replacement for Razer Synapse. It is Rust, Windows-only,
-and deliberately small: one ~0.8 MB exe with a static CRT, about 17 MB idle (measured).
+and deliberately small: one ~0.74 MB exe with a static CRT, about 17 MB idle (measured).
 
 All protocol knowledge comes from [OpenRazer](https://github.com/openrazer/openrazer). This
 project ports slices of it to Windows; it does not invent protocol.

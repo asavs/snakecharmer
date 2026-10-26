@@ -52,7 +52,7 @@ directly over Win32 HID and then gets out of the way.
 |---|---|---|---:|
 | Processes | Razer Synapse<br>Razer Central<br>Razer Synapse Service Process<br>Razer Synapse Service<br>RazerCentralService<br>embedded Chromium browser (CefSharp) | `snakecharmer.exe`<br><sub>static CRT; uses Windows system DLLs</sub> | **6 → 1** |
 | Kernel drivers | `RZCONTROL` + `RZVIRTUAL` virtual device drivers<br><sub>observed still registered after uninstalling Synapse</sub> | none (userland HID only) | **2 → 0** |
-| On-disk size | 500 MB<br><sub>Razer's published minimum</sub> | 0.83 MB (measured)<br><sub>828,416 bytes, x64 MSVC release with static CRT</sub> | **~600×** |
+| On-disk size | 500 MB<br><sub>Razer's published minimum</sub> | 0.74 MB (measured)<br><sub>738,304 bytes, default x64 MSVC release with static CRT</sub> | **~680×** |
 | Idle RAM | ~558 MB (measured) | 17 MB (measured)<br><sub>2.5 MB private working set</sub> | **~32×** |
 | Idle CPU | ≈ 1 CPU·h/day  | ≈ 0.06 CPU·h/day (measured)<br><sub>blocking HID reads; mice without DPI buttons get a small liveness read every few seconds</sub> | **~17×** |
 | Telemetry | yes | none, local-only | — |
@@ -144,6 +144,9 @@ cargo build --release
 Produces `target\release\snakecharmer.exe` (the windowless daemon) and
 `target\release\charmctl.exe` (the console control CLI).
 
+Default builds, including binaries produced by the release workflow, omit PC Vitals reporting. To include
+the optional local health integration, build with `cargo build --release --features pc-vitals`.
+
 ## Start with Windows
 
 On first run the daemon registers itself to start at login, using a per-user value named
@@ -169,8 +172,9 @@ There is no installer, so there is nothing to run. To remove Snakecharmer comple
    and releases device control for the CLI.
 3. DeathAdder V3 only: if you wrote on-board binds, run `charmctl keymap reset`.
    The binds live in the mouse and stay there otherwise.
-4. Delete `%LOCALAPPDATA%\Snakecharmer` (config, log, and the PC Vitals salt).
-5. Delete `%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`, the
+4. Delete `%LOCALAPPDATA%\Snakecharmer` (config and log; builds with PC Vitals also store a salt).
+5. If you used a build with PC Vitals enabled, delete
+   `%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`, the
    [PC Vitals capsule](#pc-vitals-health-capsule).
 6. Delete `snakecharmer.exe` and `charmctl.exe`.
 
@@ -241,12 +245,16 @@ capture first; see [`docs/ONBOARD-KEYMAP.md`](docs/ONBOARD-KEYMAP.md).
 
 ### PC Vitals health capsule
 
+This integration is opt-in at build time with `--features pc-vitals`. Default builds
+create no capsule, salt, or PC Vitals directory and schedule no health lease refresh.
+Switching to a default build does not remove an older capsule; delete it if no longer needed.
+
 PC Vitals is a separate local app, and the capsule is how Snakecharmer reports its
 status to it. It is only a file on disk. Snakecharmer sends it nowhere and makes no network
 connections, and nothing reads it unless PC Vitals is installed. It is safe to delete; the
 daemon writes a new one at its next event.
 
-Snakecharmer writes a small status file (a "capsule") for PC Vitals at
+With the feature enabled, Snakecharmer writes a small status file (a "capsule") for PC Vitals at
 `%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`. It is written only on events:
 when the daemon starts, connects, loses or recovers a device session, changes polling
 configuration, or quits. A 45-minute lease refresh runs inside the existing session wait
