@@ -4,9 +4,22 @@
 //! written if the file is missing. The settings window edits the same file.
 
 use std::collections::BTreeMap;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
+
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+struct TemporaryConfig(PathBuf);
+
+impl Drop for TemporaryConfig {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
 
 /// Per-zone lighting override (`[zones.wheel]`, `[zones.logo]`). Absent fields
 /// fall back to the device-wide `lighting` / `color`.
@@ -124,41 +137,154 @@ impl Config {
 
     /// Load config from `path`, writing defaults if the file is missing.
     ///
-    /// On a parse error, returns defaults with an explanatory message rather
-    /// than failing (a daemon should still start on a corrupt config).
-    pub fn load_or_create(path: &Path) -> (Config, Option<String>) {
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        match std::fs::read_to_string(path) {
-            Ok(text) => match toml::from_str::<Config>(&text) {
-                Ok(cfg) => (cfg, None),
-                Err(e) => (Config::default(), Some(format!("config parse error ({e}); using defaults"))),
-            },
-            Err(_) => {
-                let cfg = Config::default();
-                let note = match cfg.save(path) {
-                    Ok(()) => Some(format!("wrote default config to {}", path.display())),
-                    Err(e) => Some(format!("could not write default config: {e}")),
-                };
-                (cfg, note)
+    /// Existing files must load successfully before any startup side effect or
+    /// automatic save. Falling back to defaults would let autostart bootstrap
+    /// overwrite a malformed original, including its first-run latch.
+    pub fn load_or_create(path: &Path) -> io::Result<(Config, Option<String>)> {
+        match fs::read_to_string(path) {
+            Ok(text) => {
+                let cfg = toml::from_str::<Config>(&text).map_err(|e| {
+                    io::Error::new(io::ErrorKind::InvalidData,
+                        format!("could not parse config {}: {e}", path.display()))
+                })?;
+                Ok((cfg, None))
             }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                let cfg = Config::default();
+                cfg.save(path)?;
+                Ok((cfg, Some(format!("wrote default config to {}", path.display()))))
+            }
+            Err(e) => Err(io::Error::new(e.kind(),
+                format!("could not read config {}: {e}", path.display()))),
         }
     }
 
-    pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+    /// Publish a complete, flushed file in one same-directory replacement.
+    pub fn save(&self, path: &Path) -> io::Result<()> {
         let text = toml::to_string_pretty(self)
-            .unwrap_or_else(|_| "# failed to serialize config\n".to_string());
-        std::fs::write(path, text)
+            .map_err(io::Error::other)?;
+        let parent = path.parent().filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        fs::create_dir_all(parent)?;
+        let (temporary, mut file) = loop {
+            let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let temporary = parent.join(format!(".config.tmp.{}.{sequence}", std::process::id()));
+            match OpenOptions::new().write(true).create_new(true).open(&temporary) {
+                Ok(file) => break (TemporaryConfig(temporary), file),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e),
+            }
+        };
+        file.write_all(text.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        platform::atomic_replace_file(&temporary.0, path)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::windows::fs::OpenOptionsExt;
+
+    struct TestDir(PathBuf);
+
+    impl TestDir {
+        fn new() -> Self {
+            let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "snakecharmer-config-test-{}-{sequence}", std::process::id()
+            ));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+
+        fn config(&self) -> PathBuf {
+            self.0.join("config.toml")
+        }
+
+        fn assert_no_temporaries(&self) {
+            let names: Vec<_> = fs::read_dir(&self.0).unwrap()
+                .map(|entry| entry.unwrap().file_name()).collect();
+            assert_eq!(names, vec![std::ffi::OsString::from("config.toml")]);
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn missing_config_is_created_once() {
+        let dir = TestDir::new();
+        let (cfg, note) = Config::load_or_create(&dir.config()).unwrap();
+        assert_eq!(cfg, Config::default());
+        assert!(note.is_some());
+        let (loaded, note) = Config::load_or_create(&dir.config()).unwrap();
+        assert_eq!(loaded, cfg);
+        assert!(note.is_none());
+        dir.assert_no_temporaries();
+    }
+
+    #[test]
+    fn malformed_config_is_an_error_and_keeps_the_original() {
+        let dir = TestDir::new();
+        let original = b"dpi = 1200\n# keep my settings\n[onboard\nback = 'ctrl+c'\n";
+        fs::write(dir.config(), original).unwrap();
+        let error = Config::load_or_create(&dir.config()).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("could not parse config"));
+        assert_eq!(fs::read(dir.config()).unwrap(), original);
+        dir.assert_no_temporaries();
+    }
+
+    #[test]
+    fn non_utf8_config_is_not_replaced_with_defaults() {
+        let dir = TestDir::new();
+        let original = [0xff, 0xfe, 0x80];
+        fs::write(dir.config(), original).unwrap();
+        assert_eq!(Config::load_or_create(&dir.config()).unwrap_err().kind(),
+            io::ErrorKind::InvalidData);
+        assert_eq!(fs::read(dir.config()).unwrap(), original);
+        dir.assert_no_temporaries();
+    }
+
+    #[test]
+    fn unreadable_config_is_not_treated_as_missing() {
+        let dir = TestDir::new();
+        let original = b"dpi = 1200\n";
+        fs::write(dir.config(), original).unwrap();
+        let locked = OpenOptions::new().read(true).share_mode(0).open(dir.config()).unwrap();
+        let error = Config::load_or_create(&dir.config()).unwrap_err();
+        assert!(error.to_string().contains("could not read config"));
+        drop(locked);
+        assert_eq!(fs::read(dir.config()).unwrap(), original);
+        dir.assert_no_temporaries();
+    }
+
+    #[test]
+    fn failed_replacement_keeps_previous_config_and_cleans_temporary() {
+        let dir = TestDir::new();
+        let original = b"dpi = 1200\n# preserve this even if saving fails\n";
+        fs::write(dir.config(), original).unwrap();
+        let locked = OpenOptions::new().read(true).share_mode(0).open(dir.config()).unwrap();
+        assert!(Config::default().save(&dir.config()).is_err());
+        drop(locked);
+        assert_eq!(fs::read(dir.config()).unwrap(), original);
+        dir.assert_no_temporaries();
+    }
+
+    #[test]
+    fn save_replaces_an_existing_file_with_a_complete_config() {
+        let dir = TestDir::new();
+        fs::write(dir.config(), "dpi = 1200\n").unwrap();
+        let cfg = Config { dpi: 2400, ..Config::default() };
+        cfg.save(&dir.config()).unwrap();
+        assert_eq!(Config::load_or_create(&dir.config()).unwrap().0, cfg);
+        dir.assert_no_temporaries();
+    }
 
     #[test]
     fn defaults_are_sane() {

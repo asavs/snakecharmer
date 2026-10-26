@@ -199,7 +199,10 @@ the DeathAdder V3. [ONBOARD-KEYMAP.md](ONBOARD-KEYMAP.md) has the evidence.
 ### Config
 
 TOML at `%LOCALAPPDATA%\Snakecharmer\config.toml`, created with defaults on first run. If
-the file fails to parse, the daemon logs it and starts with defaults. The log is
+the file cannot be read or parsed, the daemon reports the error and exits before
+registering autostart or applying settings; the original file is left intact.
+Reloading an invalid file keeps the active settings. Config saves flush a temporary
+file and replace the destination atomically. The log is
 `daemon.log` in the same folder. Keys: `dpi`, `dpi_y`, `dpi_up`, `dpi_down`, `thumb_back`,
 `thumb_forward`, `lighting`, `color`, `polling_rate`, `reassert_interval_secs`,
 `autostart_bootstrapped`, `[zones.*]`, `[onboard]`. Defaults and examples are in the

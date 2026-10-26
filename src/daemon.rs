@@ -1334,7 +1334,13 @@ fn handle_menu(
             toggle_autostart(Some(&spec), log);
         }
         MenuAction::ReloadConfig => {
-            let (new_cfg, note) = Config::load_or_create(&Config::config_path());
+            let (new_cfg, note) = match Config::load_or_create(&Config::config_path()) {
+                Ok(loaded) => loaded,
+                Err(e) => {
+                    log.log(&format!("Config reload rejected: {e}. Keeping the active settings."));
+                    return Ok(false);
+                }
+            };
             if let Some(n) = note {
                 log.log(&n);
             }

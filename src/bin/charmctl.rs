@@ -281,7 +281,7 @@ fn set_effect(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn self_test() -> Result<(), Box<dyn std::error::Error>> {
-    let (cfg, _) = Config::load_or_create(&Config::config_path());
+    let (cfg, _) = Config::load_or_create(&Config::config_path())?;
     println!("Config: dpi={:?} up={:?} down={:?} lighting={:?}", cfg.dpi_xy(), cfg.dpi_up, cfg.dpi_down, cfg.lighting);
     for (label, spec) in [("dpi_up", &cfg.dpi_up), ("dpi_down", &cfg.dpi_down)] {
         match snakecharmer::actions::parse(spec) {
