@@ -6,7 +6,9 @@
 mod config_application;
 mod menu;
 
-use config_application::{apply_config_candidate, report_config_application, save_config, SessionError};
+use config_application::{
+    apply_config_candidate, report_config_application, save_config, SessionError,
+};
 use menu::{build_menu_spec, handle_menu, menu_action_for};
 
 use std::collections::HashSet;
@@ -16,9 +18,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use platform::autostart::Registration;
 use razer_hid::{aux_collection_paths, Listener, Mouse};
 use razer_proto::{DeviceMode, DeviceSpec, DpiButtons, Rgb};
-use platform::autostart::Registration;
 
 use crate::actions::Action;
 use crate::config::Config;
@@ -68,8 +70,9 @@ enum Event {
 }
 
 /// Action presets offered in the settings-window dropdowns.
-const ACTION_PRESETS: &[&str] =
-    &["copy", "paste", "cut", "none", "key:9", "key:0", "key:f13", "key:f14"];
+const ACTION_PRESETS: &[&str] = &[
+    "copy", "paste", "cut", "none", "key:9", "key:0", "key:f13", "key:f14",
+];
 /// Lighting options offered in the settings-window effect dropdown.
 const EFFECT_PRESETS: &[&str] = &["keep", "static", "breathing", "spectrum", "off"];
 
@@ -108,7 +111,13 @@ fn chord_of(spec: &str) -> Option<Vec<u16>> {
 fn apply_thumb_hook(cfg: &Config, log: &Logger) {
     let back = chord_of(&cfg.thumb_back);
     let forward = chord_of(&cfg.thumb_forward);
-    let desc = |on: bool, s: &str| if on { s.to_string() } else { "passthrough".to_string() };
+    let desc = |on: bool, s: &str| {
+        if on {
+            s.to_string()
+        } else {
+            "passthrough".to_string()
+        }
+    };
     let any = back.is_some() || forward.is_some();
     log.log(&format!(
         "Thumb remap: back={}, forward={} (global mouse hook: {}).",
@@ -126,7 +135,13 @@ fn polling_options(cfg: &Config, spec: &DeviceSpec) -> (Vec<String>, usize) {
     labels.extend(spec.polling.rates.iter().map(|hz| format!("{hz} Hz")));
     let idx = cfg
         .polling_rate
-        .and_then(|hz| spec.polling.rates.iter().position(|&r| r == hz).map(|i| i + 1))
+        .and_then(|hz| {
+            spec.polling
+                .rates
+                .iter()
+                .position(|&r| r == hz)
+                .map(|i| i + 1)
+        })
         .unwrap_or(0);
     (labels, idx)
 }
@@ -135,7 +150,10 @@ fn polling_options(cfg: &Config, spec: &DeviceSpec) -> (Vec<String>, usize) {
 /// lighting kind (its config override, else the device-wide setting).
 fn effect_options(kind: &str) -> (Vec<String>, usize) {
     let labels: Vec<String> = EFFECT_PRESETS.iter().map(|s| s.to_string()).collect();
-    let idx = labels.iter().position(|l| l.eq_ignore_ascii_case(kind)).unwrap_or(0);
+    let idx = labels
+        .iter()
+        .position(|l| l.eq_ignore_ascii_case(kind))
+        .unwrap_or(0);
     (labels, idx)
 }
 
@@ -154,14 +172,19 @@ const WISHLIST_URL: &str =
 /// case is "plug something in", the other is "this could work, here's how".
 fn found_but_unsupported() -> Option<String> {
     let api = razer_hid::open_api().ok()?;
-    let found = razer_hid::detected_mice(&api).into_iter().find(|m| !m.supported)?;
+    let found = razer_hid::detected_mice(&api)
+        .into_iter()
+        .find(|m| !m.supported)?;
     Some(found.to_string())
 }
 
 /// "wheel click" -> "Wheel click", the caption of an on-board bind field.
 fn onboard_label(name: &str) -> String {
     let mut chars = name.chars();
-    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+    chars
+        .next()
+        .map(|c| c.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
 }
 
 /// Spawn the settings window on its own thread (message loop lives there).
@@ -182,7 +205,8 @@ fn open_settings_window(
     // Back/Forward â€” while the DPI entries say "unbound" â€” in driver mode a
     // none'd DPI button does nothing. Human names only; no XBUTTON jargon.
     let (up_labels, up_values, up_index) = combo_options(&cfg.dpi_up, "Front DPI â€” unbound");
-    let (down_labels, down_values, down_index) = combo_options(&cfg.dpi_down, "Rear DPI â€” unbound");
+    let (down_labels, down_values, down_index) =
+        combo_options(&cfg.dpi_down, "Rear DPI â€” unbound");
     let (back_labels, back_values, back_index) =
         combo_options(&cfg.thumb_back, "\u{2190} Back (default)");
     let (fwd_labels, fwd_values, fwd_index) =
@@ -227,12 +251,26 @@ fn open_settings_window(
         dpi_max: spec.dpi_max,
         polling_labels,
         polling_index,
-        dpi_buttons: spec.dpi_buttons.map(|_| platform::settings::DpiButtonsInit {
-            up: ActionCombo { labels: up_labels, index: up_index },
-            down: ActionCombo { labels: down_labels, index: down_index },
-        }),
-        thumb_back: ActionCombo { labels: back_labels, index: back_index },
-        thumb_forward: ActionCombo { labels: fwd_labels, index: fwd_index },
+        dpi_buttons: spec
+            .dpi_buttons
+            .map(|_| platform::settings::DpiButtonsInit {
+                up: ActionCombo {
+                    labels: up_labels,
+                    index: up_index,
+                },
+                down: ActionCombo {
+                    labels: down_labels,
+                    index: down_index,
+                },
+            }),
+        thumb_back: ActionCombo {
+            labels: back_labels,
+            index: back_index,
+        },
+        thumb_forward: ActionCombo {
+            labels: fwd_labels,
+            index: fwd_index,
+        },
         lighting,
         onboard,
         // Use the bus identity, including its current attach-method alias.
@@ -269,15 +307,15 @@ fn open_settings_window(
                 // Dropdown indices map through the parallel *values* lists
                 // (index 0 = the identity entry = config "none").
                 SE::UpAction(i) => up_values.get(i).map(|s| MenuAction::SetUpAction(s.clone())),
-                SE::DownAction(i) => {
-                    down_values.get(i).map(|s| MenuAction::SetDownAction(s.clone()))
-                }
-                SE::ThumbBack(i) => {
-                    back_values.get(i).map(|s| MenuAction::SetThumbBack(s.clone()))
-                }
-                SE::ThumbForward(i) => {
-                    fwd_values.get(i).map(|s| MenuAction::SetThumbForward(s.clone()))
-                }
+                SE::DownAction(i) => down_values
+                    .get(i)
+                    .map(|s| MenuAction::SetDownAction(s.clone())),
+                SE::ThumbBack(i) => back_values
+                    .get(i)
+                    .map(|s| MenuAction::SetThumbBack(s.clone())),
+                SE::ThumbForward(i) => fwd_values
+                    .get(i)
+                    .map(|s| MenuAction::SetThumbForward(s.clone())),
                 // Lighting events carry the zone's row index = its position
                 // in the spec's rgb_zones (the rows were built in that order).
                 SE::Effect(zi, i) => spec.rgb_zones.get(zi).and_then(|&zone| {
@@ -312,11 +350,15 @@ struct Bindings {
 impl Bindings {
     fn from_config(cfg: &Config, log: &Logger) -> Bindings {
         let up = crate::actions::parse(&cfg.dpi_up).unwrap_or_else(|e| {
-            log.log(&format!("WARN dpi_up action invalid ({e}); disabling that button"));
+            log.log(&format!(
+                "WARN dpi_up action invalid ({e}); disabling that button"
+            ));
             Action::None
         });
         let down = crate::actions::parse(&cfg.dpi_down).unwrap_or_else(|e| {
-            log.log(&format!("WARN dpi_down action invalid ({e}); disabling that button"));
+            log.log(&format!(
+                "WARN dpi_down action invalid ({e}); disabling that button"
+            ));
             Action::None
         });
         Bindings { up, down }
@@ -339,8 +381,11 @@ fn toggle_autostart(spec: Option<&DeviceSpec>, log: &Logger) {
             return;
         }
     };
-    let attempt =
-        if want == Registration::Registered { platform::autostart::register() } else { platform::autostart::unregister() };
+    let attempt = if want == Registration::Registered {
+        platform::autostart::register()
+    } else {
+        platform::autostart::unregister()
+    };
     let actual = match attempt {
         Ok(state) => state,
         Err(e) => {
@@ -354,7 +399,10 @@ fn toggle_autostart(spec: Option<&DeviceSpec>, log: &Logger) {
         Registration::Unknown => "unavailable",
     };
     if actual == want {
-        log.log(&format!("Menu: startup request -> {}. Windows startup settings can override the request.", describe(actual)));
+        log.log(&format!(
+            "Menu: startup request -> {}. Windows startup settings can override the request.",
+            describe(actual)
+        ));
     } else {
         log.log(&format!(
             "WARN startup request: wanted {}, registration read-back is {}.",
@@ -409,7 +457,9 @@ fn bootstrap_autostart(cfg: &mut Config, log: &Logger) {
         }
         AutostartBoot::Refresh => {
             if let Err(e) = platform::autostart::refresh() {
-                log.log(&format!("WARN could not refresh Start with Windows entry: {e}"));
+                log.log(&format!(
+                    "WARN could not refresh Start with Windows entry: {e}"
+                ));
             }
         }
         AutostartBoot::Nothing => {
@@ -426,7 +476,9 @@ fn bootstrap_autostart(cfg: &mut Config, log: &Logger) {
 pub fn run(mut cfg: Config, log: Logger) -> ! {
     let mut health = crate::health::HealthReporter::new();
     if let Err(error) = health.starting(cfg.polling_rate) {
-        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+        log.log(&format!(
+            "WARN could not publish PC Vitals capsule: {error}"
+        ));
     }
     log.log(&format!(
         "Daemon starting. dpi={:?} up={:?} down={:?} lighting={:?} reassert={}s",
@@ -467,7 +519,13 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
     loop {
         let started = Instant::now();
         let result = run_session(
-            &mut cfg, &mut bindings, &log, &tx, &rx, &mut settings_open, &mut health,
+            &mut cfg,
+            &mut bindings,
+            &log,
+            &tx,
+            &rx,
+            &mut settings_open,
+            &mut health,
         );
         let delay = next_retry_delay(prev_delay, started.elapsed());
         match result {
@@ -476,7 +534,9 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
                 let message = format!("Configuration rejected: {e}\n\nThe mouse settings were not applied. Fix config.toml and restart Snakecharmer.");
                 log.log(&message);
                 if let Err(error) = health.stopped() {
-                    log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+                    log.log(&format!(
+                        "WARN could not publish PC Vitals capsule: {error}"
+                    ));
                 }
                 platform::mouse_hook::uninstall();
                 platform::alert("Snakecharmer: configuration error", &message);
@@ -491,11 +551,21 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
                     delay.as_secs()
                 ));
                 if let Err(error) = health.session_failed(&e, delay.as_secs() as u32) {
-                    log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+                    log.log(&format!(
+                        "WARN could not publish PC Vitals capsule: {error}"
+                    ));
                 }
             }
         }
-        service_retry_gap(delay, &tx, &rx, &log, &mut health, &mut settings_open, &popup_open);
+        service_retry_gap(
+            delay,
+            &tx,
+            &rx,
+            &log,
+            &mut health,
+            &mut settings_open,
+            &popup_open,
+        );
         prev_delay = delay;
     }
 }
@@ -636,12 +706,18 @@ fn service_retry_gap(
 }
 
 /// Report a terminal device failure without a recovery write or another session.
-fn stop_for_safety(error: &razer_hid::Error, log: &Logger, health: &mut crate::health::HealthReporter) -> ! {
+fn stop_for_safety(
+    error: &razer_hid::Error,
+    log: &Logger,
+    health: &mut crate::health::HealthReporter,
+) -> ! {
     razer_hid::stop_commands(error);
     let message = format!("Device communication stopped: {error}.\n\nNo further commands will be sent. Check that the mouse still moves and clicks before restarting Snakecharmer.");
     log.log(&format!("SAFETY STOP: {message}"));
     if let Err(error) = health.session_failed(error, 0) {
-        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+        log.log(&format!(
+            "WARN could not publish PC Vitals capsule: {error}"
+        ));
     }
     platform::mouse_hook::uninstall();
     platform::alert("Snakecharmer ? device communication stopped", &message);
@@ -661,7 +737,9 @@ fn shutdown(log: &Logger, health: &mut crate::health::HealthReporter, driver: Op
         }
     }
     if let Err(error) = health.stopped() {
-        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+        log.log(&format!(
+            "WARN could not publish PC Vitals capsule: {error}"
+        ));
     }
     platform::mouse_hook::uninstall();
     std::process::exit(0);
@@ -701,7 +779,10 @@ struct Maintenance {
 
 impl Maintenance {
     fn new(now: Instant) -> Self {
-        Self { reasserted: now, contacted: now }
+        Self {
+            reasserted: now,
+            contacted: now,
+        }
     }
 
     fn wait(&self, now: Instant, interval: Duration, has_listeners: bool) -> Duration {
@@ -755,7 +836,9 @@ fn run_session(
     // enumerate by this one; `spec.product_id` is only the canonical id.
     let pid = ctrl.product_id();
     if let Err(error) = health.connected(spec.name, 0x1532, pid) {
-        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+        log.log(&format!(
+            "WARN could not publish PC Vitals capsule: {error}"
+        ));
     }
     log.log(&format!(
         "Opened {} (PID 0x{:04X}, txn 0x{:02X}; rgb={}, dpi_buttons={}).",
@@ -766,7 +849,10 @@ fn run_session(
         spec.dpi_buttons.is_some()
     ));
     // Rebuild the tray menu around this device (DPI presets over its range).
-    platform::tray::set_menu(build_menu_spec(Some(&spec), platform::autostart::registration()));
+    platform::tray::set_menu(build_menu_spec(
+        Some(&spec),
+        platform::autostart::registration(),
+    ));
 
     let outcome = apply_config_candidate(cfg, cfg.clone(), spec, |candidate| {
         // Each setter confirms its read form before writing. A device failure
@@ -848,7 +934,8 @@ fn run_session(
         // A reset on the notice thread may have tripped the shared latch.
         razer_hid::ensure_active()?;
         let interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
-        let wait = maintenance.wait(Instant::now(), interval, has_listeners)
+        let wait = maintenance
+            .wait(Instant::now(), interval, has_listeners)
             .min(health.refresh_due_in());
         match rx.recv_timeout(wait) {
             Ok(Event::Button(code)) => {
@@ -884,7 +971,9 @@ fn run_session(
             Ok(Event::ListenerClosed) => {
                 // Losing an input collection is a stop condition, not a reason
                 // to send another probe or restart writes on a new handle.
-                return Err(razer_hid::Error::Verify("device input collection closed".into()).into());
+                return Err(
+                    razer_hid::Error::Verify("device input collection closed".into()).into(),
+                );
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
@@ -898,12 +987,16 @@ fn run_session(
         maintenance.service_due(Instant::now(), interval, has_listeners, |task| {
             match task {
                 MaintenanceTask::Reassert => reassert(&ctrl, cfg, log)?,
-                MaintenanceTask::Liveness => { ctrl.get_dpi()?; }
+                MaintenanceTask::Liveness => {
+                    ctrl.get_dpi()?;
+                }
             }
             Ok::<_, razer_hid::Error>(Instant::now())
         })?;
         if let Err(error) = health.refresh_if_due() {
-            log.log(&format!("WARN could not refresh PC Vitals capsule: {error}"));
+            log.log(&format!(
+                "WARN could not refresh PC Vitals capsule: {error}"
+            ));
         }
     }
 }
@@ -940,7 +1033,10 @@ fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), r
     let spec = ctrl.spec();
     let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
         if !cfg.onboard.is_empty() {
-            log.log(&format!("WARN [onboard] ignored: on-board binds aren't supported on the {}", spec.name));
+            log.log(&format!(
+                "WARN [onboard] ignored: on-board binds aren't supported on the {}",
+                spec.name
+            ));
         }
         return Ok(());
     };
@@ -952,7 +1048,9 @@ fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), r
         return Ok(());
     }
     let described = onboard::describe(&left);
-    log.log(&format!("WARN non-default binds stored on the mouse: {described}."));
+    log.log(&format!(
+        "WARN non-default binds stored on the mouse: {described}."
+    ));
     if onboard::first_time(&described) {
         let text = onboard::notice_text(spec.name, &described);
         let log = log.clone();
@@ -970,8 +1068,7 @@ fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), r
 /// which is reported rather than retried.
 fn reset_leftovers(km: &'static razer_proto::keymap::KeymapSpec, configured: &[u8], log: &Logger) {
     use crate::onboard;
-    let result = Mouse::open()
-        .and_then(|m| onboard::reset(&m, km, configured));
+    let result = Mouse::open().and_then(|m| onboard::reset(&m, km, configured));
     let message = match result {
         Ok(out) => {
             for c in &out.changes {
@@ -994,7 +1091,11 @@ fn reset_leftovers(km: &'static razer_proto::keymap::KeymapSpec, configured: &[u
     platform::alert("Snakecharmer", &message);
 }
 
-fn apply_startup_lighting(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::Error> {
+fn apply_startup_lighting(
+    ctrl: &Mouse,
+    cfg: &Config,
+    log: &Logger,
+) -> Result<(), razer_hid::Error> {
     if !ctrl.spec().has_rgb() {
         if !cfg.lighting.eq_ignore_ascii_case("keep") {
             log.log(&format!(
@@ -1090,7 +1191,9 @@ fn reassert(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::E
         let mode = ctrl.get_device_mode()?;
         if mode != DeviceMode::Driver.as_byte() {
             let m = ctrl.set_device_mode(DeviceMode::Driver)?;
-            log.log(&format!("Re-asserted driver mode (was 0x{mode:02x}, now 0x{m:02x})."));
+            log.log(&format!(
+                "Re-asserted driver mode (was 0x{mode:02x}, now 0x{m:02x})."
+            ));
         }
     }
     let (want_x, want_y) = cfg.dpi_xy();
@@ -1103,7 +1206,9 @@ fn reassert(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::E
         let cur = ctrl.get_polling_rate()?;
         if cur != want_hz {
             let hz = ctrl.set_polling_rate(want_hz)?;
-            log.log(&format!("Re-locked polling rate (was {cur} Hz, now {hz} Hz)."));
+            log.log(&format!(
+                "Re-locked polling rate (was {cur} Hz, now {hz} Hz)."
+            ));
         }
     }
     Ok(())
@@ -1125,14 +1230,24 @@ mod tests {
         for second in 1..=120 {
             let now = started + Duration::from_secs(second);
             tx.send(Event::Button(0x20)).unwrap();
-            assert!(matches!(rx.recv_timeout(maintenance.wait(now, interval, true)),
-                Ok(Event::Button(0x20))));
-            maintenance.service_due(now, interval, true, |task| {
-                commands.push((second, task));
-                Ok::<_, ()>(now)
-            }).unwrap();
+            assert!(matches!(
+                rx.recv_timeout(maintenance.wait(now, interval, true)),
+                Ok(Event::Button(0x20))
+            ));
+            maintenance
+                .service_due(now, interval, true, |task| {
+                    commands.push((second, task));
+                    Ok::<_, ()>(now)
+                })
+                .unwrap();
         }
-        assert_eq!(commands, vec![(60, MaintenanceTask::Reassert), (120, MaintenanceTask::Reassert)]);
+        assert_eq!(
+            commands,
+            vec![
+                (60, MaintenanceTask::Reassert),
+                (120, MaintenanceTask::Reassert)
+            ]
+        );
     }
 
     #[test]
@@ -1143,17 +1258,23 @@ mod tests {
         let mut commands = Vec::new();
         for second in 1..=60 {
             let now = started + Duration::from_secs(second);
-            maintenance.service_due(now, interval, false, |task| {
-                commands.push((second, task));
-                Ok::<_, ()>(now)
-            }).unwrap();
+            maintenance
+                .service_due(now, interval, false, |task| {
+                    commands.push((second, task));
+                    Ok::<_, ()>(now)
+                })
+                .unwrap();
         }
-        let mut expected: Vec<_> = (5..60).step_by(5)
-            .map(|second| (second, MaintenanceTask::Liveness)).collect();
+        let mut expected: Vec<_> = (5..60)
+            .step_by(5)
+            .map(|second| (second, MaintenanceTask::Liveness))
+            .collect();
         expected.push((60, MaintenanceTask::Reassert));
         assert_eq!(commands, expected);
-        assert_eq!(maintenance.wait(started + Duration::from_secs(60), interval, false),
-            Duration::from_secs(5));
+        assert_eq!(
+            maintenance.wait(started + Duration::from_secs(60), interval, false),
+            Duration::from_secs(5)
+        );
     }
 
     #[test]
@@ -1162,19 +1283,32 @@ mod tests {
         let mut maintenance = Maintenance::new(started);
         let interval = Duration::from_secs(60);
         let now = started + Duration::from_secs(4);
-        assert_eq!(maintenance.wait(now, interval, false), Duration::from_secs(1));
+        assert_eq!(
+            maintenance.wait(now, interval, false),
+            Duration::from_secs(1)
+        );
         let health_due_in = Duration::ZERO;
-        assert_eq!(maintenance.wait(now, interval, false).min(health_due_in), Duration::ZERO);
-        maintenance.service_due(now, interval, false, |_| -> Result<Instant, ()> {
-            panic!("a health-only wakeup must not send a device command")
-        }).unwrap();
-        assert_eq!(maintenance.wait(now, interval, false), Duration::from_secs(1));
+        assert_eq!(
+            maintenance.wait(now, interval, false).min(health_due_in),
+            Duration::ZERO
+        );
+        maintenance
+            .service_due(now, interval, false, |_| -> Result<Instant, ()> {
+                panic!("a health-only wakeup must not send a device command")
+            })
+            .unwrap();
+        assert_eq!(
+            maintenance.wait(now, interval, false),
+            Duration::from_secs(1)
+        );
         let due = started + Duration::from_secs(5);
         let mut commands = Vec::new();
-        maintenance.service_due(due, interval, false, |task| {
-            commands.push(task);
-            Ok::<_, ()>(due)
-        }).unwrap();
+        maintenance
+            .service_due(due, interval, false, |task| {
+                commands.push(task);
+                Ok::<_, ()>(due)
+            })
+            .unwrap();
         assert_eq!(commands, vec![MaintenanceTask::Liveness]);
     }
 
@@ -1183,14 +1317,22 @@ mod tests {
         let started = Instant::now();
         let mut maintenance = Maintenance::new(started);
         let now = started + Duration::from_secs(10);
-        assert_eq!(maintenance.wait(now, Duration::from_secs(60), true), Duration::from_secs(50));
+        assert_eq!(
+            maintenance.wait(now, Duration::from_secs(60), true),
+            Duration::from_secs(50)
+        );
         let mut commands = Vec::new();
-        maintenance.service_due(now, Duration::from_secs(5), true, |task| {
-            commands.push(task);
-            Ok::<_, ()>(now)
-        }).unwrap();
+        maintenance
+            .service_due(now, Duration::from_secs(5), true, |task| {
+                commands.push(task);
+                Ok::<_, ()>(now)
+            })
+            .unwrap();
         assert_eq!(commands, vec![MaintenanceTask::Reassert]);
-        assert_eq!(maintenance.wait(now, Duration::from_secs(120), true), Duration::from_secs(120));
+        assert_eq!(
+            maintenance.wait(now, Duration::from_secs(120), true),
+            Duration::from_secs(120)
+        );
     }
 
     #[test]
@@ -1202,15 +1344,22 @@ mod tests {
         // Simulate resuming long after the deadline, followed by a slow read.
         let now = started + Duration::from_secs(600);
         let completed = now + Duration::from_secs(15);
-        maintenance.service_due(now, interval, false, |task| {
-            commands.push(task);
-            Ok::<_, ()>(completed)
-        }).unwrap();
-        maintenance.service_due(completed, interval, false, |_| -> Result<Instant, ()> {
-            panic!("one delayed reassert must not cause a catch-up burst")
-        }).unwrap();
+        maintenance
+            .service_due(now, interval, false, |task| {
+                commands.push(task);
+                Ok::<_, ()>(completed)
+            })
+            .unwrap();
+        maintenance
+            .service_due(completed, interval, false, |_| -> Result<Instant, ()> {
+                panic!("one delayed reassert must not cause a catch-up burst")
+            })
+            .unwrap();
         assert_eq!(commands, vec![MaintenanceTask::Reassert]);
-        assert_eq!(maintenance.wait(completed, interval, false), Duration::from_secs(5));
+        assert_eq!(
+            maintenance.wait(completed, interval, false),
+            Duration::from_secs(5)
+        );
         assert_eq!(maintenance.wait(completed, interval, true), interval);
     }
 
@@ -1248,7 +1397,10 @@ mod tests {
         // "keep" -> None; the rest -> a concrete spec.
         assert_eq!(EffectSpec::from_config("keep", "#00ff00").unwrap(), None);
         for p in &EFFECT_PRESETS[1..] {
-            assert!(EffectSpec::from_config(p, "#00ff00").unwrap().is_some(), "{p}");
+            assert!(
+                EffectSpec::from_config(p, "#00ff00").unwrap().is_some(),
+                "{p}"
+            );
         }
     }
 
@@ -1260,8 +1412,15 @@ mod tests {
         assert_eq!(labels[0], "\u{2190} Back (default)");
         assert_eq!(values[0], "none");
         assert_eq!(idx, 0, "config none selects the identity entry");
-        assert!(!labels.iter().any(|l| l == "none"), "no raw none entry on screen");
-        assert_eq!(labels.len(), values.len(), "labels and values stay parallel");
+        assert!(
+            !labels.iter().any(|l| l == "none"),
+            "no raw none entry on screen"
+        );
+        assert_eq!(
+            labels.len(),
+            values.len(),
+            "labels and values stay parallel"
+        );
 
         // A preset value selects its own (label == value) row.
         let cfg = Config::default(); // dpi_up=copy, dpi_down=paste
@@ -1317,7 +1476,10 @@ mod tests {
             &mut settings_open,
             &popup_open,
         );
-        assert!(start.elapsed() < Duration::from_secs(5), "RetryProbe must end the gap early");
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "RetryProbe must end the gap early"
+        );
         assert!(
             matches!(rx.try_recv(), Ok(Event::Menu(MenuAction::OpenSettings))),
             "the settings request must be re-queued for the next session"
@@ -1354,12 +1516,18 @@ mod tests {
         // A zone override wins over the device-wide kind.
         cfg.zones.insert(
             "logo".into(),
-            crate::config::ZoneConfig { lighting: Some("breathing".into()), color: None },
+            crate::config::ZoneConfig {
+                lighting: Some("breathing".into()),
+                color: None,
+            },
         );
         let (labels, idx) = effect_options(cfg.zone_lighting("logo"));
         assert_eq!(labels[idx], "breathing");
         let (labels, idx) = effect_options(cfg.zone_lighting("wheel"));
-        assert_eq!(labels[idx], "spectrum", "un-overridden zone follows device-wide");
+        assert_eq!(
+            labels[idx], "spectrum",
+            "un-overridden zone follows device-wide"
+        );
     }
 
     #[test]
@@ -1404,8 +1572,12 @@ mod tests {
         // diagram today â€” all comfortably under platform's PANE_MAX_W).
         let budget = 2.0 * platform::settings::CENTER_SLACK;
         for spec in razer_proto::SUPPORTED {
-            let Some(diagram) = spec.diagram else { continue };
-            let Some((left, right)) = platform::diagram::arm_balance(&diagram) else { continue };
+            let Some(diagram) = spec.diagram else {
+                continue;
+            };
+            let Some((left, right)) = platform::diagram::arm_balance(&diagram) else {
+                continue;
+            };
             let imbalance = (left - right).abs();
             if imbalance > budget {
                 eprintln!(
@@ -1421,16 +1593,30 @@ mod tests {
 
     #[test]
     fn autostart_boot_plan_respects_absent_or_unknown_registration() {
-        assert_eq!(autostart_boot_plan(false, Registration::Absent), AutostartBoot::Register);
-        assert_eq!(autostart_boot_plan(false, Registration::Registered), AutostartBoot::Register);
-        assert_eq!(autostart_boot_plan(true, Registration::Registered), AutostartBoot::Refresh);
+        assert_eq!(
+            autostart_boot_plan(false, Registration::Absent),
+            AutostartBoot::Register
+        );
+        assert_eq!(
+            autostart_boot_plan(false, Registration::Registered),
+            AutostartBoot::Register
+        );
+        assert_eq!(
+            autostart_boot_plan(true, Registration::Registered),
+            AutostartBoot::Refresh
+        );
         // A removed registration must not be recreated after bootstrap.
-        assert_eq!(autostart_boot_plan(true, Registration::Absent), AutostartBoot::Nothing);
+        assert_eq!(
+            autostart_boot_plan(true, Registration::Absent),
+            AutostartBoot::Nothing
+        );
         // Failure to inspect an existing request must never authorize a write,
         // including before first-run bootstrap has been recorded.
         for bootstrapped in [false, true] {
-            assert_eq!(autostart_boot_plan(bootstrapped, Registration::Unknown), AutostartBoot::Nothing);
+            assert_eq!(
+                autostart_boot_plan(bootstrapped, Registration::Unknown),
+                AutostartBoot::Nothing
+            );
         }
     }
-
 }

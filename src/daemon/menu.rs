@@ -5,13 +5,13 @@ use platform::autostart::Registration;
 use razer_hid::Mouse;
 use razer_proto::{DeviceSpec, Rgb};
 
-use crate::config::Config;
-use crate::lighting::EffectSpec;
-use crate::logger::Logger;
 use super::{
     apply_config_candidate, apply_startup_lighting, apply_thumb_hook, report_config_application,
     save_config, toggle_autostart, write_onboard_config, Bindings, MenuAction, SessionError,
 };
+use crate::config::Config;
+use crate::lighting::EffectSpec;
+use crate::logger::Logger;
 
 mod menu_id {
     /// DPI menu items encode their value in the id: `DPI_FLAG | dpi`. DPI fits
@@ -48,8 +48,11 @@ const DPI_LADDER: &[u16] = &[400, 800, 1200, 1600, 1800, 3200, 6400, 12800];
 fn dpi_presets(spec: Option<&DeviceSpec>) -> Vec<u16> {
     let mut v: Vec<u16> = match spec {
         Some(s) => {
-            let mut v: Vec<u16> =
-                DPI_LADDER.iter().copied().filter(|d| (s.dpi_min..=s.dpi_max).contains(d)).collect();
+            let mut v: Vec<u16> = DPI_LADDER
+                .iter()
+                .copied()
+                .filter(|d| (s.dpi_min..=s.dpi_max).contains(d))
+                .collect();
             if !v.contains(&s.dpi_max) {
                 v.push(s.dpi_max);
             }
@@ -63,7 +66,10 @@ fn dpi_presets(spec: Option<&DeviceSpec>) -> Vec<u16> {
 
 /// The startup item shows the registration request, not Windows' separate
 /// effective startup policy. A failed read must not look like an unchecked box.
-pub(super) fn build_menu_spec(spec: Option<&DeviceSpec>, autostart: Registration) -> Vec<platform::tray::MenuItem> {
+pub(super) fn build_menu_spec(
+    spec: Option<&DeviceSpec>,
+    autostart: Registration,
+) -> Vec<platform::tray::MenuItem> {
     use menu_id::*;
     use platform::tray::MenuItem as M;
     let dpi_items: Vec<M> = dpi_presets(spec)
@@ -103,7 +109,11 @@ pub(super) fn build_menu_spec(spec: Option<&DeviceSpec>, autostart: Registration
         M::action(SETTINGS, "Settings..."),
         match autostart {
             Registration::Unknown => M::action(AUTOSTART, "Startup request unavailable"),
-            state => M::check(AUTOSTART, "Request start with Windows", state == Registration::Registered),
+            state => M::check(
+                AUTOSTART,
+                "Request start with Windows",
+                state == Registration::Registered,
+            ),
         },
         M::action(RELOAD, "Reload config"),
         M::action(QUIT, "Quit"),
@@ -167,7 +177,9 @@ pub(super) fn handle_menu(
             cfg.polling_rate = Some(hz);
             save_config(cfg, log);
             if let Err(error) = health.polling_rate_changed(Some(hz)) {
-                log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+                log.log(&format!(
+                    "WARN could not publish PC Vitals capsule: {error}"
+                ));
             }
             log.log(&format!("Settings: polling rate set to {r} Hz."));
         }
@@ -176,7 +188,9 @@ pub(super) fn handle_menu(
             cfg.polling_rate = None;
             save_config(cfg, log);
             if let Err(error) = health.polling_rate_changed(None) {
-                log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+                log.log(&format!(
+                    "WARN could not publish PC Vitals capsule: {error}"
+                ));
             }
             log.log("Settings: polling rate -> keep (unmanaged).");
         }
@@ -191,30 +205,29 @@ pub(super) fn handle_menu(
             }
             cfg.zones.clear();
             save_config(cfg, log);
-            log.log(&format!("Menu: lighting -> {} (all zones).", spec.describe()));
+            log.log(&format!(
+                "Menu: lighting -> {} (all zones).",
+                spec.describe()
+            ));
         }
-        MenuAction::SetUpAction(s) => {
-            match crate::actions::parse(&s) {
-                Ok(_) => {
-                    cfg.dpi_up = s.clone();
-                    *bindings = Bindings::from_config(cfg, log);
-                    save_config(cfg, log);
-                    log.log(&format!("Settings: dpi_up -> {s:?}."));
-                }
-                Err(e) => log.log(&format!("Settings: invalid dpi_up {s:?}: {e}")),
+        MenuAction::SetUpAction(s) => match crate::actions::parse(&s) {
+            Ok(_) => {
+                cfg.dpi_up = s.clone();
+                *bindings = Bindings::from_config(cfg, log);
+                save_config(cfg, log);
+                log.log(&format!("Settings: dpi_up -> {s:?}."));
             }
-        }
-        MenuAction::SetDownAction(s) => {
-            match crate::actions::parse(&s) {
-                Ok(_) => {
-                    cfg.dpi_down = s.clone();
-                    *bindings = Bindings::from_config(cfg, log);
-                    save_config(cfg, log);
-                    log.log(&format!("Settings: dpi_down -> {s:?}."));
-                }
-                Err(e) => log.log(&format!("Settings: invalid dpi_down {s:?}: {e}")),
+            Err(e) => log.log(&format!("Settings: invalid dpi_up {s:?}: {e}")),
+        },
+        MenuAction::SetDownAction(s) => match crate::actions::parse(&s) {
+            Ok(_) => {
+                cfg.dpi_down = s.clone();
+                *bindings = Bindings::from_config(cfg, log);
+                save_config(cfg, log);
+                log.log(&format!("Settings: dpi_down -> {s:?}."));
             }
-        }
+            Err(e) => log.log(&format!("Settings: invalid dpi_down {s:?}: {e}")),
+        },
         MenuAction::SetThumbBack(s) => match crate::actions::parse(&s) {
             Ok(_) => {
                 cfg.thumb_back = s.clone();
@@ -246,8 +259,10 @@ pub(super) fn handle_menu(
                         Some(kind.to_lowercase());
                     save_config(cfg, log);
                     match parsed {
-                        Some(spec) => log
-                            .log(&format!("Settings: {name} lighting -> {}.", spec.describe())),
+                        Some(spec) => log.log(&format!(
+                            "Settings: {name} lighting -> {}.",
+                            spec.describe()
+                        )),
                         None => log.log(&format!("Settings: {name} lighting -> keep.")),
                     }
                 }
@@ -293,7 +308,10 @@ pub(super) fn handle_menu(
                         Ok(crate::onboard::expect_for(&w.bind))
                     }
                     Err(e) => {
-                        platform::settings::onboard_result(button, Err(format!("the mouse didn't take it ({e})")));
+                        platform::settings::onboard_result(
+                            button,
+                            Err(format!("the mouse didn't take it ({e})")),
+                        );
                         return Err(e);
                     }
                 },
@@ -323,7 +341,9 @@ pub(super) fn handle_menu(
             let (new_cfg, note) = match Config::load_or_create(&Config::config_path()) {
                 Ok(loaded) => loaded,
                 Err(e) => {
-                    log.log(&format!("Config reload rejected: {e}. Keeping the active settings."));
+                    log.log(&format!(
+                        "Config reload rejected: {e}. Keeping the active settings."
+                    ));
                     return Ok(false);
                 }
             };
@@ -344,7 +364,9 @@ pub(super) fn handle_menu(
             }) {
                 Ok(outcome) => outcome,
                 Err(SessionError::Config(e)) => {
-                    log.log(&format!("Config reload rejected: {e}. Keeping the active settings."));
+                    log.log(&format!(
+                        "Config reload rejected: {e}. Keeping the active settings."
+                    ));
                     return Ok(false);
                 }
                 Err(SessionError::Device(e)) => return Err(e),
@@ -353,7 +375,9 @@ pub(super) fn handle_menu(
             *bindings = Bindings::from_config(cfg, log);
             apply_thumb_hook(cfg, log);
             if let Err(error) = health.polling_rate_changed(cfg.polling_rate) {
-                log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+                log.log(&format!(
+                    "WARN could not publish PC Vitals capsule: {error}"
+                ));
             }
             log.log("Menu: config reloaded and reapplied.");
         }
@@ -368,7 +392,10 @@ mod tests {
 
     #[test]
     fn menu_action_for_covers_double_click_and_settings() {
-        assert!(matches!(menu_action_for(menu_id::SETTINGS), Some(MenuAction::OpenSettings)));
+        assert!(matches!(
+            menu_action_for(menu_id::SETTINGS),
+            Some(MenuAction::OpenSettings)
+        ));
         assert!(matches!(
             menu_action_for(platform::tray::TRAY_CLICK),
             Some(MenuAction::OpenSettings)

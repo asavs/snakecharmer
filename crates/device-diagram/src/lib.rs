@@ -81,14 +81,39 @@ pub enum CalloutSlot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
     /// Cubic-bezier path from `start` through `curves`, optionally closed.
-    Path { role: Role, start: (i32, i32), curves: &'static [Curve], closed: bool },
+    Path {
+        role: Role,
+        start: (i32, i32),
+        curves: &'static [Curve],
+        closed: bool,
+    },
     /// Axis-aligned rectangle with corner radius `r`.
-    RoundRect { role: Role, x: i32, y: i32, w: i32, h: i32, r: i32 },
-    Circle { role: Role, cx: i32, cy: i32, r: i32 },
+    RoundRect {
+        role: Role,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        r: i32,
+    },
+    Circle {
+        role: Role,
+        cx: i32,
+        cy: i32,
+        r: i32,
+    },
     /// Straight segments through `points` (used for leads, seams, splits).
-    Polyline { role: Role, points: &'static [(i32, i32)] },
+    Polyline {
+        role: Role,
+        points: &'static [(i32, i32)],
+    },
     /// One line of text; `at` is the baseline point (SVG semantics).
-    Text { role: Role, at: (i32, i32), anchor: Anchor, text: &'static str },
+    Text {
+        role: Role,
+        at: (i32, i32),
+        anchor: Anchor,
+        text: &'static str,
+    },
     /// A remappable control's caption block *and* control anchor: `label` at
     /// baseline `at` (main caption style) with `note` 16 units below (styled
     /// by `note_role`). In the SVG this is just those two text lines; in the
@@ -163,13 +188,25 @@ impl Diagram {
                         add(x, y);
                     }
                 }
-                Shape::Text { role, at, anchor, text } => {
+                Shape::Text {
+                    role,
+                    at,
+                    anchor,
+                    text,
+                } => {
                     let size = role.font_size();
                     let (tx0, tx1) = text_extent_x(at.0, anchor, est_text_width(text, size));
                     add(tx0, at.1 - size); // ascent
                     add(tx1, at.1 + size / 3); // descent
                 }
-                Shape::Callout { at, anchor, label, note, note_role, .. } => {
+                Shape::Callout {
+                    at,
+                    anchor,
+                    label,
+                    note,
+                    note_role,
+                    ..
+                } => {
                     let (lx0, lx1) =
                         text_extent_x(at.0, anchor, est_text_width(label, Role::Label.font_size()));
                     add(lx0, at.1 - Role::Label.font_size());
@@ -224,7 +261,12 @@ impl Diagram {
 
         for s in self.shapes {
             match *s {
-                Shape::Path { role, start, curves, closed } => {
+                Shape::Path {
+                    role,
+                    start,
+                    curves,
+                    closed,
+                } => {
                     let mut d = format!("M{} {}", start.0, start.1);
                     for &((c1x, c1y), (c2x, c2y), (ex, ey)) in curves {
                         d.push_str(&format!(" C{c1x} {c1y} {c2x} {c2y} {ex} {ey}"));
@@ -237,7 +279,14 @@ impl Diagram {
                         stroke_class(role)
                     ));
                 }
-                Shape::RoundRect { role, x, y, w, h, r } => {
+                Shape::RoundRect {
+                    role,
+                    x,
+                    y,
+                    w,
+                    h,
+                    r,
+                } => {
                     out.push_str(&format!(
                         "  <rect class=\"{}\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" rx=\"{r}\"/>\n",
                         stroke_class(role)
@@ -258,13 +307,25 @@ impl Diagram {
                         pts.join(" ")
                     ));
                 }
-                Shape::Text { role, at, anchor, text } => {
+                Shape::Text {
+                    role,
+                    at,
+                    anchor,
+                    text,
+                } => {
                     out.push_str(&svg_text(text_class(role), at, anchor, text));
                 }
                 // A static picture has no dropdown to mount, so a callout is
                 // simply its caption: label line + note line (each emitted only
                 // when non-empty).
-                Shape::Callout { at, anchor, label, note, note_role, .. } => {
+                Shape::Callout {
+                    at,
+                    anchor,
+                    label,
+                    note,
+                    note_role,
+                    ..
+                } => {
                     if !label.is_empty() {
                         out.push_str(&svg_text(text_class(Role::Label), at, anchor, label));
                     }
@@ -327,7 +388,9 @@ fn text_class(role: Role) -> &'static str {
 
 /// Minimal XML escaping for text content.
 fn escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// File-name slug for a device's generated SVG asset
@@ -353,8 +416,18 @@ mod tests {
         width: 100,
         height: 50,
         shapes: &[
-            Shape::Circle { role: Role::RgbZone, cx: 20, cy: 20, r: 10 },
-            Shape::Text { role: Role::Label, at: (30, 40), anchor: Anchor::Start, text: "a<b&c" },
+            Shape::Circle {
+                role: Role::RgbZone,
+                cx: 20,
+                cy: 20,
+                r: 10,
+            },
+            Shape::Text {
+                role: Role::Label,
+                at: (30, 40),
+                anchor: Anchor::Start,
+                text: "a<b&c",
+            },
         ],
     };
 
@@ -362,23 +435,41 @@ mod tests {
     fn bounds_cover_shapes_and_text() {
         let (x0, y0, x1, y1) = D.bounds();
         assert_eq!((x0, y0), (10, 10), "circle drives the min corner");
-        assert!(x1 >= 30 + est_text_width("a<b&c", 13), "text width extends the max corner");
+        assert!(
+            x1 >= 30 + est_text_width("a<b&c", 13),
+            "text width extends the max corner"
+        );
         assert!(y1 >= 40, "text descent extends below the baseline");
     }
 
     #[test]
     fn svg_is_escaped_and_padded() {
         let svg = D.to_svg();
-        assert!(svg.contains("a&lt;b&amp;c"), "text content must be XML-escaped");
-        assert!(svg.contains("viewBox=\"-2 -2"), "viewBox = bounds min - 12 padding");
-        assert!(svg.contains("prefers-color-scheme: dark"), "dark-mode aware");
-        assert!(!svg.contains("http://") || svg.matches("http://").count() == 1,
-            "no external references beyond the xmlns");
+        assert!(
+            svg.contains("a&lt;b&amp;c"),
+            "text content must be XML-escaped"
+        );
+        assert!(
+            svg.contains("viewBox=\"-2 -2"),
+            "viewBox = bounds min - 12 padding"
+        );
+        assert!(
+            svg.contains("prefers-color-scheme: dark"),
+            "dark-mode aware"
+        );
+        assert!(
+            !svg.contains("http://") || svg.matches("http://").count() == 1,
+            "no external references beyond the xmlns"
+        );
     }
 
     #[test]
     fn empty_diagram_falls_back_to_canvas() {
-        let d = Diagram { width: 10, height: 20, shapes: &[] };
+        let d = Diagram {
+            width: 10,
+            height: 20,
+            shapes: &[],
+        };
         assert_eq!(d.bounds(), (0, 0, 10, 20));
     }
 
