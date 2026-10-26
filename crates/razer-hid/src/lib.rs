@@ -172,7 +172,19 @@ trait CommandIo {
     fn exchange(&mut self, request: &[u8; REPORT_LEN]) -> Result<[u8; REPORT_LEN]>;
 }
 
-struct HidChannel<'a>(&'a HidDevice);
+// The simulated variant exists only in unit-test builds. Production keeps a
+// single HID variant, with no dynamic transport dispatch or public test API.
+enum ControlDevice {
+    Hid(HidDevice),
+    #[cfg(test)]
+    Simulated(Mutex<safety_tests::Fake>),
+}
+
+enum HidChannel<'a> {
+    Hid(&'a HidDevice),
+    #[cfg(test)]
+    Simulated(&'a mut safety_tests::Fake),
+}
 
 trait FeatureIo {
     fn send(&mut self, report: &[u8; REPORT_LEN + 1]) -> Result<()>;
@@ -181,11 +193,19 @@ trait FeatureIo {
 
 impl FeatureIo for HidChannel<'_> {
     fn send(&mut self, report: &[u8; REPORT_LEN + 1]) -> Result<()> {
-        Ok(self.0.send_feature_report(report)?)
+        match self {
+            Self::Hid(dev) => Ok(dev.send_feature_report(report)?),
+            #[cfg(test)]
+            Self::Simulated(io) => io.send(report),
+        }
     }
 
     fn receive(&mut self, report: &mut [u8; REPORT_LEN + 1]) -> Result<usize> {
-        Ok(self.0.get_feature_report(report)?)
+        match self {
+            Self::Hid(dev) => Ok(dev.get_feature_report(report)?),
+            #[cfg(test)]
+            Self::Simulated(io) => io.receive(report),
+        }
     }
 }
 
@@ -242,7 +262,7 @@ fn write_verified<I: CommandIo, T: PartialEq + std::fmt::Debug>(
 
 /// An open handle to a supported mouse's control collection.
 pub struct Mouse {
-    dev: HidDevice,
+    dev: ControlDevice,
     spec: proto::DeviceSpec,
     /// The USB product id the device actually enumerated as. Distinct from
     /// [`DeviceSpec::product_id`], which is the spec's canonical id — a device
@@ -300,7 +320,7 @@ impl Mouse {
         // supported device, but before opening its control endpoint.
         let lease = control_lease()?;
         let dev = info.open_device(api)?;
-        Ok(Mouse { dev, spec, product_id, _control_lease: lease })
+        Ok(Mouse { dev: ControlDevice::Hid(dev), spec, product_id, _control_lease: lease })
     }
 
     /// The matched device's [`DeviceSpec`] — name, transaction id, and which
@@ -319,7 +339,15 @@ impl Mouse {
     fn with_channel<T>(&self, operation: impl FnOnce(&mut HidChannel<'_>) -> Result<T>) -> Result<T> {
         COMMANDS.lock()
             .map_err(|_| Error::SafetyStop("command lock poisoned".into()))?
-            .run(|| operation(&mut HidChannel(&self.dev)))
+            .run(|| match &self.dev {
+                ControlDevice::Hid(dev) => operation(&mut HidChannel::Hid(dev)),
+                #[cfg(test)]
+                ControlDevice::Simulated(io) => {
+                    let mut io = io.lock()
+                        .map_err(|_| Error::SafetyStop("simulated transport lock poisoned".into()))?;
+                    operation(&mut HidChannel::Simulated(&mut io))
+                }
+            })
     }
 
     /// Read the current device mode byte.

@@ -182,6 +182,12 @@ Snakecharmer retains only the `0x00` request; live read-back is not evidence of 
 On-board keymaps and the Elite's DPI-button event codes remain separately recorded
 hardware/capture evidence, not facts supplied by this snapshot.
 
+The HID regressions distinguish local transport/verification-helper tests from `Mouse`
+boundary tests. The latter call the typed methods and production process-wide latch with
+private simulated devices, in isolated test subprocesses. Literal request fixtures pin
+the existing packets; fabricated success replies do not establish firmware acceptance.
+Enumeration, the Windows HID API, and physical mouse behavior still need hardware checks.
+
 ## Features
 
 ### Device mode and DPI buttons
