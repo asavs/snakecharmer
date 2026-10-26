@@ -23,7 +23,7 @@
 A diagram here is **data, not artwork**. You are not drawing a mouse; you are stating
 facts with coordinates: *there is a button at this position, it maps to this config key,
 it emits this vendor code*. The DSL
-([`crates/razer-proto/src/diagram.rs`](../crates/razer-proto/src/diagram.rs)) has five
+([`crates/device-diagram/src/lib.rs`](../crates/device-diagram/src/lib.rs)) has six
 primitives and seven styling roles. The renderers decide everything else: colors, stroke
 weights, font sizes, dark/light theming. That is why:
 
@@ -37,7 +37,7 @@ One definition, three consumers:
 | surface | renderer | where |
 |---|---|---|
 | settings window pane | GDI+ (anti-aliased) + GDI ClearType text | `crates/platform/src/diagram.rs` |
-| `docs/assets/<device>.svg` | `Diagram::to_svg()` emitter | `crates/razer-proto/src/diagram.rs` |
+| `docs/assets/<device>.svg` | `Diagram::to_svg()` emitter | `crates/device-diagram/src/lib.rs` |
 | CI drift check | byte-compares the committed SVG against the emitter | `supported_devices_doc_matches_table` |
 
 ---

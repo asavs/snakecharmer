@@ -1,16 +1,10 @@
-//! Device diagrams as data: a tiny shape DSL each [`crate::DeviceSpec`]
-//! carries, describing a top-down schematic of the physical controls.
+//! Shared immutable device diagrams and their standalone SVG rendering.
 //!
-//! One definition per device drives two renderers, so the art can never fork:
-//! * the settings window draws it with GDI+ (the `platform` crate),
-//! * [`Diagram::to_svg`] emits the `docs/assets/<device>.svg` shown in
-//!   `docs/SUPPORTED-DEVICES.md` (a drift-check test regenerates the SVG and
-//!   fails if the committed asset differs).
-//!
-//! Coordinates are integer design units (rendered 1 unit = 1 px at 96 dpi;
-//! the emitter derives the viewBox from the content, so nothing can clip).
-//! Authoring a new device's diagram is ~15 lines of data — start from an
-//! existing device and move points; no artwork skills or tools required.
+//! Both the native settings renderer and documentation consume these const
+//! shapes. This crate has no device protocol, platform I/O, or dependencies.
+//! Native controls identify their callouts; SVG uses the stored caption text.
+
+#![forbid(unsafe_code)]
 
 /// How an element is styled. Rendering picks stroke/fill color, width and
 /// font size from the role, so diagrams stay theme-agnostic data.
@@ -65,7 +59,7 @@ pub type Curve = ((i32, i32), (i32, i32), (i32, i32));
 /// Which interactive control a [`Shape::Callout`] anchors. The settings
 /// window mounts the matching dropdown at the callout's position; the SVG
 /// emitter (a static picture) renders the caption text only.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CalloutSlot {
     DpiUp,
     DpiDown,
@@ -77,17 +71,17 @@ pub enum CalloutSlot {
     Wheel,
     /// A lighting zone's controls (effect dropdown + color swatch + picker),
     /// mounted beside that zone's marker on the schematic. Carries the zone's
-    /// index into `DeviceSpec::rgb_zones` (= the settings window's lighting
-    /// rows), so diagrams stay generic over zone count.
+    /// index into the application's lighting zones (= the settings window's
+    /// lighting rows), so diagrams stay generic over zone count.
     Lighting(u8),
     /// A button whose bind is stored in the mouse's own memory: the settings
     /// window mounts its on-board bind control here. Carries the keymap button
-    /// id (`crate::keymap`), so it only appears on mice with a recorded keymap.
+    /// id supplied by the application.
     Button(u8),
 }
 
 /// A drawing primitive. Everything is const-constructible so diagrams live
-/// in the `DeviceSpec` table as plain `static` data.
+/// in device specifications as plain `static` data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
     /// Cubic-bezier path from `start` through `curves`, optionally closed.
@@ -102,9 +96,8 @@ pub enum Shape {
     /// A remappable control's caption block *and* control anchor: `label` at
     /// baseline `at` (main caption style) with `note` 16 units below (styled
     /// by `note_role`). In the SVG this is just those two text lines; in the
-    /// settings window the caption is drawn and the slot's actual dropdown is
-    /// mounted directly beneath it — the diagram callout IS the control, so
-    /// the fact is never stated twice.
+    /// native settings window only the control is mounted at this anchor;
+    /// its selected entry identifies the button without duplicating captions.
     Callout {
         slot: CalloutSlot,
         at: (i32, i32),
@@ -141,8 +134,8 @@ fn text_extent_x(x: i32, anchor: Anchor, w: i32) -> (i32, i32) {
 
 impl Diagram {
     /// Content bounding box `(x0, y0, x1, y1)` over every shape, including
-    /// estimated text extents — the emitter and the window renderer both size
-    /// from this, which is what guarantees captions can't clip.
+    /// estimated text extents, for the SVG viewBox. The native renderer measures
+    /// its font and control extents separately from the same shape data.
     pub fn bounds(&self) -> (i32, i32, i32, i32) {
         let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
         let mut add = |x: i32, y: i32| {

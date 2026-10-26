@@ -151,74 +151,6 @@ fn found_but_unsupported() -> Option<String> {
     Some(found.to_string())
 }
 
-/// Map the spec's diagram data (razer-proto's DSL) into the platform
-/// renderer's generic shape types. Purely mechanical: the platform layer
-/// stays Razer-agnostic (RgbZone/Button become its two accent slots).
-fn to_platform_diagram(d: &razer_proto::diagram::Diagram) -> platform::diagram::Diagram {
-    use platform::diagram as pd;
-    use razer_proto::diagram as rd;
-    let role = |r: rd::Role| match r {
-        rd::Role::Body => pd::Role::Body,
-        rd::Role::Detail => pd::Role::Detail,
-        rd::Role::Lead => pd::Role::Lead,
-        rd::Role::Label => pd::Role::Label,
-        rd::Role::Note => pd::Role::Note,
-        rd::Role::RgbZone => pd::Role::AccentA,
-        rd::Role::Button => pd::Role::AccentB,
-    };
-    let anchor = |a: rd::Anchor| match a {
-        rd::Anchor::Start => pd::Anchor::Start,
-        rd::Anchor::Middle => pd::Anchor::Middle,
-        rd::Anchor::End => pd::Anchor::End,
-    };
-    let shapes = d
-        .shapes
-        .iter()
-        .map(|s| match *s {
-            rd::Shape::Path { role: r, start, curves, closed } => {
-                pd::Shape::Path { role: role(r), start, curves: curves.to_vec(), closed }
-            }
-            rd::Shape::RoundRect { role: r, x, y, w, h, r: radius } => {
-                pd::Shape::RoundRect { role: role(r), x, y, w, h, r: radius }
-            }
-            rd::Shape::Circle { role: r, cx, cy, r: radius } => {
-                pd::Shape::Circle { role: role(r), cx, cy, r: radius }
-            }
-            rd::Shape::Polyline { role: r, points } => {
-                pd::Shape::Polyline { role: role(r), points: points.to_vec() }
-            }
-            rd::Shape::Text { role: r, at, anchor: a, text } => {
-                pd::Shape::Text { role: role(r), at, anchor: anchor(a), text: text.to_string() }
-            }
-            rd::Shape::Callout { slot, at, anchor: a, note_role, .. } => {
-                let slot = match slot {
-                    rd::CalloutSlot::DpiUp => pd::CalloutSlot::DpiUp,
-                    rd::CalloutSlot::DpiDown => pd::CalloutSlot::DpiDown,
-                    rd::CalloutSlot::ThumbBack => pd::CalloutSlot::ThumbBack,
-                    rd::CalloutSlot::ThumbForward => pd::CalloutSlot::ThumbForward,
-                    rd::CalloutSlot::Wheel => pd::CalloutSlot::Wheel,
-                    rd::CalloutSlot::Lighting(z) => pd::CalloutSlot::Lighting(z),
-                    rd::CalloutSlot::Button(b) => pd::CalloutSlot::Button(b),
-                };
-                // The window's dropdowns are self-identifying (index 0 names
-                // the button — see combo_options), so the callout captions
-                // don't travel to the window: empty caption = the platform
-                // mounts the dropdown itself at the callout anchor. The
-                // generated docs SVG, which has no dropdowns, keeps them.
-                pd::Shape::Callout {
-                    slot,
-                    at,
-                    anchor: anchor(a),
-                    label: String::new(),
-                    note: String::new(),
-                    note_role: role(note_role),
-                }
-            }
-        })
-        .collect();
-    pd::Diagram { shapes }
-}
-
 /// "wheel click" -> "Wheel click", the caption of an on-board bind field.
 fn onboard_label(name: &str) -> String {
     let mut chars = name.chars();
@@ -282,7 +214,7 @@ fn open_settings_window(
     });
     let init = platform::settings::SettingsInit {
         device_name: spec.name.to_string(),
-        diagram: spec.diagram.as_ref().map(to_platform_diagram),
+        diagram: spec.diagram,
         dpi: cfg.dpi,
         dpi_min: spec.dpi_min,
         dpi_max: spec.dpi_max,
@@ -1899,7 +1831,7 @@ mod tests {
         // diagram today — all comfortably under platform's PANE_MAX_W).
         let budget = 2.0 * platform::settings::CENTER_SLACK;
         for spec in razer_proto::SUPPORTED {
-            let Some(diagram) = spec.diagram.as_ref().map(to_platform_diagram) else { continue };
+            let Some(diagram) = spec.diagram else { continue };
             let Some((left, right)) = platform::diagram::arm_balance(&diagram) else { continue };
             let imbalance = (left - right).abs();
             if imbalance > budget {

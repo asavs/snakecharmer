@@ -29,12 +29,13 @@ cost this project exists to avoid. The README's
 
 ## Architecture
 
-A Cargo workspace with one app package and three library crates:
+A Cargo workspace with one app package and four library crates:
 
 | Crate | Contents | I/O |
 |---|---|---|
-| `crates/razer-proto` | 90-byte report builder, CRC, response validation; device mode, DPI, polling and lighting commands; `DeviceSpec` and `SUPPORTED` (`devices/`); the on-board keymap protocol (`keymap.rs`); device schematics as data (`diagram.rs`) | none (`unsafe_code = "forbid"`) |
+| `crates/razer-proto` | 90-byte report builder, CRC, response validation; device mode, DPI, polling and lighting commands; `DeviceSpec` and `SUPPORTED` (`devices/`); the on-board keymap protocol (`keymap.rs`); references to shared device diagrams | none (`unsafe_code = "forbid"`) |
 | `crates/razer-hid` | `Mouse` (open a supported device, send a feature report, typed wrappers), `Listener` for input reports, `detected_mice` for naming unsupported devices. Uses `hidapi`. | HID |
+| `crates/device-diagram` | Immutable diagram schema, bounds, and SVG emitter shared by device specs and the native renderer | none (`unsafe_code = "forbid"`) |
 | `crates/platform` | All Win32 FFI and all `unsafe`: keystroke injection (`SendInput`), single-instance mutex, message boxes, tray icon, `WH_MOUSE_LL` hook, settings window, GDI+ diagram renderer, runtime-drawn icon, Run-key autostart, atomic file replace. Uses `windows-sys`. | Win32 |
 | `snakecharmer` (`src/`) | `daemon.rs` (session loop, tray and settings wiring), `config.rs`, `actions.rs` (action strings to key chords), `lighting.rs`, `onboard.rs`, `health.rs`, `logger.rs` | files |
 

@@ -3,9 +3,9 @@
 //! exposed through the already-pinned `windows-sys`, so no new dependency),
 //! text via classic GDI so captions get native ClearType.
 //!
-//! This module knows nothing about mice or Razer: it draws [`Shape`]s. The
-//! app maps its domain diagram data (e.g. `razer_proto::diagram`) into these
-//! types. Roles carry the entire visual vocabulary, so diagrams stay data.
+//! The schema is shared with the SVG emitter in `device-diagram`. Native
+//! callouts reserve space for self-identifying controls rather than painting
+//! the static captions that the documentation SVG displays.
 
 use windows_sys::Win32::Foundation::SIZE;
 use windows_sys::Win32::Graphics::Gdi::{
@@ -21,76 +21,7 @@ use windows_sys::Win32::Graphics::GdiPlus::{
     SmoothingModeAntiAlias, UnitPixel,
 };
 
-/// Styling slot for an element; colors and weights come from the [`Palette`]
-/// and per-role constants, never from the diagram data itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Role {
-    /// Primary outline. Strong stroke in the foreground color.
-    Body,
-    /// Secondary line work. Thinner foreground stroke.
-    Detail,
-    /// Leader line to a caption. Thin, semi-transparent.
-    Lead,
-    /// Main caption text (foreground).
-    Label,
-    /// Small dim text.
-    Note,
-    /// First accent (shapes stroked / text filled in `Palette::accent_a`).
-    AccentA,
-    /// Second accent (`Palette::accent_b`).
-    AccentB,
-}
-
-impl Role {
-    fn font_size(self) -> i32 {
-        match self {
-            Role::Label => 13,
-            _ => 11,
-        }
-    }
-    fn stroke_width(self) -> f32 {
-        match self {
-            Role::Body | Role::AccentA | Role::AccentB => 1.6,
-            Role::Detail => 1.1,
-            _ => 1.0,
-        }
-    }
-}
-
-/// Horizontal anchoring of a [`Shape::Text`] relative to its position.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Anchor {
-    Start,
-    Middle,
-    End,
-}
-
-/// One cubic-bezier segment: (control 1, control 2, end point).
-pub type Curve = ((i32, i32), (i32, i32), (i32, i32));
-
-/// Which app-level control a [`Shape::Callout`] anchors. The window mounts
-/// the matching dropdown at the callout's position (see
-/// [`callout_combo_rects`]); this module only reserves the space and draws
-/// the caption — what the slots mean stays the app's business.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CalloutSlot {
-    DpiUp,
-    DpiDown,
-    ThumbBack,
-    ThumbForward,
-    /// The scroll wheel / middle click (a disabled, identity-only dropdown —
-    /// middle-click remap is scaffolded, not yet implemented).
-    Wheel,
-    /// A lighting zone's control cluster (effect dropdown + color swatch +
-    /// picker button in one row); the payload is the zone's index into
-    /// [`SettingsInit::lighting`](crate::settings::SettingsInit::lighting).
-    /// Reserves a wider rect than the plain dropdown slots.
-    Lighting(u8),
-    /// An on-board bind control (editable dropdown); the payload is the
-    /// button id of a [`SettingsInit::onboard`](crate::settings::SettingsInit::onboard)
-    /// entry.
-    Button(u8),
-}
+pub use device_diagram::{Anchor, CalloutSlot, Curve, Diagram, Role, Shape};
 
 /// Width of the dropdown a callout reserves space for (design units). Wide
 /// enough for the longest self-identifying entry ("Middle click (default)")
@@ -106,39 +37,8 @@ pub const LIGHT_GAP: i32 = 4;
 pub const LIGHT_ROW_W: i32 = LIGHT_COMBO_W + LIGHT_GAP + LIGHT_SWATCH_W;
 /// Closed height of the dropdown a callout reserves space for.
 pub const CALLOUT_COMBO_H: i32 = 24;
-/// Vertical offset from a captioned callout's label baseline to its
-/// dropdown's top (the dropdown stacks beneath the two caption lines).
-const CALLOUT_COMBO_DY: i32 = 24;
-/// Caption-less callouts (empty `label` and `note`) mount the dropdown *as*
-/// the callout: vertically centered on the caption block's midpoint (label
-/// baseline + 8), so the diagram's leader lines meet the dropdown itself.
+/// The control is centered on its callout anchor's caption-block midpoint.
 const CALLOUT_COMBO_DY_BARE: i32 = 8 - CALLOUT_COMBO_H / 2;
-
-/// A drawing primitive in integer design units (1 unit = 1 px before scaling).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Shape {
-    Path { role: Role, start: (i32, i32), curves: Vec<Curve>, closed: bool },
-    RoundRect { role: Role, x: i32, y: i32, w: i32, h: i32, r: i32 },
-    Circle { role: Role, cx: i32, cy: i32, r: i32 },
-    Polyline { role: Role, points: Vec<(i32, i32)> },
-    /// One line of text; `at` is the baseline point.
-    Text { role: Role, at: (i32, i32), anchor: Anchor, text: String },
-    /// A caption block (label + note) that also anchors an interactive
-    /// control: the renderer draws the two caption lines, [`measure`]
-    /// reserves room for a dropdown beneath them, and the window places the
-    /// slot's real combo box in that reserved rect. When both `label` and
-    /// `note` are empty, no caption is drawn and the dropdown mounts centered
-    /// where the caption block would be — the control identifies itself (e.g.
-    /// via its list entries), so no fact is stated twice.
-    Callout {
-        slot: CalloutSlot,
-        at: (i32, i32),
-        anchor: Anchor,
-        label: String,
-        note: String,
-        note_role: Role,
-    },
-}
 
 /// The rect (design units: x, y, w, h) a callout reserves for its dropdown.
 /// `has_caption` selects the stacked (below the caption lines) or bare
@@ -147,7 +47,6 @@ fn callout_combo_rect(
     slot: CalloutSlot,
     at: (i32, i32),
     anchor: Anchor,
-    has_caption: bool,
 ) -> (i32, i32, i32, i32) {
     let w = match slot {
         CalloutSlot::Lighting(_) => LIGHT_ROW_W,
@@ -158,13 +57,7 @@ fn callout_combo_rect(
         Anchor::Middle => at.0 - w / 2,
         Anchor::End => at.0 - w,
     };
-    let dy = if has_caption { CALLOUT_COMBO_DY } else { CALLOUT_COMBO_DY_BARE };
-    (x, at.1 + dy, w, CALLOUT_COMBO_H)
-}
-
-/// Whether a callout draws any caption text at all.
-fn callout_has_caption(label: &str, note: &str) -> bool {
-    !label.is_empty() || !note.is_empty()
+    (x, at.1 + CALLOUT_COMBO_DY_BARE, w, CALLOUT_COMBO_H)
 }
 
 /// Every callout's slot and reserved dropdown rect (design units), in shape
@@ -174,19 +67,13 @@ pub fn callout_combo_rects(diagram: &Diagram) -> Vec<(CalloutSlot, (i32, i32, i3
         .shapes
         .iter()
         .filter_map(|s| match s {
-            Shape::Callout { slot, at, anchor, label, note, .. } => Some((
+            Shape::Callout { slot, at, anchor, .. } => Some((
                 *slot,
-                callout_combo_rect(*slot, *at, *anchor, callout_has_caption(label, note)),
+                callout_combo_rect(*slot, *at, *anchor),
             )),
             _ => None,
         })
         .collect()
-}
-
-/// A schematic: shapes in paint order.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagram {
-    pub shapes: Vec<Shape>,
 }
 
 /// Colors the renderer draws with (COLORREF, 0x00BBGGRR). Pick them from the
@@ -214,8 +101,8 @@ fn role_colors(role: Role, p: &Palette) -> (u32, u32) {
         Role::Body | Role::Detail | Role::Label => (colorref_to_argb(p.fg, 0xFF), p.fg),
         Role::Lead => (colorref_to_argb(p.dim, 0x8C), p.dim),
         Role::Note => (colorref_to_argb(p.dim, 0xFF), p.dim),
-        Role::AccentA => (colorref_to_argb(p.accent_a, 0xFF), p.accent_a),
-        Role::AccentB => (colorref_to_argb(p.accent_b, 0xFF), p.accent_b),
+        Role::RgbZone => (colorref_to_argb(p.accent_a, 0xFF), p.accent_a),
+        Role::Button => (colorref_to_argb(p.accent_b, 0xFF), p.accent_b),
     }
 }
 
@@ -292,11 +179,11 @@ pub fn measure(diagram: &Diagram) -> (i32, i32, i32, i32) {
         let hdc = GetDC(std::ptr::null_mut());
         let f_label = make_font(Role::Label.font_size());
         let f_note = make_font(Role::Note.font_size());
-        for s in &diagram.shapes {
+        for s in diagram.shapes {
             match s {
                 Shape::Path { start, curves, .. } => {
                     add(start.0, start.1);
-                    for &((c1x, c1y), (c2x, c2y), (ex, ey)) in curves {
+                    for &((c1x, c1y), (c2x, c2y), (ex, ey)) in curves.iter() {
                         add(c1x, c1y);
                         add(c2x, c2y);
                         add(ex, ey);
@@ -311,7 +198,7 @@ pub fn measure(diagram: &Diagram) -> (i32, i32, i32, i32) {
                     add(cx + r, cy + r);
                 }
                 Shape::Polyline { points, .. } => {
-                    for &(x, y) in points {
+                    for &(x, y) in points.iter() {
                         add(x, y);
                     }
                 }
@@ -327,29 +214,8 @@ pub fn measure(diagram: &Diagram) -> (i32, i32, i32, i32) {
                     add(tx0, at.1 - size);
                     add(tx1, at.1 + size / 3);
                 }
-                Shape::Callout { slot, at, anchor, label, note, note_role } => {
-                    // Caption lines (skipped when empty — caption-less
-                    // callouts are just their dropdown)...
-                    let has_caption = callout_has_caption(label, note);
-                    if has_caption {
-                        let lw = text_width(hdc, f_label, label);
-                        let nfont = if note_role.font_size() >= 13 { f_label } else { f_note };
-                        let nw = text_width(hdc, nfont, note);
-                        for (w, base, size) in [
-                            (lw, at.1, Role::Label.font_size()),
-                            (nw, at.1 + 16, note_role.font_size()),
-                        ] {
-                            let (tx0, tx1) = match anchor {
-                                Anchor::Start => (at.0, at.0 + w),
-                                Anchor::Middle => (at.0 - w / 2, at.0 + w - w / 2),
-                                Anchor::End => (at.0 - w, at.0),
-                            };
-                            add(tx0, base - size);
-                            add(tx1, base + size / 3);
-                        }
-                    }
-                    // ...plus the reserved dropdown rect.
-                    let (cx, cy, cw, ch) = callout_combo_rect(*slot, *at, *anchor, has_caption);
+                Shape::Callout { slot, at, anchor, .. } => {
+                    let (cx, cy, cw, ch) = callout_combo_rect(*slot, *at, *anchor);
                     add(cx, cy);
                     add(cx + cw, cy + ch);
                 }
@@ -376,11 +242,11 @@ pub fn body_x_bounds(diagram: &Diagram) -> Option<(i32, i32)> {
         x0 = x0.min(x);
         x1 = x1.max(x);
     };
-    for s in &diagram.shapes {
+    for s in diagram.shapes {
         match s {
             Shape::Path { role: Role::Body, start, curves, .. } => {
                 add(start.0);
-                for &((c1x, _), (c2x, _), (ex, _)) in curves {
+                for &((c1x, _), (c2x, _), (ex, _)) in curves.iter() {
                     add(c1x);
                     add(c2x);
                     add(ex);
@@ -395,7 +261,7 @@ pub fn body_x_bounds(diagram: &Diagram) -> Option<(i32, i32)> {
                 add(cx + r);
             }
             Shape::Polyline { role: Role::Body, points } => {
-                for &(x, _) in points {
+                for &(x, _) in points.iter() {
                     add(x);
                 }
             }
@@ -475,7 +341,7 @@ pub unsafe fn render(hdc: HDC, diagram: &Diagram, origin: (i32, i32), scale: f32
     let make_pen = |role: Role| -> *mut GpPen {
         let (argb, _) = role_colors(role, palette);
         let mut pen = std::ptr::null_mut();
-        GdipCreatePen1(argb, role.stroke_width() * scale, UnitPixel, &mut pen);
+        GdipCreatePen1(argb, role.stroke_width_100() as f32 / 100.0 * scale, UnitPixel, &mut pen);
         pen
     };
 
@@ -485,13 +351,13 @@ pub unsafe fn render(hdc: HDC, diagram: &Diagram, origin: (i32, i32), scale: f32
     let f_note = make_font(px(Role::Note.font_size()));
     SetBkMode(hdc, TRANSPARENT as i32);
 
-    for s in &diagram.shapes {
+    for s in diagram.shapes {
         match s {
             Shape::Path { role, start, curves, closed } => {
                 let mut path: *mut GpPath = std::ptr::null_mut();
                 GdipCreatePath(FillModeAlternate, &mut path);
                 let (mut cx, mut cy) = (tx(start.0), ty(start.1));
-                for &((c1x, c1y), (c2x, c2y), (ex, ey)) in curves {
+                for &((c1x, c1y), (c2x, c2y), (ex, ey)) in curves.iter() {
                     GdipAddPathBezier(
                         path,
                         cx,
@@ -548,22 +414,63 @@ pub unsafe fn render(hdc: HDC, diagram: &Diagram, origin: (i32, i32), scale: f32
                 let font = if role.font_size() >= 13 { f_label } else { f_note };
                 draw_gdi_text(hdc, font, role_colors(*role, palette).1, tx(at.0) as i32, ty(at.1) as i32, *anchor, text);
             }
-            Shape::Callout { at, anchor, label, note, note_role, .. } => {
-                // Caption only — the window mounts the actual dropdown in the
-                // reserved rect (callout_combo_rects). Empty caption lines
-                // draw nothing: the dropdown is the callout.
-                if !label.is_empty() {
-                    draw_gdi_text(hdc, f_label, role_colors(Role::Label, palette).1, tx(at.0) as i32, ty(at.1) as i32, *anchor, label);
-                }
-                if !note.is_empty() {
-                    let nfont = if note_role.font_size() >= 13 { f_label } else { f_note };
-                    draw_gdi_text(hdc, nfont, role_colors(*note_role, palette).1, tx(at.0) as i32, ty(at.1 + 16) as i32, *anchor, note);
-                }
-            }
+            // The native control itself supplies the callout's identity.
+            Shape::Callout { .. } => {}
         }
     }
 
     DeleteObject(f_label as _);
     DeleteObject(f_note as _);
     GdipDeleteGraphics(graphics);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CAPTIONED: Diagram = Diagram {
+        width: 100,
+        height: 100,
+        shapes: &[
+            Shape::Callout {
+                slot: CalloutSlot::Wheel,
+                at: (100, 93),
+                anchor: Anchor::End,
+                label: "Middle click",
+                note: "SVG caption only",
+                note_role: Role::Note,
+            },
+            Shape::Callout {
+                slot: CalloutSlot::Lighting(0),
+                at: (402, 93),
+                anchor: Anchor::Start,
+                label: "Wheel lighting",
+                note: "SVG note only",
+                note_role: Role::RgbZone,
+            },
+            Shape::Callout {
+                slot: CalloutSlot::DpiUp,
+                at: (228, 154),
+                anchor: Anchor::Middle,
+                label: "Front DPI",
+                note: "",
+                note_role: Role::Button,
+            },
+        ],
+    };
+
+    #[test]
+    fn native_controls_keep_the_captionless_anchor_rects() {
+        // These are the old native mapper's rectangles after it stripped SVG
+        // captions. Sharing the original captioned shapes must not move them.
+        assert_eq!(callout_combo_rects(&CAPTIONED), vec![
+            (CalloutSlot::Wheel, (-45, 89, 145, 24)),
+            (CalloutSlot::Lighting(0), (402, 89, 154, 24)),
+            (CalloutSlot::DpiUp, (156, 150, 145, 24)),
+        ]);
+        let svg = CAPTIONED.to_svg();
+        assert!(svg.contains("Middle click"));
+        assert!(svg.contains("SVG caption only"));
+        assert!(svg.contains("Wheel lighting"));
+    }
 }

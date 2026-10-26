@@ -782,7 +782,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // vertically it hangs one dia_gap below the top cluster.
         let pane_origin = (pane_origin_x, MARGIN + top_h + dia_gap);
         let pane = pane_meta.map(|(scale, palette, _)| Rc::new(DiagramPane {
-            diagram: init.diagram.clone().expect("pane_meta implies a diagram"),
+            diagram: init.diagram.expect("pane_meta implies a diagram"),
             origin: pane_origin,
             scale,
             palette,

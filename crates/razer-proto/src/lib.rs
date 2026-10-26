@@ -26,7 +26,7 @@
 #![forbid(unsafe_code)]
 
 pub mod devices;
-pub mod diagram;
+pub use device_diagram as diagram;
 pub mod keymap;
 
 pub use devices::{DEATHADDER_ELITE, DEATHADDER_V3, DEATHADDER_V4_PRO, SUPPORTED};
