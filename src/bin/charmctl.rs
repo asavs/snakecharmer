@@ -125,14 +125,9 @@ fn status() -> Result<(), Box<dyn std::error::Error>> {
     let spec = mouse.spec();
     let mode = mouse.get_device_mode()?;
     let (x, y) = mouse.get_dpi()?;
-    // Degrade gracefully: a device whose firmware rejects the get command
-    // still gets the rest of the status line.
-    let poll = match mouse.get_polling_rate() {
-        Ok(hz) => format!("{hz} Hz"),
-        Err(e) => format!("unavailable ({e})"),
-    };
+    let poll = mouse.get_polling_rate()?;
     println!(
-        "device = {} (PID 0x{:04X}), mode = {}, dpi = {x} x {y}, polling = {poll}",
+        "device = {} (PID 0x{:04X}), mode = {}, dpi = {x} x {y}, polling = {poll} Hz",
         spec.name,
         mouse.product_id(),
         mode_name(mode)
