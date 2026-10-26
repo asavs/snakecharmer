@@ -848,6 +848,58 @@ fn next_retry_delay(prev: Duration, session_lasted: Duration) -> Duration {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MaintenanceTask {
+    Reassert,
+    Liveness,
+}
+
+/// Event traffic never advances these timestamps. Only successful maintenance
+/// schedules its next deadline; a full reassert also satisfies the liveness read.
+struct Maintenance {
+    reasserted: Instant,
+    contacted: Instant,
+}
+
+impl Maintenance {
+    fn new(now: Instant) -> Self {
+        Self { reasserted: now, contacted: now }
+    }
+
+    fn wait(&self, now: Instant, interval: Duration, has_listeners: bool) -> Duration {
+        let reassert = interval.saturating_sub(now.duration_since(self.reasserted));
+        if has_listeners {
+            reassert
+        } else {
+            reassert.min(Duration::from_secs(5).saturating_sub(now.duration_since(self.contacted)))
+        }
+    }
+
+    fn service_due<E>(
+        &mut self,
+        now: Instant,
+        interval: Duration,
+        has_listeners: bool,
+        perform: impl FnOnce(MaintenanceTask) -> Result<Instant, E>,
+    ) -> Result<(), E> {
+        let task = if now.duration_since(self.reasserted) >= interval {
+            MaintenanceTask::Reassert
+        } else if !has_listeners && now.duration_since(self.contacted) >= Duration::from_secs(5) {
+            MaintenanceTask::Liveness
+        } else {
+            return Ok(());
+        };
+        // Completion time avoids catch-up bursts after a slow command. An error
+        // leaves the schedule alone and propagates out of the session at once.
+        let completed = perform(task)?;
+        self.contacted = completed;
+        if task == MaintenanceTask::Reassert {
+            self.reasserted = completed;
+        }
+        Ok(())
+    }
+}
+
 fn run_session(
     cfg: &mut Config,
     bindings: &mut Bindings,
@@ -947,25 +999,19 @@ fn run_session(
         ));
     }
 
-    let reassert_interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
     // With listeners, an unplug fails a blocking read almost instantly. Without
     // them (a device with no DPI buttons), nothing notices until we next talk to
-    // the device — so poll liveness on a short tick instead of waiting out the
-    // whole re-assert interval with a dead handle.
-    let tick = if spec.dpi_buttons.is_some() {
-        reassert_interval
-    } else {
-        reassert_interval.min(Duration::from_secs(5))
-    };
-    let mut last_reassert = Instant::now();
+    // the device — so maintain a separate five-second liveness deadline.
+    let has_listeners = spec.dpi_buttons.is_some();
+    let mut maintenance = Maintenance::new(Instant::now());
     let mut last_fire: Option<(u8, Instant)> = None;
 
     loop {
         // A reset on the notice thread may have tripped the shared latch.
         razer_hid::ensure_active()?;
-        let refresh_due_in = health.refresh_due_in();
-        let wait = tick.min(refresh_due_in);
-        let woke_for_refresh = refresh_due_in <= tick;
+        let interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
+        let wait = maintenance.wait(Instant::now(), interval, has_listeners)
+            .min(health.refresh_due_in());
         match rx.recv_timeout(wait) {
             Ok(Event::Button(code)) => {
                 handle_code(code, spec.dpi_buttons, bindings, log, &mut last_fire)
@@ -1002,25 +1048,22 @@ fn run_session(
                 // to send another probe or restart writes on a new handle.
                 return Err(razer_hid::Error::Verify("device input collection closed".into()));
             }
-            Err(RecvTimeoutError::Timeout) => {
-                if woke_for_refresh {
-                    if let Err(error) = health.refresh_if_due() {
-                        log.log(&format!("WARN could not refresh PC Vitals capsule: {error}"));
-                    }
-                    continue;
-                }
-                if last_reassert.elapsed() >= reassert_interval {
-                    reassert(&ctrl, cfg, log)?;
-                    last_reassert = Instant::now();
-                } else {
-                    // A failed liveness read stops device communication.
-                    ctrl.get_dpi()?;
-                }
-            }
+            Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
                 return Err(razer_hid::Error::Verify("event channel closed".into()))
             }
         }
+        // Service deadlines after events as well as timeouts. In particular,
+        // button presses and health refreshes cannot postpone device checks.
+        // A reload may have changed the interval while handling this event.
+        let interval = Duration::from_secs(cfg.reassert_interval_secs.max(5));
+        maintenance.service_due(Instant::now(), interval, has_listeners, |task| {
+            match task {
+                MaintenanceTask::Reassert => reassert(&ctrl, cfg, log)?,
+                MaintenanceTask::Liveness => { ctrl.get_dpi()?; }
+            }
+            Ok::<_, razer_hid::Error>(Instant::now())
+        })?;
         if let Err(error) = health.refresh_if_due() {
             log.log(&format!("WARN could not refresh PC Vitals capsule: {error}"));
         }
@@ -1461,6 +1504,123 @@ fn reassert(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::E
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn continuous_button_events_do_not_postpone_reassertion() {
+        let started = Instant::now();
+        let mut maintenance = Maintenance::new(started);
+        let interval = Duration::from_secs(60);
+        let (tx, rx) = mpsc::channel();
+        let mut commands = Vec::new();
+        // Every receive returns a button event, never Timeout. Maintenance
+        // still reaches its deadlines while the queue is continuously active.
+        for second in 1..=120 {
+            let now = started + Duration::from_secs(second);
+            tx.send(Event::Button(0x20)).unwrap();
+            assert!(matches!(rx.recv_timeout(maintenance.wait(now, interval, true)),
+                Ok(Event::Button(0x20))));
+            maintenance.service_due(now, interval, true, |task| {
+                commands.push((second, task));
+                Ok::<_, ()>(now)
+            }).unwrap();
+        }
+        assert_eq!(commands, vec![(60, MaintenanceTask::Reassert), (120, MaintenanceTask::Reassert)]);
+    }
+
+    #[test]
+    fn liveness_runs_during_traffic_and_reassertion_replaces_the_same_tick_read() {
+        let started = Instant::now();
+        let mut maintenance = Maintenance::new(started);
+        let interval = Duration::from_secs(60);
+        let mut commands = Vec::new();
+        for second in 1..=60 {
+            let now = started + Duration::from_secs(second);
+            maintenance.service_due(now, interval, false, |task| {
+                commands.push((second, task));
+                Ok::<_, ()>(now)
+            }).unwrap();
+        }
+        let mut expected: Vec<_> = (5..60).step_by(5)
+            .map(|second| (second, MaintenanceTask::Liveness)).collect();
+        expected.push((60, MaintenanceTask::Reassert));
+        assert_eq!(commands, expected);
+        assert_eq!(maintenance.wait(started + Duration::from_secs(60), interval, false),
+            Duration::from_secs(5));
+    }
+
+    #[test]
+    fn earlier_health_wakeup_does_not_advance_the_device_deadline() {
+        let started = Instant::now();
+        let mut maintenance = Maintenance::new(started);
+        let interval = Duration::from_secs(60);
+        let now = started + Duration::from_secs(4);
+        assert_eq!(maintenance.wait(now, interval, false), Duration::from_secs(1));
+        let health_due_in = Duration::ZERO;
+        assert_eq!(maintenance.wait(now, interval, false).min(health_due_in), Duration::ZERO);
+        maintenance.service_due(now, interval, false, |_| -> Result<Instant, ()> {
+            panic!("a health-only wakeup must not send a device command")
+        }).unwrap();
+        assert_eq!(maintenance.wait(now, interval, false), Duration::from_secs(1));
+        let due = started + Duration::from_secs(5);
+        let mut commands = Vec::new();
+        maintenance.service_due(due, interval, false, |task| {
+            commands.push(task);
+            Ok::<_, ()>(due)
+        }).unwrap();
+        assert_eq!(commands, vec![MaintenanceTask::Liveness]);
+    }
+
+    #[test]
+    fn reloaded_interval_takes_effect_without_restarting_the_session() {
+        let started = Instant::now();
+        let mut maintenance = Maintenance::new(started);
+        let now = started + Duration::from_secs(10);
+        assert_eq!(maintenance.wait(now, Duration::from_secs(60), true), Duration::from_secs(50));
+        let mut commands = Vec::new();
+        maintenance.service_due(now, Duration::from_secs(5), true, |task| {
+            commands.push(task);
+            Ok::<_, ()>(now)
+        }).unwrap();
+        assert_eq!(commands, vec![MaintenanceTask::Reassert]);
+        assert_eq!(maintenance.wait(now, Duration::from_secs(120), true), Duration::from_secs(120));
+    }
+
+    #[test]
+    fn slow_maintenance_uses_completion_time_without_catch_up_commands() {
+        let started = Instant::now();
+        let mut maintenance = Maintenance::new(started);
+        let interval = Duration::from_secs(60);
+        let mut commands = Vec::new();
+        // Simulate resuming long after the deadline, followed by a slow read.
+        let now = started + Duration::from_secs(600);
+        let completed = now + Duration::from_secs(15);
+        maintenance.service_due(now, interval, false, |task| {
+            commands.push(task);
+            Ok::<_, ()>(completed)
+        }).unwrap();
+        maintenance.service_due(completed, interval, false, |_| -> Result<Instant, ()> {
+            panic!("one delayed reassert must not cause a catch-up burst")
+        }).unwrap();
+        assert_eq!(commands, vec![MaintenanceTask::Reassert]);
+        assert_eq!(maintenance.wait(completed, interval, false), Duration::from_secs(5));
+        assert_eq!(maintenance.wait(completed, interval, true), interval);
+    }
+
+    #[test]
+    fn maintenance_failure_propagates_without_marking_the_command_successful() {
+        let started = Instant::now();
+        let mut maintenance = Maintenance::new(started);
+        let interval = Duration::from_secs(60);
+        let now = started + interval;
+        let mut commands = Vec::new();
+        let result = maintenance.service_due(now, interval, false, |task| {
+            commands.push(task);
+            Err("device failure")
+        });
+        assert_eq!(result, Err("device failure"));
+        assert_eq!(commands, vec![MaintenanceTask::Reassert]);
+        assert_eq!(maintenance.wait(now, interval, false), Duration::ZERO);
+    }
 
     #[test]
     fn onboard_labels_capitalize_the_button_name() {

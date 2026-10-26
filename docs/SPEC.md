@@ -71,6 +71,9 @@ Binaries:
    polling rate, and on DPI-button mice the device mode, and rewrite any that drifted.
    Lighting is not re-asserted. A mouse without DPI buttons has no blocking read to notice
    an unplug, so the daemon reads its DPI every 5 seconds as a liveness check.
+   Maintenance deadlines run after events as well as timeouts, so button presses and
+   settings activity cannot postpone them. Reloading config updates the reassert interval
+   within the current session.
 6. A failed device command, read-back mismatch, or closed input collection stops device
    communication. The daemon logs and displays the failure, removes the mouse hook, and
    exits when the notice is dismissed, without recovery writes. If no supported device
