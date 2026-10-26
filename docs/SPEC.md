@@ -124,7 +124,7 @@ out an unknown protocol is covered in [CRACKING-MICE-GUIDE.md](CRACKING-MICE-GUI
 Every command is a 90-byte feature report (report ID 0, sent as a 91-byte buffer with a
 leading `0x00`), and every response is 90 bytes. The layout is documented at the top of
 `crates/razer-proto/src/lib.rs`: status, transaction id, data size, command class and id,
-80 argument bytes, and a CRC that is the XOR of bytes 2 to 87. `Mouse::send_command`
+80 argument bytes, and a CRC that is the XOR of bytes 2 to 87. The shared HID transport
 sends each report once and requires status `0x02` and a matching command echo. BUSY is
 terminal too. A process-wide latch blocks every subsequent command after a transport,
 response, or verification failure, including commands on another handle or the reset

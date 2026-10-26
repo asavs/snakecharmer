@@ -49,7 +49,7 @@ pub const DEATHADDER_V4_PRO: DeviceSpec = DeviceSpec {
     // family and same rates as the V3.
     //
     // OpenRazer waits `RAZER_NEW_MOUSE_RECEIVER_WAIT_US` (31 ms) for this
-    // device's responses; `send_command` already sleeps 60 ms.
+    // device's responses; the shared HID transport already sleeps 60 ms.
     polling: PollingSpec {
         protocol: PollingProtocol::Extended,
         rates: &[125, 500, 1000, 2000, 4000, 8000],

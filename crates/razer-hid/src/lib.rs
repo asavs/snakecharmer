@@ -322,11 +322,6 @@ impl Mouse {
             .run(|| operation(&mut HidChannel(&self.dev)))
     }
 
-    /// Send one report. Any device failure stops all command handles this run.
-    pub fn send_command(&self, request: &[u8; REPORT_LEN]) -> Result<[u8; REPORT_LEN]> {
-        self.with_channel(|io| io.exchange(request))
-    }
-
     /// Read the current device mode byte.
     pub fn get_device_mode(&self) -> Result<u8> {
         self.with_channel(|io| read_mode(io, self.spec.transaction_id))
@@ -388,8 +383,8 @@ impl Mouse {
     // --- Chroma / RGB lighting ---------------------------------------------
     //
     // Each effect is applied to every zone in the spec's `rgb_zones`, in order.
-    // The device acknowledges each command with status 0x02 (verified by
-    // `send_command`); there is no color read-back in this protocol, so
+    // The device acknowledges each command with status 0x02 (verified by the
+    // shared transport); there is no color read-back in this protocol, so
     // success == the device accepted the report.
     //
     // On a device with no lighting hardware (`rgb_zones` empty) these are
