@@ -644,7 +644,17 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         let delay = next_retry_delay(prev_delay, started.elapsed());
         match result {
             Ok(()) => log.log("Session ended cleanly; restarting."),
-            Err(e) => {
+            Err(SessionError::Config(e)) => {
+                let message = format!("Configuration rejected: {e}\n\nThe mouse settings were not applied. Fix config.toml and restart Snakecharmer.");
+                log.log(&message);
+                if let Err(error) = health.stopped() {
+                    log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+                }
+                platform::mouse_hook::uninstall();
+                platform::alert("Snakecharmer: configuration error", &message);
+                std::process::exit(1);
+            }
+            Err(SessionError::Device(e)) => {
                 if e.requires_stop() {
                     stop_for_safety(&e, &log, &mut health);
                 }
@@ -900,6 +910,52 @@ impl Maintenance {
     }
 }
 
+#[derive(Debug)]
+enum SessionError {
+    Config(String),
+    Device(razer_hid::Error),
+}
+
+impl From<razer_hid::Error> for SessionError {
+    fn from(error: razer_hid::Error) -> Self {
+        Self::Device(error)
+    }
+}
+
+struct ConfigApplication {
+    migration_notes: Vec<String>,
+    migrated: bool,
+}
+
+/// Startup and reload use the same ordering: normalize and validate the whole
+/// candidate, apply it, then replace the active configuration. A rejected
+/// candidate cannot start a partial device update or unwind a healthy session.
+fn apply_config_candidate(
+    active: &mut Config,
+    mut candidate: Config,
+    spec: DeviceSpec,
+    apply: impl FnOnce(&Config) -> Result<(), razer_hid::Error>,
+) -> Result<ConfigApplication, SessionError> {
+    let original = candidate.clone();
+    let migration_notes = razer_proto::keymap::spec_for(spec.product_id)
+        .map(|km| crate::onboard::migrate_thumbs(km, &mut candidate))
+        .unwrap_or_default();
+    candidate.validate_for(spec).map_err(SessionError::Config)?;
+    apply(&candidate)?;
+    let migrated = candidate != original;
+    *active = candidate;
+    Ok(ConfigApplication { migration_notes, migrated })
+}
+
+fn report_config_application(outcome: ConfigApplication, cfg: &Config, log: &Logger) {
+    for note in outcome.migration_notes {
+        log.log(&format!("Config: {note}."));
+    }
+    if outcome.migrated {
+        save_config(cfg, log);
+    }
+}
+
 fn run_session(
     cfg: &mut Config,
     bindings: &mut Bindings,
@@ -908,7 +964,7 @@ fn run_session(
     rx: &Receiver<Event>,
     settings_open: &mut bool,
     health: &mut crate::health::HealthReporter,
-) -> Result<(), razer_hid::Error> {
+) -> Result<(), SessionError> {
     let api = razer_hid::open_api()?;
     let ctrl = Mouse::open_with(&api)?;
     let spec = ctrl.spec();
@@ -930,22 +986,22 @@ fn run_session(
     // Rebuild the tray menu around this device (DPI presets over its range).
     platform::tray::set_menu(build_menu_spec(Some(&spec), platform::autostart::is_enabled()));
 
-    // Each setter confirms its read form before writing. A failure ends the session.
-    let (dx, dy) = cfg.dpi_xy();
-    let (rx2, ry) = ctrl.set_dpi(dx, dy)?;
-    log.log(&format!("DPI locked to {rx2} x {ry}."));
-
-    if let Some(hz) = cfg.polling_rate {
-        let r = ctrl.set_polling_rate(hz)?;
-        log.log(&format!("Polling rate locked to {r} Hz."));
-    }
-
-    // Apply configured startup lighting (unless "keep"; a logged no-op on
-    // devices without lighting hardware — see `apply_startup_lighting`).
-    apply_startup_lighting(&ctrl, cfg, log)?;
-
-    migrate_thumb_remaps(&ctrl, cfg, bindings, log);
-    check_onboard_binds(&ctrl, cfg, log)?;
+    let outcome = apply_config_candidate(cfg, cfg.clone(), spec, |candidate| {
+        // Each setter confirms its read form before writing. A device failure
+        // still ends the session; a local config error is caught before here.
+        let (dx, dy) = candidate.dpi_xy();
+        let (rx2, ry) = ctrl.set_dpi(dx, dy)?;
+        log.log(&format!("DPI locked to {rx2} x {ry}."));
+        if let Some(hz) = candidate.polling_rate {
+            let r = ctrl.set_polling_rate(hz)?;
+            log.log(&format!("Polling rate locked to {r} Hz."));
+        }
+        apply_startup_lighting(&ctrl, candidate, log)?;
+        check_onboard_binds(&ctrl, candidate, log)
+    })?;
+    report_config_application(outcome, cfg, log);
+    *bindings = Bindings::from_config(cfg, log);
+    apply_thumb_hook(cfg, log);
 
     // Driver mode and the DPI-button vendor-code listeners only apply to devices
     // that actually have the wheel DPI buttons. On a device without them there
@@ -978,7 +1034,7 @@ fn run_session(
             }
         }
         if listeners.is_empty() {
-            return Err(razer_hid::Error::DeviceNotFound);
+            return Err(razer_hid::Error::DeviceNotFound.into());
         }
         log.log(&format!(
             "Listening on {} collection(s); dropped {} unreadable.",
@@ -1046,11 +1102,11 @@ fn run_session(
             Ok(Event::ListenerClosed) => {
                 // Losing an input collection is a stop condition, not a reason
                 // to send another probe or restart writes on a new handle.
-                return Err(razer_hid::Error::Verify("device input collection closed".into()));
+                return Err(razer_hid::Error::Verify("device input collection closed".into()).into());
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
-                return Err(razer_hid::Error::Verify("event channel closed".into()))
+                return Err(razer_hid::Error::Verify("event channel closed".into()).into())
             }
         }
         // Service deadlines after events as well as timeouts. In particular,
@@ -1091,25 +1147,6 @@ fn write_onboard_config(
         log.log(&format!("On-board bind written: {c}"));
     }
     Ok(wanted.iter().map(|w| w.button).collect())
-}
-
-/// On a mouse that stores binds, the settings window has no software thumb
-/// dropdowns, so a `thumb_back`/`thumb_forward` remap would run unseen: move it
-/// into `[onboard]` (see `onboard::migrate_thumbs`), save, and drop the hook.
-fn migrate_thumb_remaps(ctrl: &Mouse, cfg: &mut Config, bindings: &mut Bindings, log: &Logger) {
-    let Some(km) = razer_proto::keymap::spec_for(ctrl.spec().product_id) else {
-        return;
-    };
-    let notes = crate::onboard::migrate_thumbs(km, cfg);
-    if notes.is_empty() {
-        return;
-    }
-    for n in &notes {
-        log.log(&format!("Config: {n}."));
-    }
-    save_config(cfg, log);
-    *bindings = Bindings::from_config(cfg, log);
-    apply_thumb_hook(cfg, log);
 }
 
 /// Once per attach: write the `[onboard]` binds the config asks for (only the
@@ -1387,18 +1424,30 @@ fn handle_menu(
             if let Some(n) = note {
                 log.log(&n);
             }
-            *cfg = new_cfg;
-            migrate_thumb_remaps(ctrl, cfg, bindings, log);
+            let outcome = match apply_config_candidate(cfg, new_cfg, ctrl.spec(), |candidate| {
+                let (dx, dy) = candidate.dpi_xy();
+                ctrl.set_dpi(dx, dy)?;
+                if let Some(hz) = candidate.polling_rate {
+                    ctrl.set_polling_rate(hz)?;
+                }
+                apply_startup_lighting(ctrl, candidate, log)?;
+                if let Some(km) = razer_proto::keymap::spec_for(ctrl.spec().product_id) {
+                    write_onboard_config(ctrl, km, candidate, log)?;
+                }
+                Ok(())
+            }) {
+                Ok(outcome) => outcome,
+                Err(SessionError::Config(e)) => {
+                    log.log(&format!("Config reload rejected: {e}. Keeping the active settings."));
+                    return Ok(false);
+                }
+                Err(SessionError::Device(e)) => return Err(e),
+            };
+            report_config_application(outcome, cfg, log);
             *bindings = Bindings::from_config(cfg, log);
-            let (dx, dy) = cfg.dpi_xy();
-            ctrl.set_dpi(dx, dy)?;
-            if let Some(hz) = cfg.polling_rate {
-                ctrl.set_polling_rate(hz)?;
-            }
-            apply_startup_lighting(ctrl, cfg, log)?;
             apply_thumb_hook(cfg, log);
-            if let Some(km) = razer_proto::keymap::spec_for(ctrl.spec().product_id) {
-                write_onboard_config(ctrl, km, cfg, log)?;
+            if let Err(error) = health.polling_rate_changed(cfg.polling_rate) {
+                log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
             }
             log.log("Menu: config reloaded and reapplied.");
         }
@@ -1620,6 +1669,54 @@ mod tests {
         assert_eq!(result, Err("device failure"));
         assert_eq!(commands, vec![MaintenanceTask::Reassert]);
         assert_eq!(maintenance.wait(now, interval, false), Duration::ZERO);
+    }
+
+    #[test]
+    fn rejected_config_never_applies_or_replaces_the_healthy_config() {
+        let original = Config::default();
+        let mut active = original.clone();
+        let mut candidates = vec![
+            Config { dpi: 99, ..original.clone() },
+            Config { polling_rate: Some(250), ..original.clone() },
+            Config { thumb_back: "bad-action".into(), ..original.clone() },
+        ];
+        let mut bad_onboard = Config { thumb_back: "copy".into(), ..original.clone() };
+        bad_onboard.onboard.insert("underside".into(), "disabled".into());
+        candidates.push(bad_onboard);
+        for candidate in candidates {
+            let result = apply_config_candidate(&mut active, candidate, razer_proto::DEATHADDER_V3,
+                |_| panic!("a rejected reload reached device application"));
+            assert!(matches!(result, Err(SessionError::Config(_))));
+            assert_eq!(active, original, "including migrations from a rejected candidate");
+        }
+    }
+
+    #[test]
+    fn valid_config_applies_the_normalized_candidate_before_committing() {
+        let mut active = Config::default();
+        let candidate = Config { dpi: 2400, thumb_back: "copy".into(), ..Config::default() };
+        let mut applied = None;
+        let outcome = apply_config_candidate(&mut active, candidate, razer_proto::DEATHADDER_V3,
+            |candidate| {
+                assert_eq!(candidate.thumb_back, "none");
+                assert_eq!(candidate.onboard.get("back").map(String::as_str), Some("copy"));
+                applied = Some(candidate.clone());
+                Ok(())
+            }).unwrap();
+        assert_eq!(Some(&active), applied.as_ref());
+        assert!(outcome.migrated);
+        assert_eq!(outcome.migration_notes.len(), 1);
+    }
+
+    #[test]
+    fn device_failure_keeps_the_old_config_and_remains_terminal() {
+        let original = Config::default();
+        let mut active = original.clone();
+        let candidate = Config { dpi: 2400, ..original.clone() };
+        let result = apply_config_candidate(&mut active, candidate, razer_proto::DEATHADDER_V3,
+            |_| Err(razer_hid::Error::Verify("simulated read-back mismatch".into())));
+        assert!(matches!(result, Err(SessionError::Device(ref error)) if error.requires_stop()));
+        assert_eq!(active, original);
     }
 
     #[test]

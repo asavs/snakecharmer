@@ -221,6 +221,15 @@ file and replace the destination atomically. The log is
 `autostart_bootstrapped`, `[zones.*]`, `[onboard]`. Defaults and examples are in the
 [README](../README.md#configuration).
 
+After a supported mouse is opened, startup validates every setting that model will
+apply before sending any device command. A semantic error (such as an unsupported
+polling rate) reports the configuration error and exits without applying earlier
+settings. Reload normalizes thumb remaps and validates the complete candidate before
+device application; invalid candidates leave the healthy session and active config
+intact. Unsupported lighting, DPI-button actions and on-board tables remain ignored.
+Valid candidates replace the active config only after their device application succeeds;
+a device failure still stops communication rather than rolling back or retrying writes.
+
 ### Tray and settings window
 
 The tray menu has DPI presets within the device's range, lighting presets, Settings, a

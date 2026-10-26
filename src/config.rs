@@ -119,6 +119,49 @@ impl Config {
             .unwrap_or(&self.color)
     }
 
+    /// Validate every setting that this device will apply, without device I/O.
+    /// Unsupported lighting, DPI-button actions and on-board tables remain ignored.
+    pub fn validate_for(&self, spec: razer_proto::DeviceSpec) -> Result<(), String> {
+        let mut errors = Vec::new();
+        let (x, y) = self.dpi_xy();
+        if let Err(e) = razer_proto::set_dpi_report(
+            spec.transaction_id, spec.dpi_min, spec.dpi_max, x, y,
+        ) {
+            errors.push(format!("dpi/dpi_y: {e}"));
+        }
+        if let Some(hz) = self.polling_rate {
+            if let Err(e) = razer_proto::set_polling_rate_report(spec.transaction_id, spec.polling, hz) {
+                errors.push(format!("polling_rate: {e}"));
+            }
+        }
+        for (name, value, active) in [
+            ("dpi_up", &self.dpi_up, spec.dpi_buttons.is_some()),
+            ("dpi_down", &self.dpi_down, spec.dpi_buttons.is_some()),
+            ("thumb_back", &self.thumb_back, true),
+            ("thumb_forward", &self.thumb_forward, true),
+        ] {
+            if active {
+                if let Err(e) = crate::actions::parse(value) {
+                    errors.push(format!("{name}: {e}"));
+                }
+            }
+        }
+        for &zone in spec.rgb_zones {
+            let name = razer_proto::led::name(zone);
+            if let Err(e) = crate::lighting::EffectSpec::from_config(
+                self.zone_lighting(name), self.zone_color(name),
+            ) {
+                errors.push(format!("lighting ({name}): {e}"));
+            }
+        }
+        if let Some(km) = razer_proto::keymap::spec_for(spec.product_id) {
+            if let Err(e) = crate::onboard::parse_config(km, &self.onboard) {
+                errors.push(format!("[onboard]: {e}"));
+            }
+        }
+        if errors.is_empty() { Ok(()) } else { Err(errors.join("; ")) }
+    }
+
     /// Config directory: `%LOCALAPPDATA%\Snakecharmer` (falls back to CWD).
     pub fn dir() -> PathBuf {
         let base = std::env::var_os("LOCALAPPDATA")
@@ -186,6 +229,50 @@ impl Config {
 mod tests {
     use super::*;
     use std::os::windows::fs::OpenOptionsExt;
+
+    #[test]
+    fn validates_both_dpi_axes_and_polling_before_application() {
+        let cfg = Config { dpi: 1600, dpi_y: Some(30001), polling_rate: Some(250), ..Config::default() };
+        let error = cfg.validate_for(razer_proto::DEATHADDER_V3).unwrap_err();
+        assert!(error.contains("dpi/dpi_y"));
+        assert!(error.contains("polling_rate"));
+        assert!(Config { dpi: 16001, ..Config::default() }
+            .validate_for(razer_proto::DEATHADDER_ELITE).is_err());
+        assert!(Config { dpi: 45000, polling_rate: Some(8000), ..Config::default() }
+            .validate_for(razer_proto::DEATHADDER_V4_PRO).is_ok());
+    }
+
+    #[test]
+    fn validates_actions_that_the_device_uses() {
+        let mut cfg = Config { dpi_up: "not-an-action".into(), ..Config::default() };
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_ELITE).unwrap_err().contains("dpi_up"));
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_V3).is_ok(), "no DPI buttons on the V3");
+        cfg.thumb_forward = "not-an-action".into();
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_V3).unwrap_err().contains("thumb_forward"));
+    }
+
+    #[test]
+    fn validates_effective_zone_effects_and_colors() {
+        let mut cfg = Config { lighting: "static".into(), color: "bad-color".into(), ..Config::default() };
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_ELITE).unwrap_err().contains("lighting (wheel)"));
+        for name in ["wheel", "logo"] {
+            cfg.zones.insert(name.into(), ZoneConfig { lighting: Some("off".into()), color: None });
+        }
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_ELITE).is_ok(), "off ignores unused color");
+        cfg.zones.get_mut("logo").unwrap().lighting = Some("not-an-effect".into());
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_ELITE).unwrap_err().contains("lighting (logo)"));
+    }
+
+    #[test]
+    fn validates_captured_onboard_entries_and_keeps_unsupported_features_ignored() {
+        let mut cfg = Config { lighting: "not-an-effect".into(), ..Config::default() };
+        cfg.onboard.insert("left".into(), "disabled".into());
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_V3).unwrap_err().contains("[onboard]"));
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_V4_PRO).is_ok(), "no lighting or keymap on V4 Pro");
+        cfg.onboard.clear();
+        cfg.onboard.insert("wheel_click".into(), "ctrl+c".into());
+        assert!(cfg.validate_for(razer_proto::DEATHADDER_V3).is_ok());
+    }
 
     struct TestDir(PathBuf);
 
