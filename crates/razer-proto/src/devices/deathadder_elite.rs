@@ -192,8 +192,8 @@ mod tests {
         assert_eq!(spec_for(0x005C), Some(DEATHADDER_ELITE));
     }
 
-    /// A report built from this spec carries its transaction id and matches the
-    /// bytes in OpenRazer's `razer_chroma_misc_set_dpi_xy`. 1600 = 0x0640.
+    /// Assert the existing report, including selector 0x00. The pinned OpenRazer
+    /// helper emits 0x01 instead; see docs/SPEC.md. 1600 = 0x0640.
     #[test]
     fn set_dpi_report_bytes() {
         let d = DEATHADDER_ELITE;

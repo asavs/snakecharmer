@@ -6,6 +6,8 @@
 //!
 //! Protocol source: OpenRazer (github.com/openrazer/openrazer), files
 //! `driver/razercommon.{c,h}`, `driver/razerchromacommon.c`, `driver/razermouse_driver.c`.
+//! The reviewed revision is recorded in `reference/openrazer-source.json`.
+//! See `docs/SPEC.md` for the unresolved DPI-write selector difference.
 //!
 //! The Razer control protocol is a 90-byte HID feature report (report ID 0):
 //!
@@ -293,7 +295,7 @@ pub fn set_dpi_report(
         }
     }
     let args = [
-        0x00, // no variable storage (NOSTORE), per openrazer for this device
+        0x00, // Existing selector; differs from the pinned helper. See docs/SPEC.md.
         (dpi_x >> 8) as u8,
         (dpi_x & 0xFF) as u8,
         (dpi_y >> 8) as u8,

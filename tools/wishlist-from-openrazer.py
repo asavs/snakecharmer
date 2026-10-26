@@ -10,11 +10,15 @@ Everything in those tables is OpenRazer's knowledge, not ours:
 Credit is *not* generated -- it lives in CLAIMED below, so rerunning this never
 clobbers a contributor's row. Add an entry when a device PR merges.
 
-Usage:  python tools/wishlist-from-openrazer.py [--offline DIR]
+Usage:  python tools/wishlist-from-openrazer.py [--offline DIR] [--check]
+
+The source snapshot and Git blob IDs live in reference/openrazer-source.json.
+Both downloaded and offline files must match it before a table can be generated.
 """
 
 import argparse
 import ast
+import hashlib
 import json
 import pathlib
 import re
@@ -30,7 +34,7 @@ CLAIMED = {
              "Claude Opus 4.8 (high)"),
     0x00BE: ("shipped",
              "[@YUZHEthefool](https://github.com/YUZHEthefool) · "
-             "[#13](https://github.com/asavs/snakecharmer/issues/13)",
+             "[#14](https://github.com/asavs/snakecharmer/pull/14)",
              "Claude Opus 5"),
 }
 
@@ -41,12 +45,14 @@ CLAIMED = {
 # goes missing.
 ALIAS_PIDS = {0x00BF: 0x00BE}
 
-RAW = "https://raw.githubusercontent.com/openrazer/openrazer/master/"
-SOURCES = {
-    "razermouse_driver.h": RAW + "driver/razermouse_driver.h",
-    "razermouse_driver.c": RAW + "driver/razermouse_driver.c",
-    "mouse.py": RAW + "daemon/openrazer_daemon/hardware/mouse.py",
-}
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SNAPSHOT = json.loads((ROOT / "reference/openrazer-source.json").read_text(encoding="utf-8"))
+REVISION = SNAPSHOT["revision"]
+if not re.fullmatch(r"[0-9a-f]{40}", REVISION):
+    raise ValueError("OpenRazer source revision must be a full immutable commit SHA")
+RAW = f"https://raw.githubusercontent.com/openrazer/openrazer/{REVISION}/"
+SOURCES = {name: RAW + SNAPSHOT["files"][name]["path"] for name in
+           ["razermouse_driver.h", "razermouse_driver.c", "mouse.py"]}
 
 FAMILIES = ["DeathAdder", "Viper", "Basilisk", "Naga", "Cobra", "Mamba", "Lancehead",
             "Orochi", "Abyssus", "Pro Click", "Atheris", "Diamondback", "Imperator",
@@ -62,12 +68,26 @@ def fetch(offline):
     out = {}
     for name, url in SOURCES.items():
         if offline:
-            out[name] = (pathlib.Path(offline) / name).read_text(encoding="utf-8")
+            data = (pathlib.Path(offline) / name).read_bytes()
         else:
             print("fetching", url, file=sys.stderr)
             with urllib.request.urlopen(url, timeout=60) as response:
-                out[name] = response.read().decode("utf-8")
+                data = response.read()
+        # Git hashes the exact blob, including LF endings. Do not label local
+        # edits or a different checkout as the pinned revision's source.
+        actual = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
+        if actual != SNAPSHOT["files"][name]["git_blob_sha1"]:
+            raise ValueError(f"{name} does not match OpenRazer {REVISION}; "
+                             "use the pinned files without local edits or newline conversion")
+        out[name] = data.decode("utf-8")
     return out
+
+
+def source_note():
+    return (f"Source snapshot: [OpenRazer `{REVISION}`]"
+            f"(https://github.com/openrazer/openrazer/tree/{REVISION}). "
+            "File identities are recorded in "
+            "[`reference/openrazer-source.json`](../reference/openrazer-source.json).\n\n")
 
 
 def parse_devices(src):
@@ -264,26 +284,39 @@ def main():
     parser = argparse.ArgumentParser(description="Regenerate docs/DEVICE-WISHLIST.md.")
     parser.add_argument("--offline", metavar="DIR",
                         help="read the three OpenRazer files from DIR instead of fetching")
-    parser.add_argument("--json", action="store_true",
-                        help="dump the parsed devices as JSON and exit")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--json", action="store_true",
+                      help="dump the parsed devices as JSON and exit")
+    mode.add_argument("--check", action="store_true",
+                      help="fail if the pinned snapshot would change the generated tables; do not write")
     args = parser.parse_args()
 
-    src = fetch(args.offline)
+    try:
+        src = fetch(args.offline)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
     devices = parse_devices(src["mouse.py"])
     txn, poll = parse_driver(src["razermouse_driver.h"], src["razermouse_driver.c"])
     if args.json:
         json.dump(devices, sys.stdout, indent=1)
         return
 
-    doc = pathlib.Path(__file__).resolve().parent.parent / "docs" / "DEVICE-WISHLIST.md"
+    doc = ROOT / "docs" / "DEVICE-WISHLIST.md"
     text = doc.read_text(encoding="utf-8")
     begin, end = "<!-- BEGIN GENERATED TABLES -->", "<!-- END GENERATED TABLES -->"
     before, rest = text.split(begin, 1)
     _, after = rest.split(end, 1)
-    doc.write_text("%s%s\n\n%s%s%s" % (before, begin, render(devices, txn, poll), end, after),
-                   encoding="utf-8")
+    generated = "%s%s\n\n%s%s%s%s" % (
+        before, begin, source_note(), render(devices, txn, poll), end, after)
+    if args.check:
+        if generated != text:
+            print(f"{doc} is out of date for OpenRazer {REVISION}", file=sys.stderr)
+            return 1
+        print(f"{len(devices)} devices match OpenRazer {REVISION}")
+        return 0
+    doc.write_text(generated, encoding="utf-8")
     print("%d devices written to %s" % (len(devices), doc))
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

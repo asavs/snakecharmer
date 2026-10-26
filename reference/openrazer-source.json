@@ -1,0 +1,30 @@
+{
+  "repository": "https://github.com/openrazer/openrazer",
+  "revision": "477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d",
+  "files": {
+    "razercommon.c": {
+      "path": "driver/razercommon.c",
+      "git_blob_sha1": "fd6e82867d2f073371c7d93b8d97a30915849cea"
+    },
+    "razercommon.h": {
+      "path": "driver/razercommon.h",
+      "git_blob_sha1": "b469ba1bbf4f44a2fe000067aecb496fb0000899"
+    },
+    "razerchromacommon.c": {
+      "path": "driver/razerchromacommon.c",
+      "git_blob_sha1": "3c2c4c5b57b5dae624c0c6ecd3396e416e285503"
+    },
+    "razermouse_driver.c": {
+      "path": "driver/razermouse_driver.c",
+      "git_blob_sha1": "27614af90591f5cf3189590256ed7028b2aa47b1"
+    },
+    "razermouse_driver.h": {
+      "path": "driver/razermouse_driver.h",
+      "git_blob_sha1": "e108a7c0edf464cc339c60a2e4ffa84b903d93fe"
+    },
+    "mouse.py": {
+      "path": "daemon/openrazer_daemon/hardware/mouse.py",
+      "git_blob_sha1": "865d8468a244010b34278bdafc9629b9a81b206c"
+    }
+  }
+}

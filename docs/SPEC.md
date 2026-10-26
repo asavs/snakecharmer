@@ -145,8 +145,42 @@ device commands and do not trip the device-failure latch.
 Mode, DPI, polling-rate, and on-board bind setters read their corresponding command
 before writing and verify it afterward. Lighting has no effect-read command; it confirms
 the control channel with the existing DPI read and checks the effect acknowledgement.
-No color-read command is invented. Tests compare exact bytes against OpenRazer
-(`*_matches_openrazer`) and exercise failures through a simulated feature-report transport.
+No color-read command is invented. Tests assert encoded reports and exercise failures
+through a simulated feature-report transport. The reference comparison has the
+exceptions below; passing local byte tests does not resolve them.
+
+### Reference snapshot
+
+The 2026-10-26 source review uses
+[OpenRazer `477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d`](https://github.com/openrazer/openrazer/tree/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d).
+[`reference/openrazer-source.json`](../reference/openrazer-source.json) records exact Git
+blob IDs for the six reviewed files. This is a later review, not the unrecorded original
+port revision, and it adds no hardware verification.
+
+| Checked facts | Immutable source |
+|---|---|
+| 90-byte report layout, initialized header, XOR bytes 2 through 87 | [`razercommon.h`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razercommon.h#L124), [`razercommon.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razercommon.c#L111) |
+| Mode read/write classes, ids, size and allowed modes | [`razerchromacommon.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razerchromacommon.c#L24) |
+| DPI read layout; polling command families/rate bytes | [`razerchromacommon.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razerchromacommon.c#L1092) |
+| Extended lighting none, static, spectrum, single-color breathing layouts | [`razerchromacommon.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razerchromacommon.c#L477) |
+| Elite transaction `0x3F`/classic polling; V3 and both V4 Pro ids `0x1F`/extended polling | [`razermouse_driver.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razermouse_driver.c#L2129) |
+| USB ids, DPI ceilings 16000/30000/45000, Elite lighting, V3/V4 Pro polling rates | [`razermouse_driver.h`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razermouse_driver.h), [`mouse.py`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/daemon/openrazer_daemon/hardware/mouse.py) |
+
+**Unresolved DPI-write difference:** Snakecharmer sends argument 0 as `0x00`, named
+`NOSTORE` by OpenRazer. The pinned mouse driver chooses `NOSTORE` for the supported mice,
+but its [`razer_chroma_misc_set_dpi_xy` helper](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razerchromacommon.c#L1211)
+ignores that parameter and unconditionally writes `VARSTORE` (`0x01`). Therefore the
+current DPI write is not an exact match to that helper's output, and the source review
+does not establish its persistence semantics. No selector, CRC, or other packet byte
+was changed to work around this mismatch. It requires separate reference/capture
+investigation under AGENTS.md before claiming equivalence or changing device code.
+
+**Recorded polling difference:** the pinned driver sends extended polling once with
+selector `0x00` and again with `0x01` for the V3 and both V4 Pro ids
+([source](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razermouse_driver.c#L2282)).
+Snakecharmer retains only the `0x00` request; live read-back is not evidence of persistence.
+On-board keymaps and the Elite's DPI-button event codes remain separately recorded
+hardware/capture evidence, not facts supplied by this snapshot.
 
 ## Features
 
@@ -283,9 +317,9 @@ short:
   device that stops responding.
 - Never touch firmware, the bootloader, or DFU.
 - Never rebind left or right click.
-- On-board binds persist on the mouse until changed or reset. DPI is sent with the
-  no-store flag; lighting effects are sent with the variable-storage flag, as OpenRazer
-  sends them.
+- On-board binds persist on the mouse until changed or reset. Lighting effects use
+  OpenRazer's variable-storage selector. DPI writes retain selector `0x00`; the pinned
+  helper differs, so this document does not claim verified DPI persistence semantics.
 
 ## Resource budget
 
