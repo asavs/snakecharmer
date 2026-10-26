@@ -16,3 +16,4 @@ jobs:
       # SUPPORTED-DEVICES.md drift check.
       - run: cargo test --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo build --release

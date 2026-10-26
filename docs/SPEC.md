@@ -71,9 +71,11 @@ Binaries:
    polling rate, and on DPI-button mice the device mode, and rewrite any that drifted.
    Lighting is not re-asserted. A mouse without DPI buttons has no blocking read to notice
    an unplug, so the daemon reads its DPI every 5 seconds as a liveness check.
-6. When a device call fails, the session ends. The daemon retries after 3 s, doubling the
-   wait up to 30 s while the device keeps failing; a session that lasted 60 s resets it.
-   Tray clicks are still handled during the wait.
+6. A failed device command, read-back mismatch, or closed input collection stops device
+   communication. The daemon logs and displays the failure, removes the mouse hook, and
+   exits when the notice is dismissed, without recovery writes. If no supported device
+   is present at startup, enumeration retries after 3 s, backing off to 30 s; tray clicks
+   are still handled during that wait.
 
 Two supported mice plugged in at once is not supported. Commands go to whichever one
 enumerates first.
@@ -120,9 +122,17 @@ Every command is a 90-byte feature report (report ID 0, sent as a 91-byte buffer
 leading `0x00`), and every response is 90 bytes. The layout is documented at the top of
 `crates/razer-proto/src/lib.rs`: status, transaction id, data size, command class and id,
 80 argument bytes, and a CRC that is the XOR of bytes 2 to 87. `Mouse::send_command`
-retries up to five times on a busy status, then checks the response for status `0x02` and
-a matching command echo. Tests compare exact bytes against OpenRazer
-(`*_matches_openrazer`).
+sends each report once and requires status `0x02` and a matching command echo. BUSY is
+terminal too. A process-wide latch blocks every subsequent command after a transport,
+response, or verification failure, including commands on another handle or the reset
+notice thread. A mutex serializes complete read/write/read-back operations. Invalid
+local values are rejected before I/O and do not trip the latch.
+
+Mode, DPI, polling-rate, and on-board bind setters read their corresponding command
+before writing and verify it afterward. Lighting has no effect-read command; it confirms
+the control channel with the existing DPI read and checks the effect acknowledgement.
+No color-read command is invented. Tests compare exact bytes against OpenRazer
+(`*_matches_openrazer`) and exercise failures through a simulated feature-report transport.
 
 ## Features
 

@@ -25,7 +25,8 @@ jobs:
             exit 1
           fi
       - run: cargo test --workspace
-      - run: cargo build --release --bin snakecharmer --bin charmctl
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo build --release
       - name: Create the draft release
         shell: bash
         env:

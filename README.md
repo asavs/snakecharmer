@@ -347,9 +347,14 @@ what each level of "going deeper" would actually mean, see
 <details>
 <summary><b>…I unplug the mouse while Snakecharmer is running?</b></summary>
 
-The session ends and the daemon retries, starting at 3 seconds and backing off to 30. When a supported mouse comes
-back (the same one or a different supported model), it reconnects and re-applies your
-DPI, driver mode, and lighting automatically. You don't need to restart anything.
+Once a device command fails or an input collection closes, Snakecharmer stops device
+communication, logs the reason, shows a notice, and exits when you dismiss it. It sends
+no recovery commands and does not reconnect automatically. Check that the mouse still
+moves and clicks, then restart Snakecharmer when you are ready.
+
+The same stop applies to BUSY or any other non-success status, a malformed response,
+and a write whose read-back does not match. If no supported mouse has been opened yet,
+the daemon can still wait for one to appear.
 </details>
 
 <details>

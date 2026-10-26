@@ -103,7 +103,7 @@ cargo clippy --workspace --all-targets -- -D warnings     # what CI runs; no war
 
 The build produces `snakecharmer.exe` (the daemon) and `charmctl.exe` (the CLI) in
 `targetelease`, plus `diagram-editor.exe`, a dev tool for drawing button maps. These are
-the same test and clippy commands CI runs (`.github/workflows/ci.yml`), so run them before
+the same acceptance commands CI runs (`.github/workflows/ci.yml`), so run them before
 you push.
 
 Keep it small: the release exe is under 1 MB and idle RAM about 17 MB. Weigh new
@@ -121,7 +121,7 @@ attribution does.
 
 ## PR checklist
 
-- [ ] `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` are clean (see Dev setup).
+- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo build --release` are clean (see Dev setup).
 - [ ] New protocol code has **byte-exact tests** against the reference implementation.
 - [ ] You verified on **real hardware**, and unplug/replug restores the mouse's normal behavior.
 - [ ] `NOTICE` credits any project you sourced the protocol from.

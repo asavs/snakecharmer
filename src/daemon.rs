@@ -594,7 +594,7 @@ fn bootstrap_autostart(cfg: &mut Config, log: &Logger) {
 
 // --- Daemon ---------------------------------------------------------------
 
-/// Run the daemon forever, restarting the device session on unplug/sleep errors.
+/// Wait for a supported mouse, then run until Quit or a terminal device failure.
 pub fn run(mut cfg: Config, log: Logger) -> ! {
     let mut health = crate::health::HealthReporter::new();
     if let Err(error) = health.starting(cfg.polling_rate) {
@@ -645,6 +645,9 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         match result {
             Ok(()) => log.log("Session ended cleanly; restarting."),
             Err(e) => {
+                if e.requires_stop() {
+                    stop_for_safety(&e, &log, &mut health);
+                }
                 log.log(&format!(
                     "Session ended: {e}. Retrying in {}s (mouse unplugged/asleep?).",
                     delay.as_secs()
@@ -794,6 +797,19 @@ fn service_retry_gap(
     }
 }
 
+/// Report a terminal device failure without a recovery write or another session.
+fn stop_for_safety(error: &razer_hid::Error, log: &Logger, health: &mut crate::health::HealthReporter) -> ! {
+    razer_hid::stop_commands(error);
+    let message = format!("Device communication stopped: {error}.\n\nNo further commands will be sent. Check that the mouse still moves and clicks before restarting Snakecharmer.");
+    log.log(&format!("SAFETY STOP: {message}"));
+    if let Err(error) = health.session_failed(error, 0) {
+        log.log(&format!("WARN could not publish PC Vitals capsule: {error}"));
+    }
+    platform::mouse_hook::uninstall();
+    platform::alert("Snakecharmer ? device communication stopped", &message);
+    std::process::exit(1);
+}
+
 /// Clean daemon exit, shared by the in-session and no-device Quit paths:
 /// put the mouse back in hardware mode (`driver`: the session switched it to
 /// driver mode, so without this its DPI buttons go dead until a replug),
@@ -803,7 +819,7 @@ fn shutdown(log: &Logger, health: &mut crate::health::HealthReporter, driver: Op
     if let Some(ctrl) = driver {
         match ctrl.set_device_mode(DeviceMode::Hardware) {
             Ok(_) => log.log("Hardware mode restored."),
-            Err(e) => log.log(&format!("WARN could not restore hardware mode (replug to reset): {e}")),
+            Err(e) => stop_for_safety(&e, log, health),
         }
     }
     if let Err(error) = health.stopped() {
@@ -862,27 +878,22 @@ fn run_session(
     // Rebuild the tray menu around this device (DPI presets over its range).
     platform::tray::set_menu(build_menu_spec(Some(&spec), platform::autostart::is_enabled()));
 
-    // Lock DPI (non-fatal if it fails). Every supported device has DPI.
+    // Each setter confirms its read form before writing. A failure ends the session.
     let (dx, dy) = cfg.dpi_xy();
-    match ctrl.set_dpi(dx, dy) {
-        Ok((rx2, ry)) => log.log(&format!("DPI locked to {rx2} x {ry}.")),
-        Err(e) => log.log(&format!("WARN could not set DPI: {e}")),
-    }
+    let (rx2, ry) = ctrl.set_dpi(dx, dy)?;
+    log.log(&format!("DPI locked to {rx2} x {ry}."));
 
-    // Lock the polling rate if configured (non-fatal, like DPI); absent = leave as-is.
     if let Some(hz) = cfg.polling_rate {
-        match ctrl.set_polling_rate(hz) {
-            Ok(r) => log.log(&format!("Polling rate locked to {r} Hz.")),
-            Err(e) => log.log(&format!("WARN could not set polling rate: {e}")),
-        }
+        let r = ctrl.set_polling_rate(hz)?;
+        log.log(&format!("Polling rate locked to {r} Hz."));
     }
 
     // Apply configured startup lighting (unless "keep"; a logged no-op on
     // devices without lighting hardware — see `apply_startup_lighting`).
-    apply_startup_lighting(&ctrl, cfg, log);
+    apply_startup_lighting(&ctrl, cfg, log)?;
 
     migrate_thumb_remaps(&ctrl, cfg, bindings, log);
-    check_onboard_binds(&ctrl, cfg, log);
+    check_onboard_binds(&ctrl, cfg, log)?;
 
     // Driver mode and the DPI-button vendor-code listeners only apply to devices
     // that actually have the wheel DPI buttons. On a device without them there
@@ -950,6 +961,8 @@ fn run_session(
     let mut last_fire: Option<(u8, Instant)> = None;
 
     loop {
+        // A reset on the notice thread may have tripped the shared latch.
+        razer_hid::ensure_active()?;
         let refresh_due_in = health.refresh_due_in();
         let wait = tick.min(refresh_due_in);
         let woke_for_refresh = refresh_due_in <= tick;
@@ -966,15 +979,10 @@ fn run_session(
                 } else {
                     *settings_open = true;
                     // The on-board controls open on what the mouse stores, so
-                    // a leftover bind shows as itself (a failed read falls
-                    // back to the config alone).
+                    // a leftover bind shows as itself. A failed read stops the session.
                     let stored = razer_proto::keymap::spec_for(spec.product_id)
                         .map(|km| crate::onboard::read_binds(&ctrl, km))
-                        .transpose()
-                        .unwrap_or_else(|e| {
-                            log.log(&format!("WARN could not read on-board binds for settings: {e}"));
-                            None
-                        })
+                        .transpose()?
                         .unwrap_or_default();
                     open_settings_window(cfg, spec, &stored, tx);
                     log.log("Opened settings window.");
@@ -990,10 +998,9 @@ fn run_session(
                 }
             }
             Ok(Event::ListenerClosed) => {
-                // Verify the device is still alive; if not, restart the session.
-                if ctrl.get_device_mode().is_err() {
-                    return Err(razer_hid::Error::Verify("device lost".into()));
-                }
+                // Losing an input collection is a stop condition, not a reason
+                // to send another probe or restart writes on a new handle.
+                return Err(razer_hid::Error::Verify("device input collection closed".into()));
             }
             Err(RecvTimeoutError::Timeout) => {
                 if woke_for_refresh {
@@ -1006,8 +1013,7 @@ fn run_session(
                     reassert(&ctrl, cfg, log)?;
                     last_reassert = Instant::now();
                 } else {
-                    // Liveness only: a cheap read that errors out (ending the
-                    // session, triggering the retry loop) if the device is gone.
+                    // A failed liveness read stops device communication.
                     ctrl.get_dpi()?;
                 }
             }
@@ -1022,14 +1028,14 @@ fn run_session(
 }
 
 /// Write the `[onboard]` binds the config asks for (only the ones that differ)
-/// and return the buttons it configures. A bad config or a failed write is
-/// logged, not fatal; a bad config configures nothing.
+/// and return the buttons it configures. A bad config configures nothing;
+/// a failed device command stops the session.
 fn write_onboard_config(
     ctrl: &Mouse,
     km: &'static razer_proto::keymap::KeymapSpec,
     cfg: &Config,
     log: &Logger,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, razer_hid::Error> {
     use crate::onboard;
     let wanted = match onboard::parse_config(km, &cfg.onboard) {
         Ok(w) => w,
@@ -1038,15 +1044,10 @@ fn write_onboard_config(
             Vec::new()
         }
     };
-    match onboard::apply(ctrl, km, &wanted) {
-        Ok(changes) => {
-            for c in changes {
-                log.log(&format!("On-board bind written: {c}"));
-            }
-        }
-        Err(e) => log.log(&format!("WARN could not write [onboard] binds: {e}")),
+    for c in onboard::apply(ctrl, km, &wanted)? {
+        log.log(&format!("On-board bind written: {c}"));
     }
-    wanted.iter().map(|w| w.button).collect()
+    Ok(wanted.iter().map(|w| w.button).collect())
 }
 
 /// On a mouse that stores binds, the settings window has no software thumb
@@ -1070,30 +1071,23 @@ fn migrate_thumb_remaps(ctrl: &Mouse, cfg: &mut Config, bindings: &mut Bindings,
 
 /// Once per attach: write the `[onboard]` binds the config asks for (only the
 /// ones that differ), then read the rest and, if any are non-default leftovers,
-/// log them and offer to reset them. A failure (e.g. Synapse streaming lighting
-/// commands and tripping an echo mismatch) is only logged. The notice runs on a
-/// throwaway thread and is shown once per distinct set of leftovers per run.
-fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) {
+/// log them and offer to reset them. Device errors end the session. The notice
+/// runs on a throwaway thread and is shown once per distinct set of leftovers.
+fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::Error> {
     use crate::onboard;
     let spec = ctrl.spec();
     let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
         if !cfg.onboard.is_empty() {
             log.log(&format!("WARN [onboard] ignored: on-board binds aren't supported on the {}", spec.name));
         }
-        return;
+        return Ok(());
     };
-    let configured = write_onboard_config(ctrl, km, cfg, log);
-    let binds = match onboard::read_binds(ctrl, km) {
-        Ok(b) => b,
-        Err(e) => {
-            log.log(&format!("WARN could not read on-board binds: {e}"));
-            return;
-        }
-    };
+    let configured = write_onboard_config(ctrl, km, cfg, log)?;
+    let binds = onboard::read_binds(ctrl, km)?;
     let left = onboard::leftovers(&binds, &configured);
     if left.is_empty() {
         log.log("On-board binds match the config and the defaults.");
-        return;
+        return Ok(());
     }
     let described = onboard::describe(&left);
     log.log(&format!("WARN non-default binds stored on the mouse: {described}."));
@@ -1106,6 +1100,7 @@ fn check_onboard_binds(ctrl: &Mouse, cfg: &Config, log: &Logger) {
             }
         });
     }
+    Ok(())
 }
 
 /// The "reset them now?" answer. Runs on the notice's thread with its own
@@ -1131,13 +1126,13 @@ fn reset_leftovers(km: &'static razer_proto::keymap::KeymapSpec, configured: &[u
         }
         Err(e) => {
             log.log(&format!("WARN on-board reset failed: {e}"));
-            format!("The reset didn't complete: {e}\n\nTry again with `charmctl keymap reset`.")
+            format!("The reset didn't complete: {e}\n\nDevice communication has stopped. Check that the mouse still moves and clicks before restarting Snakecharmer.")
         }
     };
     platform::alert("Snakecharmer", &message);
 }
 
-fn apply_startup_lighting(ctrl: &Mouse, cfg: &Config, log: &Logger) {
+fn apply_startup_lighting(ctrl: &Mouse, cfg: &Config, log: &Logger) -> Result<(), razer_hid::Error> {
     if !ctrl.spec().has_rgb() {
         if !cfg.lighting.eq_ignore_ascii_case("keep") {
             log.log(&format!(
@@ -1146,21 +1141,22 @@ fn apply_startup_lighting(ctrl: &Mouse, cfg: &Config, log: &Logger) {
                 cfg.lighting
             ));
         }
-        return;
+        return Ok(());
     }
     // Each zone resolves its own effect + color (override, else device-wide),
     // so the wheel and logo can carry different lighting.
     for &zone in ctrl.spec().rgb_zones {
         let name = razer_proto::led::name(zone);
         match EffectSpec::from_config(cfg.zone_lighting(name), cfg.zone_color(name)) {
-            Ok(Some(effect)) => match effect.apply_zone(ctrl, zone) {
-                Ok(()) => log.log(&format!("Lighting ({name}) set to {}.", effect.describe())),
-                Err(e) => log.log(&format!("WARN could not set {name} lighting: {e}")),
-            },
+            Ok(Some(effect)) => {
+                effect.apply_zone(ctrl, zone)?;
+                log.log(&format!("Lighting ({name}) set to {}.", effect.describe()));
+            }
             Ok(None) => {} // "keep": leave this zone untouched
             Err(e) => log.log(&format!("WARN invalid {name} lighting config: {e}")),
         }
     }
+    Ok(())
 }
 
 /// Handle a menu command. Returns Ok(true) if Quit was selected.
@@ -1287,7 +1283,7 @@ fn handle_menu(
         }
         MenuAction::SetOnboard(button, value) => {
             // A rejected entry is reported and never stored; a failed write
-            // keeps the (valid) entry so the next attach retries it.
+            // keeps the valid entry, but device communication stops.
             let spec = ctrl.spec();
             let Some(km) = razer_proto::keymap::spec_for(spec.product_id) else {
                 return Ok(false);
@@ -1310,7 +1306,10 @@ fn handle_menu(
                         }
                         Ok(crate::onboard::expect_for(&w.bind))
                     }
-                    Err(e) => Err(format!("the mouse didn't take it ({e})")),
+                    Err(e) => {
+                        platform::settings::onboard_result(button, Err(format!("the mouse didn't take it ({e})")));
+                        return Err(e);
+                    }
                 },
                 Err(e) => Err(e),
             };
@@ -1343,14 +1342,14 @@ fn handle_menu(
             migrate_thumb_remaps(ctrl, cfg, bindings, log);
             *bindings = Bindings::from_config(cfg, log);
             let (dx, dy) = cfg.dpi_xy();
-            let _ = ctrl.set_dpi(dx, dy);
+            ctrl.set_dpi(dx, dy)?;
             if let Some(hz) = cfg.polling_rate {
-                let _ = ctrl.set_polling_rate(hz);
+                ctrl.set_polling_rate(hz)?;
             }
-            apply_startup_lighting(ctrl, cfg, log);
+            apply_startup_lighting(ctrl, cfg, log)?;
             apply_thumb_hook(cfg, log);
             if let Some(km) = razer_proto::keymap::spec_for(ctrl.spec().product_id) {
-                write_onboard_config(ctrl, km, cfg, log);
+                write_onboard_config(ctrl, km, cfg, log)?;
             }
             log.log("Menu: config reloaded and reapplied.");
         }
@@ -1387,6 +1386,7 @@ fn reader_thread(listener: Listener, tx: Sender<Event>, log: Logger) {
             }
             Err(e) => {
                 log.log(&format!("Listener {label} closed: {e}"));
+                razer_hid::stop_commands(&e);
                 let _ = tx.send(Event::ListenerClosed);
                 return;
             }
