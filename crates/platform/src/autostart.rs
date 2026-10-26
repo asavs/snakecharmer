@@ -3,20 +3,18 @@
 //! makes the app appear in the OS's own startup UI (Task Manager → Startup
 //! apps, Settings → Apps → Startup).
 //!
-//! The public surface deliberately exposes no path, key name, or registry
-//! concept, so the eventual MSIX/Store build can reimplement this one file on
-//! the WinRT `StartupTask` API without touching any caller. The OS is the
-//! single source of truth: the user can revoke the entry from Task Manager at
-//! any time (and a `StartupTask` enable can be refused by user or policy), so
-//! [`enable`]/[`disable`] return the *actual* resulting state and callers must
-//! render UI from that — never optimistically from what was requested.
+//! This module observes registration, not Windows' effective startup policy.
+//! Task Manager can disable startup independently of the Run value. The
+//! documented `StartupTask.State` API requires a packaged startup task; this
+//! unpackaged app does not decode or write undocumented StartupApproved data.
+//! See Microsoft's "Startup apps" and "StartupTask" documentation.
 //!
 //! Only the daemon (`snakecharmer.exe`) may call this module: the registered
 //! command comes from `current_exe()`, which is the wrong binary in
 //! `charmctl.exe` or `diagram-editor.exe`. There is deliberately no way to
 //! override the command string.
 
-use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_INVALID_DATA};
 use windows_sys::Win32::System::Registry::{
     RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegGetValueW, RegOpenKeyExW, RegSetValueExW,
     HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
@@ -46,45 +44,62 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// Whether the app is registered to start at login *right now*. The OS is the
-/// single source of truth — the user can revoke the registration from Task
-/// Manager at any time. Never fails: absent / unreadable / wrong-typed all
-/// mean "off".
-pub fn is_enabled() -> bool {
-    // SAFETY: read_command is a plain registry read; see its own comment.
-    unsafe { read_command().is_some() }
+/// What the Run value says. None of these states establishes whether Windows
+/// will launch the app: startup settings and policy can override registration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Registration {
+    Registered,
+    Absent,
+    /// The value could not be read or was not a valid string value.
+    Unknown,
 }
 
-/// Register the current exe to start at login. Idempotent. Returns the ACTUAL
-/// state after the attempt (a genuine read-back), not the request.
-pub fn enable() -> Result<bool, Error> {
+impl Registration {
+    fn from_command(command: Option<String>) -> Self {
+        if command.is_some() { Self::Registered } else { Self::Absent }
+    }
+}
+
+/// Read registration without treating an unreadable value as an absent one.
+pub fn registration() -> Registration {
+    read_registration().unwrap_or(Registration::Unknown)
+}
+
+fn read_registration() -> Result<Registration, Error> {
+    // SAFETY: read_command is a plain registry read; see its own comment.
+    unsafe { read_command() }.map(Registration::from_command)
+}
+
+/// Register the current exe, then read back registration. This does not change
+/// or verify the user's separate Windows startup setting.
+pub fn register() -> Result<Registration, Error> {
     let command = current_command()?;
     // SAFETY: write_command validates its own preconditions; see its comment.
     unsafe { write_command(&command)? };
-    Ok(is_enabled())
+    read_registration()
 }
 
 /// Remove the login registration. Idempotent (already-absent is success).
-/// Returns the ACTUAL state after the attempt, not the request.
-pub fn disable() -> Result<bool, Error> {
+/// Returns registration read-back; it does not alter Windows startup policy.
+pub fn unregister() -> Result<Registration, Error> {
     // SAFETY: delete_command is a plain registry delete; see its own comment.
     unsafe { delete_command()? };
-    Ok(is_enabled())
+    read_registration()
 }
 
-/// Re-point an already-enabled registration at the current exe (after a move
-/// or rebuild). Never enables anything; `Ok(false)` when autostart is off.
-pub fn refresh() -> Result<bool, Error> {
+/// Re-point an existing registration at the current exe after a move/rebuild.
+/// Does not create an absent value or change Windows' separate startup policy.
+pub fn refresh() -> Result<Registration, Error> {
     // SAFETY: read_command is a plain registry read; see its own comment.
-    let Some(existing) = (unsafe { read_command() }) else {
-        return Ok(false);
+    let Some(existing) = (unsafe { read_command()? }) else {
+        return Ok(Registration::Absent);
     };
     let want = current_command()?;
     if !command_matches(&existing, &want) {
         // SAFETY: write_command validates its own preconditions; see its comment.
         unsafe { write_command(&want)? };
     }
-    Ok(true)
+    read_registration()
 }
 
 /// The command line to register: the current exe, quoted. Run values are
@@ -104,14 +119,22 @@ fn to_wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// Read the registered command, or `None` when absent, unreadable, or not a
-/// string value (`RRF_RT_REG_SZ` rejects wrong-typed data).
+fn value_present(status: u32) -> Result<bool, Error> {
+    match status {
+        0 => Ok(true),
+        ERROR_FILE_NOT_FOUND => Ok(false),
+        status => Err(Error::Os { call: "RegGetValueW", status }),
+    }
+}
+
+/// Read the registered command. Only a missing key/value means `None`;
+/// unreadable or wrong-typed data is an error (`RRF_RT_REG_SZ` checks the type).
 ///
 /// SAFETY: two-call `RegGetValueW` sizing — the first call only writes the
 /// byte count, the second writes into a buffer allocated to exactly that
 /// count. All string arguments are NUL-terminated UTF-16 that outlive the
 /// calls.
-unsafe fn read_command() -> Option<String> {
+unsafe fn read_command() -> Result<Option<String>, Error> {
     let sub = to_wide(RUN_KEY);
     let val = to_wide(VALUE_NAME);
     let mut size: u32 = 0;
@@ -124,8 +147,11 @@ unsafe fn read_command() -> Option<String> {
         std::ptr::null_mut(),
         &mut size,
     );
-    if ok != 0 || size == 0 {
-        return None;
+    if !value_present(ok)? {
+        return Ok(None);
+    }
+    if size == 0 {
+        return Err(Error::Os { call: "RegGetValueW", status: ERROR_INVALID_DATA });
     }
     let mut buf = vec![0u16; (size as usize).div_ceil(2)];
     let ok = RegGetValueW(
@@ -137,11 +163,13 @@ unsafe fn read_command() -> Option<String> {
         buf.as_mut_ptr() as *mut _,
         &mut size,
     );
-    if ok != 0 {
-        return None;
+    if !value_present(ok)? {
+        return Ok(None);
     }
     let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    Some(String::from_utf16_lossy(&buf[..len]))
+    let command = String::from_utf16(&buf[..len])
+        .map_err(|_| Error::Os { call: "RegGetValueW", status: ERROR_INVALID_DATA })?;
+    Ok(Some(command))
 }
 
 /// Write `command` as the Run value.
@@ -225,16 +253,26 @@ mod tests {
         assert!(cmd.to_ascii_lowercase().contains(".exe"), "not an exe path: {cmd}");
     }
 
+    #[test]
+    fn read_failures_do_not_mean_absent_registration() {
+        use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_MORE_DATA, ERROR_UNSUPPORTED_TYPE};
+        assert_eq!(value_present(0), Ok(true));
+        assert_eq!(value_present(ERROR_FILE_NOT_FOUND), Ok(false));
+        for status in [ERROR_ACCESS_DENIED, ERROR_MORE_DATA, ERROR_UNSUPPORTED_TYPE] {
+            assert_eq!(value_present(status), Err(Error::Os { call: "RegGetValueW", status }));
+        }
+    }
+
     /// Round-trips the real HKCU Run value, restoring whatever was there.
     #[test]
     #[ignore = "writes to the developer's real HKCU Run key"]
     fn hkcu_roundtrip_restores_prior_state() {
         // SAFETY: same registry internals the public API uses.
-        let prior = unsafe { read_command() };
-        assert!(enable().unwrap(), "enable must read back as on");
-        assert!(is_enabled());
-        assert!(!disable().unwrap(), "disable must read back as off");
-        assert!(!is_enabled());
+        let prior = unsafe { read_command().unwrap() };
+        assert_eq!(register().unwrap(), Registration::Registered);
+        assert_eq!(registration(), Registration::Registered);
+        assert_eq!(unregister().unwrap(), Registration::Absent);
+        assert_eq!(registration(), Registration::Absent);
         if let Some(cmd) = prior {
             unsafe { write_command(&cmd).unwrap() };
         }

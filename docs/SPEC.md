@@ -200,8 +200,11 @@ Back and Forward are ordinary mouse buttons, so a software remap needs a global
 is configured. With `thumb_back` and `thumb_forward` both `none` (the default) there is no
 hook, and mouse events never pass through Snakecharmer. When the hook is installed, it
 passes through everything except a remapped thumb button, ignores injected events, and
-never blocks: it uses `try_lock` and passes the event through if the lock is taken. It
-applies to every mouse on the PC, not only the Razer one.
+uses `try_lock` and passes the event through without waiting for that mutex when it is
+taken. Chord allocation and `SendInput` still run synchronously, so callback latency is
+not bounded. Windows can silently remove a hook that exceeds its configured
+[`LowLevelHooksTimeout`](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelmouseproc).
+The hook applies to every mouse on the PC, not only the Razer one.
 
 On a mouse that stores binds (the V3), Back and Forward are bound on-board instead, and an
 existing software remap moves into `[onboard]` on first connect.
@@ -268,7 +271,7 @@ a device failure still stops communication rather than rolling back or retrying 
 ### Tray and settings window
 
 The tray menu has DPI presets within the device's range, lighting presets, Settings, a
-Start with Windows check, Reload config, and Quit. A left-click on the icon opens
+Request start with Windows check, Reload config, and Quit. A left-click on the icon opens
 settings.
 
 The settings window is built from plain Win32 common controls, with no GUI framework. It
@@ -285,8 +288,18 @@ no built-in vendor selection, and settings-only previews do not register raw inp
 
 On first run the daemon adds a `Snakecharmer` value under
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, which needs no admin rights.
-`autostart_bootstrapped` records that this happened, so if you turn it off it stays off.
-The tray check reads the registry, which is the only source of truth.
+`autostart_bootstrapped` records that this happened so a removed registration stays
+removed. The tray's **Request start with Windows** check represents this registration,
+not Windows' effective startup setting. Read failures are `Unknown`, displayed as
+**Startup request unavailable**; neither a toggle nor bootstrap writes an unreadable
+registration. Mutation read-back errors are reported instead of being treated as off.
+
+Windows startup settings and Task Manager can independently disable a registered app.
+This unpackaged Run-key backend does not query or override that setting, so a checked
+request does not establish that the app will start. Microsoft's documented
+[`StartupTask.State`](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask)
+applies to startup tasks declared in an app package; no StartupApproved binary layout is
+guessed here. See the [README](../README.md#start-with-windows) for the user-facing behavior.
 
 ### PC Vitals health capsule
 

@@ -141,7 +141,7 @@ pub const DEATHADDER_ELITE: DeviceSpec = DeviceSpec {
             // callouts) — benefit first, then the cost detail
             Shape::Text { role: Role::Note, at: (100, 252), anchor: Anchor::End, text: "default = no hook, zero cost" },
             Shape::Text { role: Role::Note, at: (100, 268), anchor: Anchor::End, text: "remaps use a global mouse hook" },
-            Shape::Text { role: Role::Note, at: (100, 284), anchor: Anchor::End, text: "(~µs per mouse event)" },
+            Shape::Text { role: Role::Note, at: (100, 284), anchor: Anchor::End, text: "(all pointing devices)" },
             // logo LED on the palm — RGB zone 0x04 (abstract marker; never Razer's logo)
             Shape::Circle { role: Role::RgbZone, cx: 228, cy: 300, r: 24 },
             Shape::Path { role: Role::RgbZone, start: (228, 284), closed: false, curves: &[

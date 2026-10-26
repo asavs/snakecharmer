@@ -59,7 +59,7 @@
   <text class="sub" x="100" y="238" text-anchor="end">XBUTTON1</text>
   <text class="sub" x="100" y="252" text-anchor="end">default = no hook, zero cost</text>
   <text class="sub" x="100" y="268" text-anchor="end">remaps use a global mouse hook</text>
-  <text class="sub" x="100" y="284" text-anchor="end">(~µs per mouse event)</text>
+  <text class="sub" x="100" y="284" text-anchor="end">(all pointing devices)</text>
   <circle class="rgb" cx="228" cy="300" r="24"/>
   <path class="rgb" d="M228 284 C212 292 244 308 228 316"/>
   <polyline class="lead" points="252,300 396,300"/>

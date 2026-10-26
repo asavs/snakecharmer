@@ -59,10 +59,9 @@ pub struct Config {
     /// How often (seconds) to re-assert driver mode + DPI.
     pub reassert_interval_secs: u64,
     /// Whether first-run autostart registration has already been attempted.
-    /// This is a one-shot latch, NOT the autostart setting: the registry
-    /// (`platform::autostart`) is the only source of truth for current state,
-    /// because the user can revoke it from Task Manager without us running.
-    /// All this does is stop us ever re-enabling after the user turns it off.
+    /// This one-shot latch stops us recreating a removed login registration.
+    /// `platform::autostart` reads that registration; it does not query the
+    /// separate Windows startup setting that can suppress the registered app.
     pub autostart_bootstrapped: bool,
     /// Per-zone lighting overrides, keyed by zone name (`wheel`, `logo`).
     /// A zone without an entry (or with a field unset) uses the device-wide

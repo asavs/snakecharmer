@@ -949,7 +949,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                 // right beside the thumb dropdowns — stated exactly once.)
                 let _ = mk(
                     "STATIC",
-                    "Default = no hook, zero cost; remaps use a global hook (~\u{00B5}s per mouse event).",
+                    "Default = no hook; remaps apply to every pointing device on this PC.",
                     SS_CENTER,
                     0,
                     MARGIN,

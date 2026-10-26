@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use razer_hid::{aux_collection_paths, Listener, Mouse};
 use razer_proto::{DeviceMode, DeviceSpec, DpiButtons, Rgb};
+use platform::autostart::Registration;
 
 use crate::actions::Action;
 use crate::config::Config;
@@ -44,7 +45,7 @@ pub enum MenuAction {
     SettingsClosed,
     ReloadConfig,
     /// Flip the "Start with Windows" registration. Carries no payload: the
-    /// handler reads the current OS state at click time and inverts *that*,
+    /// handler reads the current registration at click time and inverts that,
     /// so a stale tray tick self-corrects instead of writing the wrong value.
     ToggleAutostart,
     /// The user clicked Retry on the no-device notice: probe for the mouse
@@ -366,10 +367,9 @@ fn dpi_presets(spec: Option<&DeviceSpec>) -> Vec<u16> {
     v
 }
 
-/// Build the tray menu. Pure: `autostart` is the current "Start with Windows"
-/// state, read by the caller (`platform::autostart::is_enabled()`) — the tick
-/// always renders real OS state, never an optimistic guess.
-fn build_menu_spec(spec: Option<&DeviceSpec>, autostart: bool) -> Vec<platform::tray::MenuItem> {
+/// The startup item shows the registration request, not Windows' separate
+/// effective startup policy. A failed read must not look like an unchecked box.
+fn build_menu_spec(spec: Option<&DeviceSpec>, autostart: Registration) -> Vec<platform::tray::MenuItem> {
     use menu_id::*;
     use platform::tray::MenuItem as M;
     let dpi_items: Vec<M> = dpi_presets(spec)
@@ -407,7 +407,10 @@ fn build_menu_spec(spec: Option<&DeviceSpec>, autostart: bool) -> Vec<platform::
         ),
         M::Separator,
         M::action(SETTINGS, "Settings..."),
-        M::check(AUTOSTART, "Start with Windows", autostart),
+        match autostart {
+            Registration::Unknown => M::action(AUTOSTART, "Startup request unavailable"),
+            state => M::check(AUTOSTART, "Request start with Windows", state == Registration::Registered),
+        },
         M::action(RELOAD, "Reload config"),
         M::action(QUIT, "Quit"),
     ]
@@ -452,26 +455,37 @@ fn menu_action_for(id: u32) -> Option<MenuAction> {
 ///
 /// Shared by the in-session and no-device paths (the action is
 /// device-independent; `spec` only shapes the rebuilt menu). Reads the current
-/// OS state at click time and inverts *that*; on error it re-reads rather than
-/// assumes, so the menu always ends up showing what the OS actually holds —
-/// an `enable()` can be refused (see `platform::autostart`).
+/// registration at click time. An unreadable value is left alone, and a
+/// failed mutation re-reads registration rather than assuming success.
 fn toggle_autostart(spec: Option<&DeviceSpec>, log: &Logger) {
-    let want = !platform::autostart::is_enabled();
+    let want = match platform::autostart::registration() {
+        Registration::Registered => Registration::Absent,
+        Registration::Absent => Registration::Registered,
+        Registration::Unknown => {
+            log.log("WARN startup registration is unreadable; leaving it unchanged.");
+            platform::tray::set_menu(build_menu_spec(spec, Registration::Unknown));
+            return;
+        }
+    };
     let attempt =
-        if want { platform::autostart::enable() } else { platform::autostart::disable() };
+        if want == Registration::Registered { platform::autostart::register() } else { platform::autostart::unregister() };
     let actual = match attempt {
         Ok(state) => state,
         Err(e) => {
-            log.log(&format!("WARN could not update Start with Windows: {e}"));
-            platform::autostart::is_enabled()
+            log.log(&format!("WARN could not update startup registration: {e}"));
+            platform::autostart::registration()
         }
     };
-    let describe = |on: bool| if on { "on" } else { "off" };
+    let describe = |state| match state {
+        Registration::Registered => "registered",
+        Registration::Absent => "absent",
+        Registration::Unknown => "unavailable",
+    };
     if actual == want {
-        log.log(&format!("Menu: Start with Windows -> {}.", describe(actual)));
+        log.log(&format!("Menu: startup request -> {}. Windows startup settings can override the request.", describe(actual)));
     } else {
         log.log(&format!(
-            "WARN Start with Windows: requested {}, but the OS reports {}.",
+            "WARN startup request: wanted {}, registration read-back is {}.",
             describe(want),
             describe(actual)
         ));
@@ -488,13 +502,15 @@ enum AutostartBoot {
 }
 
 /// never bootstrapped -> Register (on by default, exactly once)
-/// bootstrapped + on  -> Refresh  (self-heal a stale exe path after a move/rebuild)
-/// bootstrapped + off -> Nothing  (the user turned it off — respect it)
-fn autostart_boot_plan(bootstrapped: bool, currently_enabled: bool) -> AutostartBoot {
-    match (bootstrapped, currently_enabled) {
+/// bootstrapped + registered -> Refresh (repair a stale executable path)
+/// bootstrapped + absent -> Nothing (respect the removed registration)
+/// unreadable -> Nothing (do not overwrite a registration we cannot inspect)
+fn autostart_boot_plan(bootstrapped: bool, registration: Registration) -> AutostartBoot {
+    match (bootstrapped, registration) {
+        (_, Registration::Unknown) => AutostartBoot::Nothing,
         (false, _) => AutostartBoot::Register,
-        (true, true) => AutostartBoot::Refresh,
-        (true, false) => AutostartBoot::Nothing,
+        (true, Registration::Registered) => AutostartBoot::Refresh,
+        (true, Registration::Absent) => AutostartBoot::Nothing,
     }
 }
 
@@ -508,11 +524,12 @@ fn bootstrap_autostart(cfg: &mut Config, log: &Logger) {
     if cfg!(debug_assertions) {
         return;
     }
-    match autostart_boot_plan(cfg.autostart_bootstrapped, platform::autostart::is_enabled()) {
+    let registration = platform::autostart::registration();
+    match autostart_boot_plan(cfg.autostart_bootstrapped, registration) {
         AutostartBoot::Register => {
-            match platform::autostart::enable() {
-                Ok(true) => log.log("Start with Windows registered (first run)."),
-                Ok(false) => log.log("WARN Start with Windows registration did not take."),
+            match platform::autostart::register() {
+                Ok(Registration::Registered) => log.log("Start with Windows requested (first run); Windows startup settings can override it."),
+                Ok(_) => log.log("WARN startup registration did not read back as registered."),
                 Err(e) => log.log(&format!("WARN could not register Start with Windows: {e}")),
             }
             cfg.autostart_bootstrapped = true;
@@ -523,7 +540,11 @@ fn bootstrap_autostart(cfg: &mut Config, log: &Logger) {
                 log.log(&format!("WARN could not refresh Start with Windows entry: {e}"));
             }
         }
-        AutostartBoot::Nothing => {}
+        AutostartBoot::Nothing => {
+            if registration == Registration::Unknown {
+                log.log("WARN startup registration is unreadable; skipping registration refresh.");
+            }
+        }
     }
 }
 
@@ -545,7 +566,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
     ));
 
     // Register/refresh "Start with Windows" before the tray spawns, so the
-    // initial menu renders the true tick.
+    // initial menu reflects the registration read-back.
     bootstrap_autostart(&mut cfg, &log);
 
     let (tx, rx) = mpsc::channel::<Event>();
@@ -556,7 +577,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         thread::spawn(move || {
             platform::tray::run(
                 "Snakecharmer",
-                build_menu_spec(None, platform::autostart::is_enabled()),
+                build_menu_spec(None, platform::autostart::registration()),
                 move |id| {
                     if let Some(a) = menu_action_for(id) {
                         let _ = tx.send(Event::Menu(a));
@@ -919,7 +940,7 @@ fn run_session(
         spec.dpi_buttons.is_some()
     ));
     // Rebuild the tray menu around this device (DPI presets over its range).
-    platform::tray::set_menu(build_menu_spec(Some(&spec), platform::autostart::is_enabled()));
+    platform::tray::set_menu(build_menu_spec(Some(&spec), platform::autostart::registration()));
 
     let outcome = apply_config_candidate(cfg, cfg.clone(), spec, |candidate| {
         // Each setter confirms its read form before writing. A device failure
@@ -1854,13 +1875,17 @@ mod tests {
     }
 
     #[test]
-    fn autostart_boot_plan_never_re_enables() {
-        assert_eq!(autostart_boot_plan(false, false), AutostartBoot::Register);
-        assert_eq!(autostart_boot_plan(false, true), AutostartBoot::Register);
-        assert_eq!(autostart_boot_plan(true, true), AutostartBoot::Refresh);
-        // The load-bearing row: once the user turns autostart off, the
-        // bootstrap must never re-enable it.
-        assert_eq!(autostart_boot_plan(true, false), AutostartBoot::Nothing);
+    fn autostart_boot_plan_respects_absent_or_unknown_registration() {
+        assert_eq!(autostart_boot_plan(false, Registration::Absent), AutostartBoot::Register);
+        assert_eq!(autostart_boot_plan(false, Registration::Registered), AutostartBoot::Register);
+        assert_eq!(autostart_boot_plan(true, Registration::Registered), AutostartBoot::Refresh);
+        // A removed registration must not be recreated after bootstrap.
+        assert_eq!(autostart_boot_plan(true, Registration::Absent), AutostartBoot::Nothing);
+        // Failure to inspect an existing request must never authorize a write,
+        // including before first-run bootstrap has been recorded.
+        for bootstrapped in [false, true] {
+            assert_eq!(autostart_boot_plan(bootstrapped, Registration::Unknown), AutostartBoot::Nothing);
+        }
     }
 
     #[test]
@@ -1879,7 +1904,7 @@ mod tests {
 
     #[test]
     fn menu_spec_renders_autostart_tick() {
-        for state in [true, false] {
+        for state in [Registration::Registered, Registration::Absent] {
             let items = build_menu_spec(None, state);
             let tick = items.iter().find_map(|i| match i {
                 platform::tray::MenuItem::Check { id, checked, .. }
@@ -1889,8 +1914,14 @@ mod tests {
                 }
                 _ => None,
             });
-            assert_eq!(tick, Some(state), "the tick must render the passed state, never optimism");
+            assert_eq!(tick, Some(state == Registration::Registered));
         }
+        let items = build_menu_spec(None, Registration::Unknown);
+        assert!(items.iter().any(|item| matches!(item,
+            platform::tray::MenuItem::Action { id, label }
+                if *id == menu_id::AUTOSTART && label == "Startup request unavailable")));
+        assert!(!items.iter().any(|item| matches!(item,
+            platform::tray::MenuItem::Check { id, .. } if *id == menu_id::AUTOSTART)));
     }
 
     #[test]
