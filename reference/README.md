@@ -15,8 +15,7 @@ your mouse or keyboard.
 
 Razer mice have a volatile "device mode" HID feature (protocol taken from the open-source
 [OpenRazer](https://github.com/openrazer/openrazer) Linux driver — the same reversible
-command Synapse sends at every boot; **firmware is never touched**, and unplugging the
-mouse always restores factory behavior):
+command Synapse sends at every boot; **firmware is never touched**):
 
 - **Hardware mode `0x00`** (factory): the DPI buttons cycle DPI stages inside the firmware
   and send *nothing* to the PC.
@@ -45,6 +44,9 @@ keystrokes you configure (default: Ctrl+C / Ctrl+V).
 
 ## Running it (to experiment / crack a device)
 
+Run one controller at a time: quit Snakecharmer and Synapse before running the device
+scripts. These standalone Python scripts do not coordinate with another process.
+
 ```powershell
 python -m pip install hidapi
 
@@ -71,8 +73,14 @@ mirroring what OpenRazer does on Linux.
 
 ## Safety / recovery
 
-- Device mode is **volatile**: unplug + replug the mouse and it is 100% back to factory
-  behavior. Nothing persistent is ever written to the mouse.
+- Device mode is **volatile**; unplugging and reconnecting the Elite restores hardware
+  mode. These scripts do not reset stored settings or write persistent bindings.
+- Both setters confirm their read command before writing and require an exact read-back.
+  A transport error, malformed reply, any status other than `0x02` (including BUSY), or a
+  read-back mismatch stops all further control commands in that Python process.
+- The listener exits after a device failure; it does not reconnect or retry writes. Check
+  that the mouse still moves and clicks before manually restarting the script. If no mouse
+  is present when started, the script reports the error and exits too.
 - Only documented OpenRazer commands are ever sent: set/get device mode (class `0x00`, id
   `0x04`/`0x84`) and set/get DPI (class `0x04`, id `0x05`/`0x85`), transaction id `0x3F`
   (the DeathAdder Elite's, per `razermouse_driver.c`).
@@ -80,6 +88,16 @@ mirroring what OpenRazer does on Linux.
   modes and are unaffected.
 - **Never fuzz or guess feature reports** — only send commands read out of OpenRazer (or
   another FOSS reference). See `../docs/CRACKING-MICE-GUIDE.md` §8 for the full safety rules.
+
+The hardware-free checks run in CI and need only Python's standard library:
+
+```powershell
+python -m unittest discover -s reference -p "test_*.py"
+python reference/keymap_diff.py --self-test
+```
+
+The transport tests replace HID and Win32 dependencies with fakes. They do not validate
+real hardware behavior.
 
 ## Protocol reference (as researched from OpenRazer)
 
