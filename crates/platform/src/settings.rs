@@ -59,10 +59,11 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     CBS_AUTOHSCROLL, CBS_DROPDOWN, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETLBTEXT, CB_GETLBTEXTLEN, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
     HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DRAWITEM, WM_HSCROLL,
-    WM_MOUSEMOVE, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WNDPROC, WS_CHILD, WS_OVERLAPPED,
+    WM_MOUSEMOVE, WM_NCDESTROY, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WNDPROC, WS_CHILD, WS_OVERLAPPED,
     WS_CAPTION, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, RI_KEY_BREAK, WM_KEYDOWN, WM_SETFOCUS,
 };
 
+use std::rc::Rc;
 use std::sync::atomic::{AtomicIsize, Ordering};
 
 use crate::diagram::{self, CalloutSlot, Diagram, Palette};
@@ -411,7 +412,7 @@ struct Swatch {
 }
 
 struct WindowState {
-    on_event: Box<dyn Fn(SettingsEvent)>,
+    on_event: Rc<dyn Fn(SettingsEvent)>,
     tb: HWND,
     lbl_dpi: HWND,
     /// One entry per lighting zone (empty when the device has no lighting).
@@ -429,10 +430,10 @@ struct WindowState {
     razer_mods: Mods,
     /// Owned UI font (Segoe UI 9 pt) shared by all controls.
     ui_font: HFONT,
-    /// Runtime-drawn titlebar/taskbar icon (freed on `WM_DESTROY`); null if
+    /// Runtime-drawn titlebar/taskbar icon (freed on `WM_NCDESTROY`); null if
     /// icon creation failed.
     hicon: HICON,
-    pane: Option<DiagramPane>,
+    pane: Option<Rc<DiagramPane>>,
     dpi_min: u16,
     dpi_max: u16,
 }
@@ -494,7 +495,7 @@ unsafe fn os_dark_mode() -> bool {
 pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
     // SAFETY: standard Win32 control creation. All wide-string buffers outlive
     // their calls; the boxed WindowState is owned by the window via GWLP_USERDATA
-    // (see the tray module for the same pattern) and dropped on WM_DESTROY.
+    // (see the tray module for the same pattern) and dropped on WM_NCDESTROY.
     unsafe {
         let icc = INITCOMMONCONTROLSEX {
             dwSize: std::mem::size_of::<INITCOMMONCONTROLSEX>() as u32,
@@ -745,12 +746,12 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // Horizontally the *body* sits on the window centerline (see body_off);
         // vertically it hangs one dia_gap below the top cluster.
         let pane_origin = (pane_origin_x, MARGIN + top_h + dia_gap);
-        let pane = pane_meta.map(|(scale, palette, _)| DiagramPane {
+        let pane = pane_meta.map(|(scale, palette, _)| Rc::new(DiagramPane {
             diagram: init.diagram.clone().expect("pane_meta implies a diagram"),
             origin: pane_origin,
             scale,
             palette,
-        });
+        }));
 
         // --- Top cluster, every row centered. Creation order = tab order:
         // DPI slider row, polling, lighting, per-button dropdowns, then Save.
@@ -1051,7 +1052,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         );
 
         let state = Box::new(WindowState {
-            on_event: Box::new(on_event),
+            on_event: Rc::new(on_event),
             tb,
             lbl_dpi,
             swatches,
@@ -1111,7 +1112,7 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
             if msg.message == WM_KEYDOWN && msg.wParam == 0x09 && GetFocus() == hwnd {
-                if let Some(from) = state_mut(hwnd).and_then(|st| st.return_focus.take()) {
+                if let Some(from) = with_state(hwnd, |st| st.return_focus.take()).flatten() {
                     let back = GetKeyState(0x10) < 0;
                     SetFocus(GetNextDlgTabItem(hwnd, from, back as i32));
                     continue;
@@ -1127,10 +1128,20 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
     }
 }
 
-unsafe fn state_mut<'a>(hwnd: HWND) -> Option<&'a mut WindowState> {
+/// Access state only on its owning GUI thread. The closure must not call Win32
+/// or user callbacks: either can dispatch another message or destroy the window.
+/// Its result is independent of the borrow, so callers take owned snapshots and
+/// reacquire state after any operation that can reenter the window procedure.
+unsafe fn with_state<R>(hwnd: HWND, f: impl FnOnce(&mut WindowState) -> R) -> Option<R> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, GWLP_USERDATA};
     let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut WindowState;
-    ptr.as_mut()
+    ptr.as_mut().map(f)
+}
+
+unsafe fn emit(hwnd: HWND, event: SettingsEvent) {
+    if let Some(callback) = with_state(hwnd, |st| Rc::clone(&st.on_event)) {
+        callback(event);
+    }
 }
 
 /// Replace a swatch button's WNDPROC with [`swatch_wndproc`], stashing the
@@ -1146,18 +1157,29 @@ unsafe fn subclass_swatch(hwnd: HWND) {
 /// Tracks hover on one swatch button, toggling [`Swatch::hovered`] (read by
 /// [`WM_DRAWITEM`] to paint the highlighted border) and forwarding every
 /// other message to the original BUTTON WNDPROC.
-unsafe extern "system" fn swatch_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn swatch_wndproc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, GWLP_USERDATA};
 
     let set_hovered = |hovered: bool| {
-        if let Some(st) = state_mut(GetParent(hwnd)) {
-            if let Some(sw) = st.swatches.iter_mut().find(|s| s.hwnd == hwnd) {
-                if sw.hovered != hovered {
+        let changed = with_state(GetParent(hwnd), |st| {
+            st.swatches
+                .iter_mut()
+                .find(|s| s.hwnd == hwnd)
+                .is_some_and(|sw| {
+                    let changed = sw.hovered != hovered;
                     sw.hovered = hovered;
-                    InvalidateRect(hwnd, std::ptr::null(), 0);
-                }
-            }
+                    changed
+                })
+        })
+        .unwrap_or(false);
+        if changed {
+            InvalidateRect(hwnd, std::ptr::null(), 0);
         }
     };
     match msg {
@@ -1225,11 +1247,7 @@ unsafe extern "system" fn recorder_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM,
                         let text = to_wide(&name);
                         SetWindowTextW(hwnd, text.as_ptr());
                         let combo = GetParent(hwnd);
-                        if let Some(st) = state_mut(GetParent(combo)) {
-                            if let Some(k) = st.onboard_edits.iter().position(|e| e.hwnd == combo) {
-                                apply_onboard(st, k, name);
-                            }
-                        }
+                        apply_onboard(GetParent(combo), combo, name);
                     }
                 }
                 return 0;
@@ -1267,23 +1285,29 @@ unsafe fn combo_item_text(cb: HWND, i: LRESULT) -> Option<String> {
 /// applied, and remember it, so a focus change without an edit stays quiet.
 /// The status line says it's being saved; the app's [`onboard_result`] says
 /// how it went. Focus leaves the box so the test press isn't recorded.
-fn apply_onboard(st: &mut WindowState, k: usize, text: String) {
-    let edit = &mut st.onboard_edits[k];
-    if text.trim() == edit.last.trim() {
-        return;
+unsafe fn apply_onboard(hwnd: HWND, combo: HWND, text: String) {
+    let update = with_state(hwnd, |st| {
+        let edit = st.onboard_edits.iter_mut().find(|e| e.hwnd == combo)?;
+        if text.trim() == edit.last.trim() {
+            return None;
+        }
+        edit.last = text.clone();
+        let status = format!(
+            "{}: saving {} to the mouse\u{2026}",
+            edit.label,
+            text.trim()
+        );
+        let id = edit.id;
+        st.testing = None;
+        st.return_focus = Some(combo);
+        Some((st.status, status, id, Rc::clone(&st.on_event)))
+    })
+    .flatten();
+    if let Some((status_hwnd, status, id, callback)) = update {
+        set_text(status_hwnd, &status);
+        PostMessageW(hwnd, WM_APP_DEFOCUS, 0, 0);
+        callback(SettingsEvent::Onboard(id, text.trim().to_string()));
     }
-    edit.last = text.clone();
-    let (id, combo) = (edit.id, edit.hwnd);
-    let status = format!("{}: saving {} to the mouse\u{2026}", edit.label, text.trim());
-    st.testing = None;
-    st.return_focus = Some(combo);
-    // SAFETY: the status static and the combo's parent window are alive while
-    // WindowState is.
-    unsafe {
-        set_text(st.status, &status);
-        PostMessageW(GetParent(combo), WM_APP_DEFOCUS, 0, 0);
-    }
-    (st.on_event)(SettingsEvent::Onboard(id, text.trim().to_string()));
 }
 
 /// Read one raw input and return what a Razer device sent, if it's a press the
@@ -1292,7 +1316,7 @@ fn apply_onboard(st: &mut WindowState, k: usize, text: String) {
 /// give `None`.
 ///
 /// SAFETY: `lparam` is the HRAWINPUT of a WM_INPUT message.
-unsafe fn read_razer_input(st: &mut WindowState, lparam: LPARAM) -> Option<Got> {
+unsafe fn read_razer_input(hwnd: HWND, lparam: LPARAM) -> Option<Got> {
     let mut raw: RAWINPUT = std::mem::zeroed();
     let mut size = std::mem::size_of::<RAWINPUT>() as u32;
     let n = GetRawInputData(
@@ -1306,10 +1330,21 @@ unsafe fn read_razer_input(st: &mut WindowState, lparam: LPARAM) -> Option<Got> 
         return None;
     }
     let device = raw.header.hDevice as isize;
-    let razer = *st.razer_devices.entry(device).or_insert_with(|| is_razer_device(raw.header.hDevice));
-    if !razer {
-        return None;
-    }
+    let known = with_state(hwnd, |st| st.razer_devices.get(&device).copied()).flatten();
+    let razer = known.unwrap_or_else(|| is_razer_device(raw.header.hDevice));
+    with_state(hwnd, |st| {
+        st.razer_devices.insert(device, razer);
+        if razer {
+            interpret_razer_input(st, &raw)
+        } else {
+            None
+        }
+    })
+    .flatten()
+}
+
+/// Interpret an already-read report without calling back into Windows.
+unsafe fn interpret_razer_input(st: &mut WindowState, raw: &RAWINPUT) -> Option<Got> {
     match raw.header.dwType {
         RIM_TYPEKEYBOARD => {
             let kb = raw.data.keyboard;
@@ -1341,7 +1376,11 @@ unsafe fn read_razer_input(st: &mut WindowState, lparam: LPARAM) -> Option<Got> 
             } else if flags & 0x0100 != 0 {
                 MouseSend::Forward
             } else if flags & 0x0400 != 0 {
-                if b.usButtonData as i16 > 0 { MouseSend::ScrollUp } else { MouseSend::ScrollDown }
+                if b.usButtonData as i16 > 0 {
+                    MouseSend::ScrollUp
+                } else {
+                    MouseSend::ScrollDown
+                }
             } else {
                 return None;
             };
@@ -1386,61 +1425,67 @@ fn snap50(v: i32) -> u16 {
     (((v + 25) / 50) * 50).clamp(0, 65535) as u16
 }
 
-unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn wnd_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     match msg {
         WM_APP_DEFOCUS => {
             SetFocus(hwnd);
             0
         }
-        // Like a dialog: focus on the window goes to its first control, except
-        // while it's parked there after an on-board write (Tab resumes then).
+        // Focus notifications can reenter us, so take no state borrow into SetFocus.
         WM_SETFOCUS => {
-            if let Some(st) = state_mut(hwnd) {
-                if st.return_focus.is_none() {
-                    let first = GetNextDlgTabItem(hwnd, std::ptr::null_mut(), 0);
-                    if !first.is_null() {
-                        SetFocus(first);
-                    }
+            if with_state(hwnd, |st| st.return_focus.is_none()) == Some(true) {
+                let first = GetNextDlgTabItem(hwnd, std::ptr::null_mut(), 0);
+                if !first.is_null() {
+                    SetFocus(first);
                 }
             }
             0
         }
         WM_APP_ONBOARD => {
             let (button, result) = *Box::from_raw(lparam as *mut (u8, Result<Expect, String>));
-            if let Some(st) = state_mut(hwnd) {
-                if let Some(k) = st.onboard_edits.iter().position(|e| e.id == button) {
-                    let label = st.onboard_edits[k].label.clone();
-                    let text = match &result {
-                        Ok(Expect::Key(_) | Expect::Mouse(_)) => {
-                            format!("{label}: saved to the mouse. Press {label} on your mouse to test it.")
-                        }
-                        Ok(Expect::Nothing) => format!("{label}: saved. The button now does nothing."),
-                        Ok(Expect::Unmanaged) => {
-                            format!("{label}: no longer set by Snakecharmer; the mouse keeps its current bind.")
-                        }
-                        Err(e) => format!("\u{2717} {label} wasn't saved: {e}"),
-                    };
-                    set_text(st.status, &text);
-                    st.testing = match result {
-                        Ok(e @ (Expect::Key(_) | Expect::Mouse(_))) => Some((k, e)),
-                        _ => None,
-                    };
-                }
+            let update = with_state(hwnd, |st| {
+                let k = st.onboard_edits.iter().position(|e| e.id == button)?;
+                let label = &st.onboard_edits[k].label;
+                let text = match &result {
+                    Ok(Expect::Key(_) | Expect::Mouse(_)) => {
+                        format!("{label}: saved to the mouse. Press {label} on your mouse to test it.")
+                    }
+                    Ok(Expect::Nothing) => format!("{label}: saved. The button now does nothing."),
+                    Ok(Expect::Unmanaged) => {
+                        format!("{label}: no longer set by Snakecharmer; the mouse keeps its current bind.")
+                    }
+                    Err(e) => format!("\u{2717} {label} wasn't saved: {e}"),
+                };
+                st.testing = match result {
+                    Ok(e @ (Expect::Key(_) | Expect::Mouse(_))) => Some((k, e)),
+                    _ => None,
+                };
+                Some((st.status, text))
+            }).flatten();
+            if let Some((status, text)) = update {
+                set_text(status, &text);
             }
             0
         }
         WM_INPUT => {
-            if let Some(st) = state_mut(hwnd) {
-                if st.testing.is_some() {
-                    if let Some(got) = read_razer_input(st, lparam) {
-                        let (k, expect) = st.testing.clone().unwrap();
-                        let label = st.onboard_edits[k].label.clone();
-                        if let Some((text, done)) = verdict(&label, &expect, &got) {
-                            set_text(st.status, &text);
-                            if done {
-                                st.testing = None;
-                            }
+            if with_state(hwnd, |st| st.testing.is_some()) == Some(true) {
+                if let Some(got) = read_razer_input(hwnd, lparam) {
+                    let update = with_state(hwnd, |st| {
+                        let (k, expect) = st.testing.as_ref()?;
+                        let (text, done) = verdict(&st.onboard_edits[*k].label, expect, &got)?;
+                        if done {
+                            st.testing = None;
                         }
+                        Some((st.status, text))
+                    })
+                    .flatten();
+                    if let Some((status, text)) = update {
+                        set_text(status, &text);
                     }
                 }
             }
@@ -1448,33 +1493,37 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_PAINT => {
-            if let Some(st) = state_mut(hwnd) {
-                if let Some(p) = &st.pane {
-                    let mut ps: PAINTSTRUCT = std::mem::zeroed();
-                    let hdc = BeginPaint(hwnd, &mut ps);
-                    diagram::render(hdc, &p.diagram, p.origin, p.scale, &p.palette);
-                    EndPaint(hwnd, &ps);
-                    return 0;
-                }
+            // BeginPaint can dispatch erase notifications. Keep the immutable
+            // diagram alive without borrowing window state during painting.
+            if let Some(p) = with_state(hwnd, |st| st.pane.clone()).flatten() {
+                let mut ps: PAINTSTRUCT = std::mem::zeroed();
+                let hdc = BeginPaint(hwnd, &mut ps);
+                diagram::render(hdc, &p.diagram, p.origin, p.scale, &p.palette);
+                EndPaint(hwnd, &ps);
+                return 0;
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_HSCROLL => {
-            if let Some(st) = state_mut(hwnd) {
-                let pos = SendMessageW(st.tb, TBM_GETPOS, 0, 0) as i32;
-                let dpi = snap50(pos).clamp(st.dpi_min, st.dpi_max);
-                let txt = to_wide(&format!("DPI: {dpi}"));
-                SetWindowTextW(st.lbl_dpi, txt.as_ptr());
-                // Fire the device change only on discrete steps / release, not
-                // during continuous thumb-drag.
+            if let Some((tb, label, min, max)) =
+                with_state(hwnd, |st| (st.tb, st.lbl_dpi, st.dpi_min, st.dpi_max))
+            {
+                let pos = SendMessageW(tb, TBM_GETPOS, 0, 0) as i32;
+                let dpi = snap50(pos).clamp(min, max);
+                set_text(label, &format!("DPI: {dpi}"));
                 let code = loword(wparam) as u32;
-                let fire = matches!(
+                if matches!(
                     code,
-                    TB_ENDTRACK | TB_THUMBPOSITION | TB_LINEUP | TB_LINEDOWN | TB_PAGEUP
-                        | TB_PAGEDOWN | TB_TOP | TB_BOTTOM
-                );
-                if fire {
-                    (st.on_event)(SettingsEvent::Dpi(dpi));
+                    TB_ENDTRACK
+                        | TB_THUMBPOSITION
+                        | TB_LINEUP
+                        | TB_LINEDOWN
+                        | TB_PAGEUP
+                        | TB_PAGEDOWN
+                        | TB_TOP
+                        | TB_BOTTOM
+                ) {
+                    emit(hwnd, SettingsEvent::Dpi(dpi));
                 }
             }
             0
@@ -1482,154 +1531,148 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
         WM_COMMAND => {
             let id = loword(wparam);
             let notify = hiword(wparam);
-            if let Some(st) = state_mut(hwnd) {
-                match (id, notify) {
-                    // Entering an on-board box: say what to do.
-                    (id, CBN_SETFOCUS)
-                        if (ID_CB_ONBOARD_BASE..ID_CB_ONBOARD_BASE + MAX_ONBOARD).contains(&id) =>
-                    {
-                        let cb = lparam as HWND;
-                        if let Some(e) = st.onboard_edits.iter().find(|e| e.hwnd == cb) {
-                            let text = format!(
-                                "{}: press the key or combo to store, or pick one from the list (Alt+Down).",
-                                e.label
-                            );
-                            set_text(st.status, &text);
-                        }
+            match (id, notify) {
+                (id, CBN_SETFOCUS)
+                    if (ID_CB_ONBOARD_BASE..ID_CB_ONBOARD_BASE + MAX_ONBOARD).contains(&id) =>
+                {
+                    let cb = lparam as HWND;
+                    let update = with_state(hwnd, |st| {
                         st.testing = None;
+                        st.onboard_edits.iter().find(|e| e.hwnd == cb).map(|e| {
+                            (st.status, format!(
+                                "{}: press the key or combo to store, or pick one from the list (Alt+Down).", e.label
+                            ))
+                        })
+                    }).flatten();
+                    if let Some((status, text)) = update {
+                        set_text(status, &text);
                     }
-                    // On-board controls apply live like every other control: a
-                    // preset once it's chosen (not while arrowing through the
-                    // list), a recorded key at once, anything else on focus loss.
-                    (id, CBN_SELENDOK | CBN_KILLFOCUS)
-                        if (ID_CB_ONBOARD_BASE..ID_CB_ONBOARD_BASE + MAX_ONBOARD).contains(&id) =>
-                    {
-                        let cb = lparam as HWND;
-                        let text = if notify == CBN_SELENDOK {
-                            // The edit text isn't updated yet during SELENDOK.
-                            combo_item_text(cb, SendMessageW(cb, CB_GETCURSEL, 0, 0))
-                        } else {
-                            Some(window_text(cb))
-                        };
-                        if let (Some(text), Some(k)) =
-                            (text, st.onboard_edits.iter().position(|e| e.hwnd == cb))
-                        {
-                            apply_onboard(st, k, text);
-                        }
-                    }
-                    (ID_CB_UP, CBN_SELCHANGE) => {
-                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
-                        if i >= 0 {
-                            (st.on_event)(SettingsEvent::UpAction(i as usize));
-                        }
-                    }
-                    (ID_CB_DOWN, CBN_SELCHANGE) => {
-                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
-                        if i >= 0 {
-                            (st.on_event)(SettingsEvent::DownAction(i as usize));
-                        }
-                    }
-                    (ID_CB_THUMB_BACK, CBN_SELCHANGE) => {
-                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
-                        if i >= 0 {
-                            (st.on_event)(SettingsEvent::ThumbBack(i as usize));
-                        }
-                    }
-                    (ID_CB_THUMB_FWD, CBN_SELCHANGE) => {
-                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
-                        if i >= 0 {
-                            (st.on_event)(SettingsEvent::ThumbForward(i as usize));
-                        }
-                    }
-                    (id, CBN_SELCHANGE)
-                        if (ID_CB_EFFECT_BASE..ID_CB_EFFECT_BASE + MAX_ZONES).contains(&id) =>
-                    {
-                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
-                        if i >= 0 {
-                            let zone = (id - ID_CB_EFFECT_BASE) as usize;
-                            (st.on_event)(SettingsEvent::Effect(zone, i as usize));
-                        }
-                    }
-                    (ID_CB_POLL, CBN_SELCHANGE) => {
-                        let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
-                        if i >= 0 {
-                            (st.on_event)(SettingsEvent::Polling(i as usize));
-                        }
-                    }
-                    (id, BN_CLICKED)
-                        if (ID_BTN_COLOR_BASE..ID_BTN_COLOR_BASE + MAX_ZONES).contains(&id) =>
-                    {
-                        let zone = (id - ID_BTN_COLOR_BASE) as usize;
-                        if let Some(sw) = st.swatches.get(zone) {
-                            if let Some(c) = choose_color(hwnd, sw.color) {
-                                let sw = &mut st.swatches[zone];
-                                sw.color = c;
-                                // Rebuild the swatch brush.
-                                DeleteObject(sw.brush);
-                                sw.brush = CreateSolidBrush(colorref(c));
-                                use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
-                                InvalidateRect(sw.hwnd, std::ptr::null(), 1);
-                                (st.on_event)(SettingsEvent::Color(zone, c.0, c.1, c.2));
-                            }
-                        }
-                    }
-                    (ID_BTN_DPI_MINUS | ID_BTN_DPI_PLUS, BN_CLICKED) => {
-                        // Step the slider by one snap increment and fire the
-                        // same live-DPI path as a slider move.
-                        let cur = snap50(SendMessageW(st.tb, TBM_GETPOS, 0, 0) as i32) as i32;
-                        let delta = if id == ID_BTN_DPI_PLUS { 50 } else { -50 };
-                        let dpi =
-                            (cur + delta).clamp(st.dpi_min as i32, st.dpi_max as i32) as u16;
-                        SendMessageW(st.tb, TBM_SETPOS, 1, dpi as LPARAM);
-                        let txt = to_wide(&format!("DPI: {dpi}"));
-                        SetWindowTextW(st.lbl_dpi, txt.as_ptr());
-                        (st.on_event)(SettingsEvent::Dpi(dpi));
-                    }
-                    (ID_BTN_SAVE, BN_CLICKED) => {
-                        // Report the on-board fields first so the app has
-                        // validated and staged them before it writes the file.
-                        // (Normally already applied on focus loss; this
-                        // catches text still being typed when Save is hit.)
-                        let initial: Vec<String> =
-                            st.onboard_edits.iter().map(|e| e.last.clone()).collect();
-                        let now: Vec<String> =
-                            st.onboard_edits.iter().map(|e| window_text(e.hwnd)).collect();
-                        for k in onboard_changed(&initial, &now) {
-                            apply_onboard(st, k, now[k].clone());
-                        }
-                        (st.on_event)(SettingsEvent::Save)
-                    }
-                    _ => {}
                 }
+                // Presets apply once chosen; recorded keys apply immediately;
+                // typed text applies on focus loss or Save.
+                (id, CBN_SELENDOK | CBN_KILLFOCUS)
+                    if (ID_CB_ONBOARD_BASE..ID_CB_ONBOARD_BASE + MAX_ONBOARD).contains(&id) =>
+                {
+                    let cb = lparam as HWND;
+                    let text = if notify == CBN_SELENDOK {
+                        combo_item_text(cb, SendMessageW(cb, CB_GETCURSEL, 0, 0))
+                    } else {
+                        Some(window_text(cb))
+                    };
+                    if let Some(text) = text {
+                        apply_onboard(hwnd, cb, text);
+                    }
+                }
+                (ID_CB_UP, CBN_SELCHANGE) => {
+                    let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                    if i >= 0 {
+                        emit(hwnd, SettingsEvent::UpAction(i as usize));
+                    }
+                }
+                (ID_CB_DOWN, CBN_SELCHANGE) => {
+                    let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                    if i >= 0 {
+                        emit(hwnd, SettingsEvent::DownAction(i as usize));
+                    }
+                }
+                (ID_CB_THUMB_BACK, CBN_SELCHANGE) => {
+                    let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                    if i >= 0 {
+                        emit(hwnd, SettingsEvent::ThumbBack(i as usize));
+                    }
+                }
+                (ID_CB_THUMB_FWD, CBN_SELCHANGE) => {
+                    let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                    if i >= 0 {
+                        emit(hwnd, SettingsEvent::ThumbForward(i as usize));
+                    }
+                }
+                (id, CBN_SELCHANGE)
+                    if (ID_CB_EFFECT_BASE..ID_CB_EFFECT_BASE + MAX_ZONES).contains(&id) =>
+                {
+                    let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                    if i >= 0 {
+                        emit(
+                            hwnd,
+                            SettingsEvent::Effect((id - ID_CB_EFFECT_BASE) as usize, i as usize),
+                        );
+                    }
+                }
+                (ID_CB_POLL, CBN_SELCHANGE) => {
+                    let i = SendMessageW(lparam as HWND, CB_GETCURSEL, 0, 0);
+                    if i >= 0 {
+                        emit(hwnd, SettingsEvent::Polling(i as usize));
+                    }
+                }
+                (id, BN_CLICKED)
+                    if (ID_BTN_COLOR_BASE..ID_BTN_COLOR_BASE + MAX_ZONES).contains(&id) =>
+                {
+                    let zone = (id - ID_BTN_COLOR_BASE) as usize;
+                    choose_zone_color(hwnd, zone, |owner, initial| choose_color(owner, initial));
+                }
+                (ID_BTN_DPI_MINUS | ID_BTN_DPI_PLUS, BN_CLICKED) => {
+                    if let Some((tb, label, min, max)) =
+                        with_state(hwnd, |st| (st.tb, st.lbl_dpi, st.dpi_min, st.dpi_max))
+                    {
+                        let cur = snap50(SendMessageW(tb, TBM_GETPOS, 0, 0) as i32) as i32;
+                        let delta = if id == ID_BTN_DPI_PLUS { 50 } else { -50 };
+                        let dpi = (cur + delta).clamp(min as i32, max as i32) as u16;
+                        SendMessageW(tb, TBM_SETPOS, 1, dpi as LPARAM);
+                        set_text(label, &format!("DPI: {dpi}"));
+                        emit(hwnd, SettingsEvent::Dpi(dpi));
+                    }
+                }
+                (ID_BTN_SAVE, BN_CLICKED) => {
+                    // Text queries send synchronous messages: first snapshot
+                    // the controls, then reacquire state for each update.
+                    if let Some(edits) = with_state(hwnd, |st| {
+                        st.onboard_edits
+                            .iter()
+                            .map(|e| (e.hwnd, e.last.clone()))
+                            .collect::<Vec<_>>()
+                    }) {
+                        let initial: Vec<String> =
+                            edits.iter().map(|(_, last)| last.clone()).collect();
+                        let now: Vec<String> =
+                            edits.iter().map(|(cb, _)| window_text(*cb)).collect();
+                        for k in onboard_changed(&initial, &now) {
+                            apply_onboard(hwnd, edits[k].0, now[k].clone());
+                        }
+                        emit(hwnd, SettingsEvent::Save);
+                    }
+                }
+                _ => {}
             }
             0
         }
         WM_DRAWITEM => {
-            // Paint a zone's swatch button: filled with its current color,
-            // bordered brighter while hovered — the color block is the
-            // picker trigger, so the border is its only affordance.
-            if let Some(st) = state_mut(hwnd) {
-                let dis = &*(lparam as *const DRAWITEMSTRUCT);
-                if let Some(sw) = st.swatches.iter().find(|s| s.hwnd == dis.hwndItem) {
-                    FillRect(dis.hDC, &dis.rcItem, sw.brush);
-                    let border = CreateSolidBrush(colorref(if sw.hovered {
-                        (0x2F, 0x6F, 0xD0) // accent blue, matches remappable-button role
-                    } else {
-                        (0x80, 0x80, 0x80)
-                    }));
-                    FrameRect(dis.hDC, &dis.rcItem, border);
-                    if sw.hovered {
-                        let r = RECT {
-                            left: dis.rcItem.left + 1,
-                            top: dis.rcItem.top + 1,
-                            right: dis.rcItem.right - 1,
-                            bottom: dis.rcItem.bottom - 1,
-                        };
-                        FrameRect(dis.hDC, &r, border);
-                    }
-                    DeleteObject(border);
-                    return 1;
+            let dis = &*(lparam as *const DRAWITEMSTRUCT);
+            let swatch = with_state(hwnd, |st| {
+                st.swatches
+                    .iter()
+                    .find(|s| s.hwnd == dis.hwndItem)
+                    .map(|sw| (sw.brush, sw.hovered))
+            })
+            .flatten();
+            if let Some((brush, hovered)) = swatch {
+                FillRect(dis.hDC, &dis.rcItem, brush);
+                let border = CreateSolidBrush(colorref(if hovered {
+                    (0x2F, 0x6F, 0xD0)
+                } else {
+                    (0x80, 0x80, 0x80)
+                }));
+                FrameRect(dis.hDC, &dis.rcItem, border);
+                if hovered {
+                    let r = RECT {
+                        left: dis.rcItem.left + 1,
+                        top: dis.rcItem.top + 1,
+                        right: dis.rcItem.right - 1,
+                        bottom: dis.rcItem.bottom - 1,
+                    };
+                    FrameRect(dis.hDC, &r, border);
                 }
+                DeleteObject(border);
+                return 1;
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
@@ -1638,12 +1681,15 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
             0
         }
         WM_DESTROY => {
-            use windows_sys::Win32::UI::WindowsAndMessaging::{
-                GetWindowLongPtrW, PostQuitMessage, GWLP_USERDATA,
-            };
-            // Stop advertising the handle before it becomes invalid.
             SETTINGS_HWND.store(0, Ordering::SeqCst);
-            let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut WindowState;
+            windows_sys::Win32::UI::WindowsAndMessaging::PostQuitMessage(0);
+            0
+        }
+        WM_NCDESTROY => {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowLongPtrW, GWLP_USERDATA};
+            // Children are gone. Detach before freeing so nested messages see
+            // no state, rather than a dangling userdata pointer.
+            let ptr = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0) as *mut WindowState;
             if !ptr.is_null() {
                 let st = Box::from_raw(ptr);
                 for sw in &st.swatches {
@@ -1657,12 +1703,47 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                 if !st.hicon.is_null() {
                     DestroyIcon(st.hicon);
                 }
-                drop(st);
             }
-            PostQuitMessage(0);
-            0
+            DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+/// ChooseColor dispatches nested messages. Keep no state borrow in the picker,
+/// then reacquire state and require the same owner before applying its result.
+unsafe fn choose_zone_color(
+    hwnd: HWND,
+    zone: usize,
+    choose: impl FnOnce(HWND, (u8, u8, u8)) -> Option<(u8, u8, u8)>,
+) {
+    let initial = with_state(hwnd, |st| {
+        st.swatches
+            .get(zone)
+            .map(|sw| (sw.color, Rc::clone(&st.on_event)))
+    })
+    .flatten();
+    if let Some((initial, callback)) = initial {
+        if let Some(c) = choose(hwnd, initial) {
+            let brush = CreateSolidBrush(colorref(c));
+            let update = with_state(hwnd, |st| {
+                if !Rc::ptr_eq(&st.on_event, &callback) {
+                    return None;
+                }
+                let sw = st.swatches.get_mut(zone)?;
+                sw.color = c;
+                Some((sw.hwnd, std::mem::replace(&mut sw.brush, brush)))
+            })
+            .flatten();
+            if let Some((swatch, old_brush)) = update {
+                DeleteObject(old_brush);
+                use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
+                InvalidateRect(swatch, std::ptr::null(), 1);
+                callback(SettingsEvent::Color(zone, c.0, c.1, c.2));
+            } else {
+                DeleteObject(brush);
+            }
+        }
     }
 }
 
@@ -1689,6 +1770,179 @@ mod tests {
 
     fn v(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// A message-only window exercises our real WNDPROC without showing UI,
+    /// registering raw input, installing hooks, or opening a device.
+    unsafe fn hidden_window(on_event: Rc<dyn Fn(SettingsEvent)>) -> HWND {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SetWindowLongPtrW, GWLP_USERDATA, HWND_MESSAGE,
+        };
+        let class = to_wide("SnakecharmerSettingsReentrancyTest");
+        let instance = GetModuleHandleW(std::ptr::null());
+        let wc = WNDCLASSW {
+            lpfnWndProc: Some(wnd_proc),
+            hInstance: instance,
+            lpszClassName: class.as_ptr(),
+            ..std::mem::zeroed()
+        };
+        RegisterClassW(&wc);
+        let hwnd = CreateWindowExW(
+            0,
+            class.as_ptr(),
+            class.as_ptr(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            std::ptr::null_mut(),
+            instance,
+            std::ptr::null(),
+        );
+        assert!(!hwnd.is_null(), "create message-only test window");
+        let state = Box::new(WindowState {
+            on_event,
+            tb: hwnd,
+            lbl_dpi: hwnd,
+            swatches: vec![Swatch {
+                hwnd,
+                color: (1, 2, 3),
+                brush: CreateSolidBrush(colorref((1, 2, 3))),
+                hovered: false,
+            }],
+            onboard_edits: vec![OnboardEdit {
+                id: 4,
+                hwnd,
+                last: "default".into(),
+                label: "Back".into(),
+            }],
+            status: hwnd,
+            testing: None,
+            return_focus: None,
+            razer_devices: Default::default(),
+            razer_mods: Mods::default(),
+            ui_font: std::ptr::null_mut(),
+            hicon: std::ptr::null_mut(),
+            pane: None,
+            dpi_min: 100,
+            dpi_max: 30000,
+        });
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(state) as isize);
+        hwnd
+    }
+
+    #[test]
+    fn callback_can_destroy_its_owner_without_dropping_the_live_callback() {
+        // Each test owns a GUI thread; WM_QUIT from teardown never reaches
+        // another test's queue or a user window's message loop.
+        std::thread::spawn(|| unsafe {
+            use std::cell::Cell;
+            use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, GWLP_USERDATA};
+            struct CallbackLifetime {
+                owner: Rc<Cell<HWND>>,
+                dropped: Rc<Cell<bool>>,
+                detached: Rc<Cell<bool>>,
+            }
+            impl Drop for CallbackLifetime {
+                fn drop(&mut self) {
+                    self.dropped.set(true);
+                    self.detached
+                        .set(unsafe { GetWindowLongPtrW(self.owner.get(), GWLP_USERDATA) == 0 });
+                }
+            }
+            let owner = Rc::new(Cell::new(std::ptr::null_mut()));
+            let dropped = Rc::new(Cell::new(false));
+            let detached = Rc::new(Cell::new(false));
+            let alive_after_destroy = Rc::new(Cell::new(false));
+            let lifetime = CallbackLifetime {
+                owner: owner.clone(),
+                dropped: dropped.clone(),
+                detached: detached.clone(),
+            };
+            let observed = alive_after_destroy.clone();
+            let callback = Rc::new(move |_: SettingsEvent| {
+                DestroyWindow(lifetime.owner.get());
+                observed.set(!lifetime.dropped.get());
+            });
+            let hwnd = hidden_window(callback);
+            owner.set(hwnd);
+            with_state(hwnd, |st| st.onboard_edits.clear());
+            SendMessageW(hwnd, WM_COMMAND, ID_BTN_SAVE as WPARAM, 0);
+            assert!(
+                alive_after_destroy.get(),
+                "the callback must outlive its owner's teardown"
+            );
+            assert!(
+                dropped.get() && detached.get(),
+                "userdata must be detached before final state drops"
+            );
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn color_picker_allows_nested_state_updates() {
+        std::thread::spawn(|| unsafe {
+            use std::cell::Cell;
+            let colors = Rc::new(Cell::new(0));
+            let observed = colors.clone();
+            let hwnd = hidden_window(Rc::new(move |event| {
+                if matches!(event, SettingsEvent::Color(0, 10, 20, 30)) {
+                    observed.set(observed.get() + 1);
+                }
+            }));
+            choose_zone_color(hwnd, 0, |owner, initial| {
+                assert_eq!(initial, (1, 2, 3));
+                let result: (u8, Result<Expect, String>) = (4, Ok(Expect::Key("F13".into())));
+                SendMessageW(
+                    owner,
+                    WM_APP_ONBOARD,
+                    0,
+                    Box::into_raw(Box::new(result)) as LPARAM,
+                );
+                Some((10, 20, 30))
+            });
+            assert_eq!(colors.get(), 1);
+            let (color, testing) =
+                with_state(hwnd, |st| (st.swatches[0].color, st.testing.is_some())).unwrap();
+            assert_eq!(color, (10, 20, 30));
+            assert!(
+                testing,
+                "the nested message's state update must survive the picker"
+            );
+            DestroyWindow(hwnd);
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn color_picker_discards_result_after_owner_destruction() {
+        std::thread::spawn(|| unsafe {
+            use std::cell::Cell;
+            let colors = Rc::new(Cell::new(0));
+            let observed = colors.clone();
+            let hwnd = hidden_window(Rc::new(move |event| {
+                if matches!(event, SettingsEvent::Color(..)) {
+                    observed.set(observed.get() + 1);
+                }
+            }));
+            choose_zone_color(hwnd, 0, |owner, _| {
+                DestroyWindow(owner);
+                Some((10, 20, 30))
+            });
+            assert_eq!(
+                colors.get(),
+                0,
+                "a destroyed owner must receive no color result"
+            );
+            assert!(with_state(hwnd, |_| ()).is_none());
+        })
+        .join()
+        .unwrap();
     }
 
     #[test]

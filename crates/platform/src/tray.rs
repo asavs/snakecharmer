@@ -7,6 +7,7 @@
 //! is alive.
 
 use std::ffi::c_void;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -23,7 +24,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     TranslateMessage, CW_USEDEFAULT, GWLP_USERDATA, HICON, HMENU, IDI_APPLICATION, MF_CHECKED,
     MF_POPUP, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, MSG, TPM_LEFTALIGN, TPM_RETURNCMD,
     TPM_RIGHTBUTTON, WM_APP, WM_COMMAND,
-    WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    WM_DESTROY, WM_NCDESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 const TRAY_CALLBACK_MSG: u32 = WM_APP + 1;
@@ -80,8 +81,8 @@ impl MenuItem {
 
 /// Boxed state stashed in the window's user-data pointer.
 struct TrayState {
-    on_command: Box<dyn Fn(u32)>,
-    /// The runtime-drawn app icon (freed with `DestroyIcon` on `WM_DESTROY`);
+    on_command: Rc<dyn Fn(u32)>,
+    /// The runtime-drawn app icon (freed with `DestroyIcon` on `WM_NCDESTROY`);
     /// null if creation fell back to the stock icon.
     hicon: HICON,
 }
@@ -122,13 +123,13 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
     };
 
     let state = Box::new(TrayState {
-        on_command: Box::new(on_command),
+        on_command: Rc::new(on_command),
         hicon,
     });
 
     // SAFETY: standard Win32 window-class registration + hidden window creation.
     // All pointers (class name, state box) outlive the calls; the state box is
-    // handed to the window via GWLP_USERDATA and freed on WM_DESTROY.
+    // handed to the window via GWLP_USERDATA and freed on WM_NCDESTROY.
     unsafe {
         let hinstance = GetModuleHandleW(std::ptr::null());
         let class_name = to_wide("SnakecharmerTrayWnd");
@@ -162,7 +163,7 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
             hinstance,
             std::ptr::null(),
         );
-        // Hand ownership of the state to the window (freed in WM_DESTROY).
+        // Hand ownership of the state to the window (freed in WM_NCDESTROY).
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(state) as isize);
         TRAY_HWND.store(hwnd as isize, Ordering::SeqCst);
 
@@ -201,9 +202,11 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
     }
 }
 
-unsafe fn state_ref<'a>(hwnd: HWND) -> Option<&'a TrayState> {
+/// Clone the callback on the owning GUI thread before entering any Win32
+/// operation or callback that can reenter the window procedure or destroy it.
+unsafe fn command_callback(hwnd: HWND) -> Option<Rc<dyn Fn(u32)>> {
     let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const TrayState;
-    ptr.as_ref()
+    ptr.as_ref().map(|state| Rc::clone(&state.on_command))
 }
 
 /// Build a popup HMENU from the spec (one level of submenus supported).
@@ -246,8 +249,8 @@ unsafe extern "system" fn wnd_proc(
                 WM_RBUTTONUP => show_context_menu(hwnd),
                 // A single left-click or a double-click opens settings.
                 WM_LBUTTONUP | WM_LBUTTONDBLCLK => {
-                    if let Some(state) = state_ref(hwnd) {
-                        (state.on_command)(TRAY_CLICK);
+                    if let Some(callback) = command_callback(hwnd) {
+                        callback(TRAY_CLICK);
                     }
                 }
                 _ => {}
@@ -264,13 +267,18 @@ unsafe extern "system" fn wnd_proc(
             0
         }
         WM_DESTROY => {
+            TRAY_HWND.store(0, Ordering::SeqCst);
             let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
             nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
             nid.hWnd = hwnd;
             nid.uID = 1;
             Shell_NotifyIconW(NIM_DELETE, &nid);
-            // Reclaim and drop the state box, freeing the drawn icon.
-            let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut TrayState;
+            PostQuitMessage(0);
+            0
+        }
+        WM_NCDESTROY => {
+            // Detach before freeing, including any nested teardown messages.
+            let ptr = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0) as *mut TrayState;
             if !ptr.is_null() {
                 let state = Box::from_raw(ptr);
                 if !state.hicon.is_null() {
@@ -278,15 +286,16 @@ unsafe extern "system" fn wnd_proc(
                 }
                 drop(state);
             }
-            PostQuitMessage(0);
-            0
+            DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
 }
 
 unsafe fn show_context_menu(hwnd: HWND) {
-    let Some(state) = state_ref(hwnd) else { return };
+    let Some(callback) = command_callback(hwnd) else {
+        return;
+    };
     // Clone the spec out so the lock is not held across TrackPopupMenu (which
     // blocks until the user dismisses the menu).
     let items: Vec<MenuItem> = match menu_cell().lock() {
@@ -312,8 +321,10 @@ unsafe fn show_context_menu(hwnd: HWND) {
     PostMessageW(hwnd, 0x0000, 0, 0); // WM_NULL, per MSDN TrackPopupMenu note
     DestroyMenu(hmenu);
 
-    if cmd != 0 {
-        (state.on_command)(cmd as u32);
+    // The popup's nested loop may have destroyed the owner. A recycled HWND
+    // belongs to a different state and must not receive the old menu command.
+    if cmd != 0 && command_callback(hwnd).is_some_and(|current| Rc::ptr_eq(&current, &callback)) {
+        callback(cmd as u32);
     }
 }
 
