@@ -50,9 +50,9 @@ directly over Win32 HID and then gets out of the way.
 
 | | Razer Synapse | Snakecharmer | Δ |
 |---|---|---|---:|
-| Processes | Razer Synapse<br>Razer Central<br>Razer Synapse Service Process<br>Razer Synapse Service<br>RazerCentralService<br>embedded Chromium browser (CefSharp) | `snakecharmer.exe`<br><sub>`crt-static`, no runtime deps</sub> | **6 → 1** |
+| Processes | Razer Synapse<br>Razer Central<br>Razer Synapse Service Process<br>Razer Synapse Service<br>RazerCentralService<br>embedded Chromium browser (CefSharp) | `snakecharmer.exe`<br><sub>static CRT; uses Windows system DLLs</sub> | **6 → 1** |
 | Kernel drivers | `RZCONTROL` + `RZVIRTUAL` virtual device drivers<br><sub>observed still registered after uninstalling Synapse</sub> | none (userland HID only) | **2 → 0** |
-| On-disk size | 500 MB<br><sub>Razer's published minimum</sub> | 0.61 MB (measured)<br><sub>single static exe</sub> | **~820×** |
+| On-disk size | 500 MB<br><sub>Razer's published minimum</sub> | 0.83 MB (measured)<br><sub>828,416 bytes, x64 MSVC release with static CRT</sub> | **~600×** |
 | Idle RAM | ~558 MB (measured) | 17 MB (measured)<br><sub>2.5 MB private working set</sub> | **~32×** |
 | Idle CPU | ≈ 1 CPU·h/day  | ≈ 0.06 CPU·h/day (measured)<br><sub>blocking HID reads; mice without DPI buttons get a small liveness read every few seconds</sub> | **~17×** |
 | Telemetry | yes | none, local-only | — |

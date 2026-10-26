@@ -8,7 +8,7 @@ main job people bring here does not need a frontier model.
 
 Snakecharmer is a Windows daemon that configures Razer mice over USB HID (DPI, polling
 rate, RGB, button remapping) as a replacement for Razer Synapse. It is Rust, Windows-only,
-and deliberately small: one static ~0.6 MB exe, about 17 MB idle (measured).
+and deliberately small: one ~0.8 MB exe with a static CRT, about 17 MB idle (measured).
 
 All protocol knowledge comes from [OpenRazer](https://github.com/openrazer/openrazer). This
 project ports slices of it to Windows; it does not invent protocol.
@@ -107,9 +107,10 @@ For a device port, just record the mouse's on-board profile count in the PR.
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo build --release
+python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe
 ```
 
-These match CI; [`CONTRIBUTING.md`](CONTRIBUTING.md) has the same block.
+CI runs these checks; [`CONTRIBUTING.md`](CONTRIBUTING.md) covers development setup.
 
 A change is not done until those are green. Tests for protocol code assert **exact bytes**
 against the OpenRazer reference. See the `*_matches_openrazer` tests for the pattern.

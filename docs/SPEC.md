@@ -272,11 +272,18 @@ Measured figures, from the [README](../README.md#why):
 
 | | Measured |
 |---|---|
-| Exe size | 0.61 MB, one static exe (`crt-static`; release profile with `opt-level = "z"`, LTO, `panic = "abort"`, stripped) |
+| Exe size | 0.83 MB (828,416 bytes), x64 MSVC release with static CRT (`opt-level = "z"`, LTO, `panic = "abort"`, stripped) |
 | Idle RAM | 17 MB working set, 2.5 MB private |
 | Idle CPU | about 0.06 CPU-hours per day |
 | Processes | 1 |
 | Kernel drivers | 0 |
+
+MSVC builds enable `crt-static` in [`.cargo/config.toml`](../.cargo/config.toml).
+CI and release builds inspect both shipped executables with
+[`check-static-crt.py`](../tools/check-static-crt.py), rejecting ordinary or
+delay-loaded imports of the dynamic Microsoft CRT. Windows system DLLs are
+still required. Executable size was measured on 2026-10-26; RAM and CPU remain
+the earlier runtime measurements.
 
 Weigh every new dependency against these numbers. The app uses raw `windows-sys` instead
 of a GUI framework, draws with the GDI+ that ships in Windows, and has no async runtime.

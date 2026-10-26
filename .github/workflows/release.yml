@@ -32,6 +32,8 @@ jobs:
       - run: cargo test --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo build --release
+      - name: Verify static CRT linkage
+        run: python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe
       - name: Create the draft release
         shell: bash
         env:
