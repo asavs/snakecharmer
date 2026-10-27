@@ -80,7 +80,7 @@ Over half a gigabyte of RAM, held permanently, to run two side buttons and a DPI
 - **RGB lighting.** Static, breathing, spectrum, or off, per zone. The wheel and
   logo can have different effects and colors (settings window), or share one
   (tray menu).
-- **System tray** menu with quick DPI, lighting, a Start with Windows toggle, reload, and
+- **System tray** menu with quick DPI, lighting, a startup request toggle, reload, and
   quit, plus a native settings window. It needs no admin rights and shows no window
   until you open one.
 
@@ -151,10 +151,17 @@ the optional local health integration, build with `cargo build --release --featu
 
 On first run the daemon registers itself to start at login, using a per-user value named
 `Snakecharmer` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (no admin, no
-installer). Toggle it with the tray menu's **Start with Windows** checkbox. If you turn
-it off, it stays off. The same registry value is what lists the app in Task Manager →
-Startup apps, and the tray checkbox reads the real registry state, so turning it off in
-either place turns it off in both.
+installer). The tray menu's **Request start with Windows** checkbox adds or removes that
+registration. Removing it in the tray keeps it removed on later launches. An unreadable
+registration shows **Startup request unavailable**, and is left unchanged.
+
+The checkbox shows the request, not whether Windows will allow the app to start.
+[Windows startup settings and Task Manager](https://learn.microsoft.com/en-us/windows/win32/w8cookbook/startup-apps)
+can disable startup independently; that can leave the request checked in Snakecharmer.
+If startup is disabled there, use that same Windows control to enable it again. The Run
+backend does not query or override that separate setting. Microsoft's
+[`StartupTask.State` API](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask)
+requires a packaged startup task; Snakecharmer is an unpackaged app.
 
 Upgrading from a build that used `scripts\install-autostart.ps1`? Delete the leftover
 `Snakecharmer.vbs` (or any hand-made `Snakecharmer.lnk`) from your Startup folder
@@ -165,8 +172,9 @@ since the second instance exits on the single-instance mutex, but it clutters th
 
 There is no installer, so there is nothing to run. To remove Snakecharmer completely:
 
-1. Turn off **Start with Windows** in the tray menu (or in Task Manager → Startup apps).
-   You can also delete the `Snakecharmer` value under
+1. Uncheck **Request start with Windows** in the tray menu to remove its registration.
+   Disabling the app in Task Manager only suppresses startup; to remove the registration
+   directly, delete the `Snakecharmer` value under
    `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
 2. Choose **Quit** from the tray menu. Quit puts the mouse back in its hardware mode
    and releases device control for the CLI.
