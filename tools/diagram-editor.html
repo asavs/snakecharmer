@@ -58,26 +58,26 @@
 <div id="stage"></div>
 <div id="side">
   <header>
-    <h1>diagram editor &mdash; <span id="dev">detecting&hellip;</span></h1>
+    <h1>diagram editor &mdash; <span id="dev">loading&hellip;</span></h1>
     <p>hover to preview a shape's points &middot; click selects the <b>whole shape</b> &middot; click its segments to toggle them off/on &middot; double-click drops the shape &middot; esc clears.</p>
     <p>squares = anchors, circles = adjusters; the glowing one is your &ldquo;this point&rdquo; for notes.</p>
     <p>ctrl+z undoes a drag/nudge &middot; ctrl+y (or ctrl+shift+z) redoes.</p>
     <p><b>delete point</b> (or the Delete key) removes the glowing point: anchors merge their curves, adjusters straighten their segment.</p>
-    <p>notes queue quietly (enter sends, shift+enter for a newline) &mdash; <b>finish</b> writes lib.rs, regenerates, rebuilds &amp; restarts the daemon, and wakes claude with everything queued.</p>
+    <p>notes save as you queue them (enter sends, shift+enter for a newline) &mdash; <b>save</b> updates device source and SVG assets for review.</p>
   </header>
   <div id="status">loading current diagram&hellip;</div>
   <pre id="out">no changes yet</pre>
   <div id="history">
-    <div class="htitle">notes queued for claude &mdash; hover to see the joint, click to pin</div>
+    <div class="htitle">saved notes &mdash; hover to see the joint, click to pin</div>
     <div id="hlist">&hellip;</div>
   </div>
   <div id="notebox">
     <div class="target" id="noteTarget">note about: nothing selected — click segments first (or leave unselected for a general note)</div>
-    <textarea id="noteText" placeholder="tell claude about the selected segments/points… enter queues it, finish delivers"></textarea>
-    <button id="sendNote" class="ghost">queue note for claude</button>
+    <textarea id="noteText" placeholder="note about selected segments/points… enter saves it"></textarea>
+    <button id="sendNote" class="ghost">save note</button>
   </div>
   <div id="bar">
-    <button id="save">finish</button>
+    <button id="save">save</button>
     <button id="undo" class="ghost" disabled>undo</button>
     <button id="del" class="ghost">delete point</button>
     <button id="reset" class="ghost">reset</button>
@@ -660,7 +660,7 @@ async function loadNotes() {
     list.replaceChildren();
     unpinNote();
     const entries = t.split(/^## /m).slice(1);
-    if (!entries.length) { list.textContent = 'none — claude has read everything'; return; }
+    if (!entries.length) { list.textContent = 'no saved notes'; return; }
     for (const e of entries) {
       const entry = parseEntry(e);
       const div = document.createElement('div'); div.className = 'hitem';
@@ -707,23 +707,23 @@ function emit() {
 }
 let notesQueued = 0;
 document.getElementById('save').onclick = async function () {
-  if (!changed.size && !notesQueued) { status('nothing to finish — no moved points, no queued notes', ''); return; }
+  if (!changed.size && !notesQueued) { status('nothing to save — no moved points or new notes', ''); return; }
   this.disabled = true;
   status(changed.size
-    ? 'finishing — rewriting lib.rs, regenerating SVGs, rebuilding, restarting daemon… (~30s)'
-    : 'finishing — waking claude with your notes…');
+    ? 'saving device source and regenerating SVG assets…'
+    : 'completing the saved notes batch…');
   const payload = [...changed].map(el => ({
     kind: KIND[models.get(el).kind],
     old: flat(originals.get(el)),
     new: flat(models.get(el)),
   }));
   try {
-    const r = await fetch('/save', { method: 'POST', body: JSON.stringify(payload) });
+    const r = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     out.textContent = await r.text();
-    if (r.ok) { status('finished — claude is on it', 'ok'); notesQueued = 0; await init(); }
-    else status('finish failed — details below', 'bad');
+    if (r.ok) { status('saved — review the source and SVG changes', 'ok'); notesQueued = 0; await init(); }
+    else status('save failed — details below', 'bad');
   } catch (e) {
-    status('finish failed: ' + e, 'bad');
+    status('save failed: ' + e, 'bad');
   }
   this.disabled = false;
 };
@@ -764,11 +764,11 @@ document.getElementById('sendNote').onclick = async function () {
   }
   this.disabled = true;
   try {
-    const r = await fetch('/note', { method: 'POST', body: JSON.stringify(body) });
+    const r = await fetch('/note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (r.ok) {
       document.getElementById('noteText').value = '';
       notesQueued++;
-      status('note queued — claude sees it when you press finish', 'ok');
+      status('note saved — press save to complete the batch', 'ok');
       loadNotes();
     } else status('note failed: ' + await r.text(), 'bad');
   } catch (e) { status('note failed: ' + e, 'bad'); }

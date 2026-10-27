@@ -6,6 +6,8 @@
 //!
 //! Protocol source: OpenRazer (github.com/openrazer/openrazer), files
 //! `driver/razercommon.{c,h}`, `driver/razerchromacommon.c`, `driver/razermouse_driver.c`.
+//! The reviewed revision is recorded in `reference/openrazer-source.json`.
+//! See `docs/SPEC.md` for the unresolved DPI-write selector difference.
 //!
 //! The Razer control protocol is a 90-byte HID feature report (report ID 0):
 //!
@@ -26,7 +28,7 @@
 #![forbid(unsafe_code)]
 
 pub mod devices;
-pub mod diagram;
+pub use device_diagram as diagram;
 pub mod keymap;
 
 pub use devices::{DEATHADDER_ELITE, DEATHADDER_V3, DEATHADDER_V4_PRO, SUPPORTED};
@@ -212,13 +214,21 @@ impl core::fmt::Display for ProtoError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ProtoError::ArgsTooLong(n) => write!(f, "arguments too long: {n} > 80"),
-            ProtoError::DpiOutOfRange(v) => write!(f, "DPI {v} out of the device's supported range"),
+            ProtoError::DpiOutOfRange(v) => {
+                write!(f, "DPI {v} out of the device's supported range")
+            }
             ProtoError::PollingRateUnsupported { hz, supported } => {
                 let list: Vec<String> = supported.iter().map(|r| r.to_string()).collect();
-                write!(f, "polling rate {hz} Hz unsupported (supported: {} Hz)", list.join(", "))
+                write!(
+                    f,
+                    "polling rate {hz} Hz unsupported (supported: {} Hz)",
+                    list.join(", ")
+                )
             }
             ProtoError::UnknownPollingRate(b) => write!(f, "unknown polling-rate byte 0x{b:02x}"),
-            ProtoError::BadResponseLen(n) => write!(f, "unexpected response length {n} (want {REPORT_LEN})"),
+            ProtoError::BadResponseLen(n) => {
+                write!(f, "unexpected response length {n} (want {REPORT_LEN})")
+            }
             ProtoError::DeviceStatus(s) => write!(f, "device returned status 0x{s:02x}"),
             ProtoError::CommandEchoMismatch { sent, got } => write!(
                 f,
@@ -227,7 +237,10 @@ impl core::fmt::Display for ProtoError {
             ),
             ProtoError::BadColor(s) => write!(f, "bad color {s:?} (want #RRGGBB)"),
             ProtoError::KeymapButtonMismatch { sent, got } => {
-                write!(f, "keymap reply for button 0x{got:02x}, asked for 0x{sent:02x}")
+                write!(
+                    f,
+                    "keymap reply for button 0x{got:02x}, asked for 0x{sent:02x}"
+                )
             }
             ProtoError::KeymapNotWritable(why) => write!(f, "can't write that bind: {why}"),
         }
@@ -268,7 +281,8 @@ pub fn build_report(
 
 /// set device mode: class 0x00, id 0x04, args [mode, 0x00].
 pub fn set_device_mode_report(transaction_id: u8, mode: DeviceMode) -> [u8; REPORT_LEN] {
-    build_report(transaction_id, 0x00, 0x04, 0x02, &[mode.as_byte(), 0x00]).expect("2 args always valid")
+    build_report(transaction_id, 0x00, 0x04, 0x02, &[mode.as_byte(), 0x00])
+        .expect("2 args always valid")
 }
 
 /// get device mode: class 0x00, id 0x84.
@@ -293,7 +307,7 @@ pub fn set_dpi_report(
         }
     }
     let args = [
-        0x00, // no variable storage (NOSTORE), per openrazer for this device
+        0x00, // Existing selector; differs from the pinned helper. See docs/SPEC.md.
         (dpi_x >> 8) as u8,
         (dpi_x & 0xFF) as u8,
         (dpi_y >> 8) as u8,
@@ -342,7 +356,9 @@ fn polling_rate_hz(protocol: PollingProtocol, byte: u8) -> Option<u16> {
         PollingProtocol::Classic => &[125, 500, 1000],
         PollingProtocol::Extended => &[125, 250, 500, 1000, 2000, 4000, 8000],
     };
-    all.iter().copied().find(|&hz| polling_rate_byte(protocol, hz) == Some(byte))
+    all.iter()
+        .copied()
+        .find(|&hz| polling_rate_byte(protocol, hz) == Some(byte))
 }
 
 /// set polling rate: `razer_chroma_misc_set_polling_rate` (classic) or
@@ -353,7 +369,10 @@ pub fn set_polling_rate_report(
     polling: PollingSpec,
     hz: u16,
 ) -> Result<[u8; REPORT_LEN], ProtoError> {
-    let unsupported = ProtoError::PollingRateUnsupported { hz, supported: polling.rates };
+    let unsupported = ProtoError::PollingRateUnsupported {
+        hz,
+        supported: polling.rates,
+    };
     if !polling.rates.contains(&hz) {
         return Err(unsupported);
     }
@@ -457,8 +476,14 @@ fn extended_matrix_effect_base(
     led_id: u8,
     effect_id: u8,
 ) -> [u8; REPORT_LEN] {
-    build_report(transaction_id, 0x0F, 0x02, arg_size, &[variable_storage, led_id, effect_id])
-        .expect("3 args always valid")
+    build_report(
+        transaction_id,
+        0x0F,
+        0x02,
+        arg_size,
+        &[variable_storage, led_id, effect_id],
+    )
+    .expect("3 args always valid")
 }
 
 /// "None" (off) effect for a zone. `razer_chroma_extended_matrix_effect_none`.
@@ -548,7 +573,10 @@ mod tests {
     #[test]
     fn driver_mode_report_matches_spec() {
         let r = set_device_mode_report(T, DeviceMode::Driver);
-        assert_eq!(&r[0..10], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x04, 0x03, 0x00]);
+        assert_eq!(
+            &r[0..10],
+            &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x04, 0x03, 0x00]
+        );
         assert_eq!(r[88], 0x05, "driver-mode CRC");
         assert_eq!(r[89], 0x00, "reserved");
         // bytes 10..88 must be zero
@@ -558,14 +586,20 @@ mod tests {
     #[test]
     fn hardware_mode_report_matches_spec() {
         let r = set_device_mode_report(T, DeviceMode::Hardware);
-        assert_eq!(&r[0..10], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x04, 0x00, 0x00]);
+        assert_eq!(
+            &r[0..10],
+            &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x04, 0x00, 0x00]
+        );
         assert_eq!(r[88], 0x06, "hardware-mode CRC");
     }
 
     #[test]
     fn get_mode_report_matches_spec() {
         let r = get_device_mode_report(T);
-        assert_eq!(&r[0..10], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x84, 0x00, 0x00]);
+        assert_eq!(
+            &r[0..10],
+            &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x84, 0x00, 0x00]
+        );
         assert_eq!(r[88], 0x86, "get-mode CRC");
     }
 
@@ -580,7 +614,10 @@ mod tests {
         dpi_buttons: None,
         dpi_min: 100,
         dpi_max: 30000,
-        polling: PollingSpec { protocol: PollingProtocol::Classic, rates: &[125, 500, 1000] },
+        polling: PollingSpec {
+            protocol: PollingProtocol::Classic,
+            rates: &[125, 500, 1000],
+        },
         diagram: None,
     };
 
@@ -596,7 +633,10 @@ mod tests {
         assert_eq!(elite[1], 0x3F);
         assert_eq!(other[1], 0x1F);
         assert_eq!(&elite[2..], &other[2..], "only byte 1 (txn) may differ");
-        assert_eq!(elite[88], other[88], "txn is outside the CRC, so CRC is identical");
+        assert_eq!(
+            elite[88], other[88],
+            "txn is outside the CRC, so CRC is identical"
+        );
     }
 
     #[test]
@@ -628,7 +668,10 @@ mod tests {
     #[test]
     fn args_too_long_rejected() {
         let big = [0u8; 81];
-        assert_eq!(build_report(T, 0x00, 0x00, 0x00, &big), Err(ProtoError::ArgsTooLong(81)));
+        assert_eq!(
+            build_report(T, 0x00, 0x00, 0x00, &big),
+            Err(ProtoError::ArgsTooLong(81))
+        );
     }
 
     #[test]
@@ -641,7 +684,10 @@ mod tests {
         resp[8] = 0x03; // driver
         let v = validate_response(&req, &resp).unwrap();
         assert_eq!(parse_device_mode(v), 0x03);
-        assert_eq!(DeviceMode::from_byte(parse_device_mode(v)), Some(DeviceMode::Driver));
+        assert_eq!(
+            DeviceMode::from_byte(parse_device_mode(v)),
+            Some(DeviceMode::Driver)
+        );
     }
 
     #[test]
@@ -666,7 +712,10 @@ mod tests {
         // razer_chroma_misc_set_polling_rate: class 0x00, id 0x05, args [rate].
         let p = DEATHADDER_ELITE.polling;
         let r = set_polling_rate_report(T, p, 500).unwrap();
-        assert_eq!(&r[0..9], &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x01, 0x00, 0x05, 0x02]);
+        assert_eq!(
+            &r[0..9],
+            &[0x00, 0x3F, 0x00, 0x00, 0x00, 0x01, 0x00, 0x05, 0x02]
+        );
         assert!(r[9..88].iter().all(|&b| b == 0));
         assert_eq!(r[88], crc(&r));
         // Full classic map: 0x01=1000, 0x02=500, 0x08=125.
@@ -688,12 +737,24 @@ mod tests {
         // [argument=0x00, rate] (the V3's case passes argument 0x00).
         let v = DEATHADDER_V3;
         let r = set_polling_rate_report(v.transaction_id, v.polling, 1000).unwrap();
-        assert_eq!(&r[0..10], &[0x00, 0x1F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x40, 0x00, 0x08]);
+        assert_eq!(
+            &r[0..10],
+            &[0x00, 0x1F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x40, 0x00, 0x08]
+        );
         assert!(r[10..88].iter().all(|&b| b == 0));
         assert_eq!(r[88], crc(&r));
         // Full extended map.
-        for (hz, b) in [(8000u16, 0x01u8), (4000, 0x02), (2000, 0x04), (500, 0x10), (125, 0x40)] {
-            assert_eq!(set_polling_rate_report(v.transaction_id, v.polling, hz).unwrap()[9], b);
+        for (hz, b) in [
+            (8000u16, 0x01u8),
+            (4000, 0x02),
+            (2000, 0x04),
+            (500, 0x10),
+            (125, 0x40),
+        ] {
+            assert_eq!(
+                set_polling_rate_report(v.transaction_id, v.polling, hz).unwrap()[9],
+                b
+            );
         }
     }
 
@@ -710,7 +771,10 @@ mod tests {
         let e = DEATHADDER_ELITE;
         assert_eq!(
             set_polling_rate_report(e.transaction_id, e.polling, 2000),
-            Err(ProtoError::PollingRateUnsupported { hz: 2000, supported: e.polling.rates })
+            Err(ProtoError::PollingRateUnsupported {
+                hz: 2000,
+                supported: e.polling.rates
+            })
         );
         let v = DEATHADDER_V3;
         assert!(matches!(
@@ -777,7 +841,10 @@ mod tests {
         // Doc: 010500000000 (data_size 06)
         let r = effect_none_report(T, led::SCROLL_WHEEL);
         assert_eq!(r[5], 0x06);
-        assert_eq!(&r[8..14], &[VARSTORE, led::SCROLL_WHEEL, 0x00, 0x00, 0x00, 0x00]);
+        assert_eq!(
+            &r[8..14],
+            &[VARSTORE, led::SCROLL_WHEEL, 0x00, 0x00, 0x00, 0x00]
+        );
         assert_eq!(r[88], crc(&r));
     }
 
@@ -788,7 +855,17 @@ mod tests {
         assert_eq!(r[5], 0x09);
         assert_eq!(
             &r[8..17],
-            &[VARSTORE, led::SCROLL_WHEEL, 0x01, 0x00, 0x00, 0x01, 0xFF, 0x00, 0x00]
+            &[
+                VARSTORE,
+                led::SCROLL_WHEEL,
+                0x01,
+                0x00,
+                0x00,
+                0x01,
+                0xFF,
+                0x00,
+                0x00
+            ]
         );
         assert_eq!(r[88], crc(&r));
     }
@@ -800,7 +877,17 @@ mod tests {
         assert_eq!(r[5], 0x09);
         assert_eq!(
             &r[8..17],
-            &[VARSTORE, led::LOGO, 0x02, 0x01, 0x00, 0x01, 0x00, 0xFF, 0x00]
+            &[
+                VARSTORE,
+                led::LOGO,
+                0x02,
+                0x01,
+                0x00,
+                0x01,
+                0x00,
+                0xFF,
+                0x00
+            ]
         );
         assert_eq!(r[88], crc(&r));
     }
@@ -836,7 +923,10 @@ mod tests {
     /// this keeps the two from drifting. If it fails, update the doc table.
     #[test]
     fn supported_devices_doc_matches_table() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/SUPPORTED-DEVICES.md");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/SUPPORTED-DEVICES.md"
+        );
         let doc = std::fs::read_to_string(path)
             .expect("docs/SUPPORTED-DEVICES.md must exist")
             .replace("\r\n", "\n"); // normalize CRLF checkouts before verbatim matching
@@ -914,7 +1004,10 @@ mod tests {
         }
 
         // No stale rows either: every device row must correspond to a spec.
-        let rows = doc.lines().filter(|l| l.starts_with('|') && l.contains("1532:")).count();
+        let rows = doc
+            .lines()
+            .filter(|l| l.starts_with('|') && l.contains("1532:"))
+            .count();
         assert_eq!(
             rows,
             SUPPORTED.len(),
@@ -928,7 +1021,10 @@ mod tests {
         let req = get_device_mode_report(T);
         let mut resp = [0u8; REPORT_LEN];
         resp[0] = status::BUSY;
-        assert_eq!(validate_response(&req, &resp), Err(ProtoError::DeviceStatus(status::BUSY)));
+        assert_eq!(
+            validate_response(&req, &resp),
+            Err(ProtoError::DeviceStatus(status::BUSY))
+        );
 
         resp[0] = status::SUCCESS;
         resp[6] = 0x04; // wrong class
@@ -938,6 +1034,9 @@ mod tests {
             Err(ProtoError::CommandEchoMismatch { .. })
         ));
 
-        assert_eq!(validate_response(&req, &resp[..10]), Err(ProtoError::BadResponseLen(10)));
+        assert_eq!(
+            validate_response(&req, &resp[..10]),
+            Err(ProtoError::BadResponseLen(10))
+        );
     }
 }
