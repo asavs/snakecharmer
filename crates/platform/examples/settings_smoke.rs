@@ -18,7 +18,9 @@ use platform::settings::{
 // Preview the shipped immutable diagrams rather than maintaining copies of
 // their coordinate data. This dependency is confined to the example.
 fn diagram_full() -> Diagram {
-    razer_proto::DEATHADDER_ELITE.diagram.expect("Elite diagram")
+    razer_proto::DEATHADDER_ELITE
+        .diagram
+        .expect("Elite diagram")
 }
 
 fn diagram_minimal() -> Diagram {
@@ -54,7 +56,10 @@ fn main() {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(hold_secs));
         use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, PostMessageW, WM_CLOSE};
-        let cls: Vec<u16> = "SnakecharmerSettings".encode_utf16().chain(std::iter::once(0)).collect();
+        let cls: Vec<u16> = "SnakecharmerSettings"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         // SAFETY: FindWindowW/PostMessageW with a valid NUL-terminated class name.
         unsafe {
             let hwnd = FindWindowW(cls.as_ptr(), std::ptr::null());
@@ -74,7 +79,12 @@ fn main() {
             dpi_min: 100,
             dpi_max: 30000,
             polling_labels: strings(&[
-                "keep — leave as set", "125 Hz", "500 Hz", "1000 Hz", "2000 Hz", "4000 Hz",
+                "keep — leave as set",
+                "125 Hz",
+                "500 Hz",
+                "1000 Hz",
+                "2000 Hz",
+                "4000 Hz",
                 "8000 Hz",
             ]),
             polling_index: 3,
@@ -86,17 +96,38 @@ fn main() {
             // CalloutSlot::Button, so the thumb dropdowns above aren't mounted.
             onboard: Some(
                 [
-                    (0x03, "Wheel click", "Middle click (default)", "Copy (Ctrl+C)"),
+                    (
+                        0x03,
+                        "Wheel click",
+                        "Middle click (default)",
+                        "Copy (Ctrl+C)",
+                    ),
                     (0x04, "Back", "Back (default)", "f5"),
                     (0x05, "Forward", "Forward (default)", "Forward (default)"),
-                    (0x09, "Wheel up", "Scroll up (default)", "Scroll up (default)"),
-                    (0x0A, "Wheel down", "Scroll down (default)", "Scroll down (default)"),
+                    (
+                        0x09,
+                        "Wheel up",
+                        "Scroll up (default)",
+                        "Scroll up (default)",
+                    ),
+                    (
+                        0x0A,
+                        "Wheel down",
+                        "Scroll down (default)",
+                        "Scroll down (default)",
+                    ),
                 ]
                 .into_iter()
                 .map(|(id, label, default, text)| OnboardButton {
                     id,
                     label: label.to_string(),
-                    presets: strings(&[default, "Middle click", "Copy (Ctrl+C)", "Paste (Ctrl+V)", "Disabled"]),
+                    presets: strings(&[
+                        default,
+                        "Middle click",
+                        "Copy (Ctrl+C)",
+                        "Paste (Ctrl+V)",
+                        "Disabled",
+                    ]),
                     text: text.to_string(),
                 })
                 .collect(),

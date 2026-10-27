@@ -39,7 +39,9 @@ use windows_sys::Win32::Graphics::Gdi::{
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
-use windows_sys::Win32::UI::Controls::Dialogs::{ChooseColorW, CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW};
+use windows_sys::Win32::UI::Controls::Dialogs::{
+    ChooseColorW, CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW,
+};
 use windows_sys::Win32::UI::Controls::{
     InitCommonControlsEx, DRAWITEMSTRUCT, ICC_BAR_CLASSES, INITCOMMONCONTROLSEX, TBM_SETPOS,
     TBM_SETRANGE, TB_BOTTOM, TB_ENDTRACK, TB_LINEDOWN, TB_LINEUP, TB_PAGEDOWN, TB_PAGEUP,
@@ -54,13 +56,15 @@ use windows_sys::Win32::UI::Input::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRect, CallWindowProcW, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow,
-    DispatchMessageW, GetMessageW, GetParent, GetWindowTextW, GetNextDlgTabItem, IsDialogMessageW, LoadCursorW,
-    PostMessageW, RegisterClassW, SendMessageW, SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage,
-    CBS_AUTOHSCROLL, CBS_DROPDOWN, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETLBTEXT, CB_GETLBTEXTLEN, CB_GETCURSEL, CB_SETCURSEL, CW_USEDEFAULT, GWLP_WNDPROC,
-    HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DRAWITEM, WM_HSCROLL,
-    WM_MOUSEMOVE, WM_NCDESTROY, WM_PAINT, WM_SETFONT, WM_SETICON, WNDCLASSW, WNDPROC, WS_CHILD, WS_OVERLAPPED,
-    WS_CAPTION, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, RI_KEY_BREAK, WM_KEYDOWN, WM_SETFOCUS,
+    DispatchMessageW, GetMessageW, GetNextDlgTabItem, GetParent, GetWindowTextW, IsDialogMessageW,
+    LoadCursorW, PostMessageW, RegisterClassW, SendMessageW, SetForegroundWindow, SetWindowPos,
+    SetWindowTextW, ShowWindow, TranslateMessage, CBS_AUTOHSCROLL, CBS_DROPDOWN, CBS_DROPDOWNLIST,
+    CB_ADDSTRING, CB_GETCURSEL, CB_GETLBTEXT, CB_GETLBTEXTLEN, CB_SETCURSEL, CW_USEDEFAULT,
+    GWLP_WNDPROC, HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, MSG, RI_KEY_BREAK, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_SHOW, WM_CLOSE, WM_COMMAND, WM_DESTROY,
+    WM_DRAWITEM, WM_HSCROLL, WM_KEYDOWN, WM_MOUSEMOVE, WM_NCDESTROY, WM_PAINT, WM_SETFOCUS,
+    WM_SETFONT, WM_SETICON, WNDCLASSW, WNDPROC, WS_CAPTION, WS_CHILD, WS_OVERLAPPED, WS_SYSMENU,
+    WS_TABSTOP, WS_VISIBLE,
 };
 
 use std::rc::Rc;
@@ -229,7 +233,9 @@ impl UsbDeviceId {
     fn matches_device_path(self, path: &str) -> bool {
         // Device-interface paths put the hardware id between the first two
         // '#': never match an incidental VID/PID in the instance or class id.
-        let Some(hardware) = path.split('#').nth(1) else { return false };
+        let Some(hardware) = path.split('#').nth(1) else {
+            return false;
+        };
         let mut vendor = None;
         let mut product = None;
         for field in hardware.split('&') {
@@ -243,7 +249,8 @@ impl UsbDeviceId {
             }
         }
         vendor.is_some_and(|id| id.eq_ignore_ascii_case(&format!("VID_{:04X}", self.vendor_id)))
-            && product.is_some_and(|id| id.eq_ignore_ascii_case(&format!("PID_{:04X}", self.product_id)))
+            && product
+                .is_some_and(|id| id.eq_ignore_ascii_case(&format!("PID_{:04X}", self.product_id)))
     }
 }
 
@@ -354,7 +361,13 @@ fn verdict(label: &str, expect: &Expect, got: &Got) -> Option<(String, bool)> {
         _ => false,
     };
     if matched {
-        return Some((format!("\u{2713} {label} sent {}. It's stored on the mouse.", got.name()), true));
+        return Some((
+            format!(
+                "\u{2713} {label} sent {}. It's stored on the mouse.",
+                got.name()
+            ),
+            true,
+        ));
     }
     if *got == Got::Mouse(MouseSend::Left) {
         return None;
@@ -365,7 +378,10 @@ fn verdict(label: &str, expect: &Expect, got: &Got) -> Option<(String, bool)> {
         Expect::Nothing | Expect::Unmanaged => return None,
     };
     Some((
-        format!("\u{2717} The mouse sent {}, not {want}. Press {label} on the mouse to test.", got.name()),
+        format!(
+            "\u{2717} The mouse sent {}, not {want}. Press {label} on the mouse to test.",
+            got.name()
+        ),
         false,
     ))
 }
@@ -600,7 +616,9 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         let onboard: &[OnboardButton] = init.onboard.as_deref().unwrap_or_default();
         let onboard = &onboard[..onboard.len().min(MAX_ONBOARD as usize)];
         let onboard_in_diagram = !onboard.is_empty()
-            && onboard.iter().all(|b| slot_rect(CalloutSlot::Button(b.id)).is_some());
+            && onboard
+                .iter()
+                .all(|b| slot_rect(CalloutSlot::Button(b.id)).is_some());
         let show_thumbs = init.onboard.is_none();
         // Lighting rides the diagram only when EVERY zone has a slot there;
         // a partial set falls back to top-cluster rows so no zone vanishes.
@@ -655,7 +673,10 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // used (centering exactly on it is only the target, not guaranteed).
         let body_off: f32 = pane_meta
             .and_then(|(scale, _, _)| {
-                init.diagram.as_ref().and_then(diagram::arm_balance).map(|(l, _)| l * scale)
+                init.diagram
+                    .as_ref()
+                    .and_then(diagram::arm_balance)
+                    .map(|(l, _)| l * scale)
             })
             .unwrap_or(dia_w as f32 / 2.0);
         // Centering exactly on the body (item 5's stated goal) can leave one
@@ -674,11 +695,16 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         } else {
             MIN_CLIENT_W
         };
-        let pane_origin_x = (client_w / 2 - anchor.round() as i32)
-            .clamp(0, (client_w - dia_w).max(0));
+        let pane_origin_x =
+            (client_w / 2 - anchor.round() as i32).clamp(0, (client_w - dia_w).max(0));
 
         let style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
-        let mut rect = RECT { left: 0, top: 0, right: client_w, bottom: client_h };
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: client_w,
+            bottom: client_h,
+        };
         AdjustWindowRect(&mut rect, style, 0);
 
         let title = if init.device_name.is_empty() {
@@ -747,8 +773,11 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             0, // DEFAULT_PITCH | FF_DONTCARE
             face.as_ptr(),
         );
-        let font: HGDIOBJ =
-            if ui_font.is_null() { GetStockObject(DEFAULT_GUI_FONT) } else { ui_font as _ };
+        let font: HGDIOBJ = if ui_font.is_null() {
+            GetStockObject(DEFAULT_GUI_FONT)
+        } else {
+            ui_font as _
+        };
         let mk = |class: &str, text: &str, style: u32, id: u16, x, y, w, h| -> HWND {
             let cls = to_wide(class);
             let txt = to_wide(text);
@@ -774,12 +803,14 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // Horizontally the *body* sits on the window centerline (see body_off);
         // vertically it hangs one dia_gap below the top cluster.
         let pane_origin = (pane_origin_x, MARGIN + top_h + dia_gap);
-        let pane = pane_meta.map(|(scale, palette, _)| Rc::new(DiagramPane {
-            diagram: init.diagram.expect("pane_meta implies a diagram"),
-            origin: pane_origin,
-            scale,
-            palette,
-        }));
+        let pane = pane_meta.map(|(scale, palette, _)| {
+            Rc::new(DiagramPane {
+                diagram: init.diagram.expect("pane_meta implies a diagram"),
+                origin: pane_origin,
+                scale,
+                palette,
+            })
+        });
 
         // --- Top cluster, every row centered. Creation order = tab order:
         // DPI slider row, polling, lighting, per-button dropdowns, then Save.
@@ -791,15 +822,50 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // still work when it has focus). Never full-window width.
         let row1_w = 84 + 4 + 26 + 6 + SLIDER_W + 6 + 26;
         let mut x = (client_w - row1_w) / 2;
-        let lbl_dpi =
-            mk("STATIC", &format!("DPI: {}", init.dpi), 0, ID_LBL_DPI, x, y + 7, 84, LBL_H);
+        let lbl_dpi = mk(
+            "STATIC",
+            &format!("DPI: {}", init.dpi),
+            0,
+            ID_LBL_DPI,
+            x,
+            y + 7,
+            84,
+            LBL_H,
+        );
         x += 84 + 4;
-        let _ = mk("BUTTON", "\u{2212}", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_DPI_MINUS, x, y + 2, 26, 26);
+        let _ = mk(
+            "BUTTON",
+            "\u{2212}",
+            BS_PUSHBUTTON | WS_TABSTOP,
+            ID_BTN_DPI_MINUS,
+            x,
+            y + 2,
+            26,
+            26,
+        );
         x += 26 + 6;
         accessible_label(&mk, "DPI", x, y);
-        let tb = mk("msctls_trackbar32", "", WS_TABSTOP, ID_TB_DPI, x, y, SLIDER_W, ROW1_H);
+        let tb = mk(
+            "msctls_trackbar32",
+            "",
+            WS_TABSTOP,
+            ID_TB_DPI,
+            x,
+            y,
+            SLIDER_W,
+            ROW1_H,
+        );
         x += SLIDER_W + 6;
-        let _ = mk("BUTTON", "+", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_DPI_PLUS, x, y + 2, 26, 26);
+        let _ = mk(
+            "BUTTON",
+            "+",
+            BS_PUSHBUTTON | WS_TABSTOP,
+            ID_BTN_DPI_PLUS,
+            x,
+            y + 2,
+            26,
+            26,
+        );
         y += ROW1_H + GROUP_GAP;
         SendMessageW(
             tb,
@@ -811,7 +877,16 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
 
         // Helper: a pre-populated dropdown at an arbitrary position.
         let make_combo = |id: u16, x: i32, cy: i32, w: i32, items: &[String], sel: usize| -> HWND {
-            let cb = mk("COMBOBOX", "", combo_style, id, x, cy, w, COMBO_H + COMBO_DROP);
+            let cb = mk(
+                "COMBOBOX",
+                "",
+                combo_style,
+                id,
+                x,
+                cy,
+                w,
+                COMBO_H + COMBO_DROP,
+            );
             for item in items {
                 let wtxt = to_wide(item);
                 SendMessageW(cb, CB_ADDSTRING, 0, wtxt.as_ptr() as LPARAM);
@@ -825,7 +900,16 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             // Screen readers name a control after the label just before it.
             accessible_label(&mk, &format!("{} button bind", b.label), x, cy);
             let style = (CBS_DROPDOWN | CBS_AUTOHSCROLL) as u32 | WS_TABSTOP;
-            let cb = mk("COMBOBOX", "", style, ID_CB_ONBOARD_BASE + k as u16, x, cy, w, COMBO_H + COMBO_DROP);
+            let cb = mk(
+                "COMBOBOX",
+                "",
+                style,
+                ID_CB_ONBOARD_BASE + k as u16,
+                x,
+                cy,
+                w,
+                COMBO_H + COMBO_DROP,
+            );
             for item in &b.presets {
                 let wtxt = to_wide(item);
                 SendMessageW(cb, CB_ADDSTRING, 0, wtxt.as_ptr() as LPARAM);
@@ -833,7 +917,12 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             let text = to_wide(&b.text);
             SetWindowTextW(cb, text.as_ptr());
             subclass_recorder(cb);
-            OnboardEdit { id: b.id, hwnd: cb, last: b.text.clone(), label: b.label.clone() }
+            OnboardEdit {
+                id: b.id,
+                hwnd: cb,
+                last: b.text.clone(),
+                label: b.label.clone(),
+            }
         };
         let mut onboard_edits: Vec<OnboardEdit> = Vec::new();
 
@@ -861,16 +950,36 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         for (zi, l) in init
             .lighting
             .iter()
-            .take(if lighting_in_diagram { 0 } else { MAX_ZONES as usize })
+            .take(if lighting_in_diagram {
+                0
+            } else {
+                MAX_ZONES as usize
+            })
             .enumerate()
         {
             let zi16 = zi as u16;
             y += GROUP_GAP;
             let light_w = 52 + 4 + 110 + 16 + 38 + 2 + 60;
             x = (client_w - light_w) / 2;
-            let _ = mk("STATIC", &format!("{}:", l.label), 0, 0, x, y + 5, 52, LBL_H);
+            let _ = mk(
+                "STATIC",
+                &format!("{}:", l.label),
+                0,
+                0,
+                x,
+                y + 5,
+                52,
+                LBL_H,
+            );
             x += 52 + 4;
-            let _ = make_combo(ID_CB_EFFECT_BASE + zi16, x, y + 1, 110, &l.effect_labels, l.effect_index);
+            let _ = make_combo(
+                ID_CB_EFFECT_BASE + zi16,
+                x,
+                y + 1,
+                110,
+                &l.effect_labels,
+                l.effect_index,
+            );
             x += 110 + 16;
             let _ = mk("STATIC", "Color:", 0, 0, x, y + 5, 38, LBL_H);
             x += 38 + 2;
@@ -879,7 +988,16 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             // Owner-drawn, so the text is never painted: it's the button's
             // name for screen readers.
             let name = format!("{} color", l.label);
-            let swatch = mk("BUTTON", &name, BS_OWNERDRAW | WS_TABSTOP, ID_BTN_COLOR_BASE + zi16, x, y, 60, ROW2_H);
+            let swatch = mk(
+                "BUTTON",
+                &name,
+                BS_OWNERDRAW | WS_TABSTOP,
+                ID_BTN_COLOR_BASE + zi16,
+                x,
+                y,
+                60,
+                ROW2_H,
+            );
             subclass_swatch(swatch);
             swatches.push(Swatch {
                 hwnd: swatch,
@@ -894,13 +1012,14 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // dropdowns (no diagram, or no callout slots in it): centered
         // labeled rows.
         let fx = (client_w - COL_W) / 2;
-        let labeled_combo = |label: &str, id: u16, items: &[String], sel: usize, y: &mut i32| -> HWND {
-            let _ = mk("STATIC", label, 0, 0, fx, *y, COL_W, LBL_H);
-            *y += LBL_H + LBL_GAP;
-            let cb = make_combo(id, fx, *y, COL_W, items, sel);
-            *y += COMBO_H + GROUP_GAP;
-            cb
-        };
+        let labeled_combo =
+            |label: &str, id: u16, items: &[String], sel: usize, y: &mut i32| -> HWND {
+                let _ = mk("STATIC", label, 0, 0, fx, *y, COL_W, LBL_H);
+                *y += LBL_H + LBL_GAP;
+                let cb = make_combo(id, fx, *y, COL_W, items, sel);
+                *y += COMBO_H + GROUP_GAP;
+                cb
+            };
         if fb_h > 0 {
             y += GROUP_GAP;
             if !dpi_in_diagram {
@@ -923,7 +1042,16 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             }
             if !onboard_in_diagram {
                 for (k, b) in onboard.iter().enumerate() {
-                    let _ = mk("STATIC", &format!("{} (stored on the mouse):", b.label), 0, 0, fx, y, COL_W, LBL_H);
+                    let _ = mk(
+                        "STATIC",
+                        &format!("{} (stored on the mouse):", b.label),
+                        0,
+                        0,
+                        fx,
+                        y,
+                        COL_W,
+                        LBL_H,
+                    );
                     y += LBL_H + LBL_GAP;
                     onboard_edits.push(make_onboard(k, b, fx, y, COL_W));
                     y += COMBO_H + GROUP_GAP;
@@ -945,8 +1073,8 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                     &mut y,
                 );
                 y += -GROUP_GAP + 4; // tuck the note right under its combos
-                // (With a diagram, this cost note is part of the schematic,
-                // right beside the thumb dropdowns — stated exactly once.)
+                                     // (With a diagram, this cost note is part of the schematic,
+                                     // right beside the thumb dropdowns — stated exactly once.)
                 let _ = mk(
                     "STATIC",
                     "Default = no hook; remaps apply to every pointing device on this PC.",
@@ -979,13 +1107,33 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
             };
             if dpi_in_diagram {
                 if let Some(b) = &init.dpi_buttons {
-                    place(ID_CB_UP, CalloutSlot::DpiUp, &b.up, "Front DPI button action");
-                    place(ID_CB_DOWN, CalloutSlot::DpiDown, &b.down, "Rear DPI button action");
+                    place(
+                        ID_CB_UP,
+                        CalloutSlot::DpiUp,
+                        &b.up,
+                        "Front DPI button action",
+                    );
+                    place(
+                        ID_CB_DOWN,
+                        CalloutSlot::DpiDown,
+                        &b.down,
+                        "Rear DPI button action",
+                    );
                 }
             }
             if show_thumbs && thumb_in_diagram {
-                place(ID_CB_THUMB_BACK, CalloutSlot::ThumbBack, &init.thumb_back, "Back thumb button action");
-                place(ID_CB_THUMB_FWD, CalloutSlot::ThumbForward, &init.thumb_forward, "Forward thumb button action");
+                place(
+                    ID_CB_THUMB_BACK,
+                    CalloutSlot::ThumbBack,
+                    &init.thumb_back,
+                    "Back thumb button action",
+                );
+                place(
+                    ID_CB_THUMB_FWD,
+                    CalloutSlot::ThumbForward,
+                    &init.thumb_forward,
+                    "Forward thumb button action",
+                );
             }
             // On-board buttons, each at its own button's callout.
             if onboard_in_diagram {
@@ -1009,9 +1157,8 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
                         continue;
                     };
                     let py = pane_origin.1 + (((cy - by0) as f32) * scale).round() as i32;
-                    let sx = |d: i32| {
-                        pane_origin.0 + (((cx + d - bx0) as f32) * scale).round() as i32
-                    };
+                    let sx =
+                        |d: i32| pane_origin.0 + (((cx + d - bx0) as f32) * scale).round() as i32;
                     let sw = |w: i32| ((w as f32) * scale).round() as i32;
                     accessible_label(&mk, &format!("{} lighting effect", l.label), sx(0), py);
                     let _ = make_combo(
@@ -1054,10 +1201,28 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         } else {
             "To bind a button, click its box on the mouse and press a key or combo."
         };
-        let status = mk("STATIC", status_text, SS_CENTER, 0, MARGIN, by, client_w - 2 * MARGIN, STATUS_H);
+        let status = mk(
+            "STATIC",
+            status_text,
+            SS_CENTER,
+            0,
+            MARGIN,
+            by,
+            client_w - 2 * MARGIN,
+            STATUS_H,
+        );
         by += if onboard.is_empty() { 0 } else { STATUS_H + 6 };
         let bx = (client_w - 90) / 2;
-        let _ = mk("BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, ID_BTN_SAVE, bx, by, 90, BOTTOM_H);
+        let _ = mk(
+            "BUTTON",
+            "Save",
+            BS_PUSHBUTTON | WS_TABSTOP,
+            ID_BTN_SAVE,
+            bx,
+            by,
+            90,
+            BOTTOM_H,
+        );
         let _ = mk(
             "STATIC",
             "Changes apply immediately; Save writes config.toml.",
@@ -1116,10 +1281,24 @@ pub fn open(init: SettingsInit, on_event: impl Fn(SettingsEvent) + 'static) {
         // on-board test step sees what the mouse itself sends.
         if !onboard.is_empty() && init.input_device.is_some() {
             let rid = [
-                RAWINPUTDEVICE { usUsagePage: 1, usUsage: 6, dwFlags: 0, hwndTarget: hwnd }, // keyboard
-                RAWINPUTDEVICE { usUsagePage: 1, usUsage: 2, dwFlags: 0, hwndTarget: hwnd }, // mouse
+                RAWINPUTDEVICE {
+                    usUsagePage: 1,
+                    usUsage: 6,
+                    dwFlags: 0,
+                    hwndTarget: hwnd,
+                }, // keyboard
+                RAWINPUTDEVICE {
+                    usUsagePage: 1,
+                    usUsage: 2,
+                    dwFlags: 0,
+                    hwndTarget: hwnd,
+                }, // mouse
             ];
-            RegisterRawInputDevices(rid.as_ptr(), rid.len() as u32, std::mem::size_of::<RAWINPUTDEVICE>() as u32);
+            RegisterRawInputDevices(
+                rid.as_ptr(),
+                rid.len() as u32,
+                std::mem::size_of::<RAWINPUTDEVICE>() as u32,
+            );
         }
 
         // Keyboard users start on the first control, not the bare window.
@@ -1222,9 +1401,16 @@ unsafe extern "system" fn swatch_wndproc(
 /// Make an on-board combo's edit field a key recorder ([`recorder_wndproc`]),
 /// stashing its original WNDPROC the same way as [`subclass_swatch`].
 unsafe fn subclass_recorder(combo: HWND) {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowExW, SetWindowLongPtrW, GWLP_USERDATA};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowExW, SetWindowLongPtrW, GWLP_USERDATA,
+    };
     let class = to_wide("Edit");
-    let edit = FindWindowExW(combo, std::ptr::null_mut(), class.as_ptr(), std::ptr::null());
+    let edit = FindWindowExW(
+        combo,
+        std::ptr::null_mut(),
+        class.as_ptr(),
+        std::ptr::null(),
+    );
     if edit.is_null() {
         return;
     }
@@ -1238,10 +1424,16 @@ unsafe fn subclass_recorder(combo: HWND) {
 /// the window stays usable from the keyboard: Tab / Shift+Tab move on, Alt+Down
 /// opens the preset list, Alt+F4 closes the window. Everything else goes to the
 /// original EDIT WNDPROC.
-unsafe extern "system" fn recorder_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn recorder_wndproc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetKeyState;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, CB_SHOWDROPDOWN, GWLP_USERDATA, WM_CHAR, WM_KEYDOWN, WM_SYSCHAR, WM_SYSKEYDOWN,
+        GetWindowLongPtrW, CB_SHOWDROPDOWN, GWLP_USERDATA, WM_CHAR, WM_KEYDOWN, WM_SYSCHAR,
+        WM_SYSKEYDOWN,
     };
     let down = |vk: i32| GetKeyState(vk) < 0;
     match msg {
@@ -1422,7 +1614,13 @@ unsafe fn input_device_matches(device: HANDLE, identity: UsbDeviceId) -> bool {
         return false;
     }
     let mut buf = vec![0u16; len as usize];
-    if GetRawInputDeviceInfoW(device, RIDI_DEVICENAME, buf.as_mut_ptr() as *mut _, &mut len) == u32::MAX {
+    if GetRawInputDeviceInfoW(
+        device,
+        RIDI_DEVICENAME,
+        buf.as_mut_ptr() as *mut _,
+        &mut len,
+    ) == u32::MAX
+    {
         return false;
     }
     identity.matches_device_path(&String::from_utf16_lossy(&buf))
@@ -1439,7 +1637,12 @@ unsafe fn set_text(hwnd: HWND, text: &str) {
 /// A zero-size label placed just before a control in creation (z) order: the
 /// name Windows' accessibility layer gives a control with no visible caption,
 /// such as the dropdowns on the diagram.
-fn accessible_label(mk: &impl Fn(&str, &str, u32, u16, i32, i32, i32, i32) -> HWND, name: &str, x: i32, y: i32) {
+fn accessible_label(
+    mk: &impl Fn(&str, &str, u32, u16, i32, i32, i32, i32) -> HWND,
+    name: &str,
+    x: i32,
+    y: i32,
+) {
     let _ = mk("STATIC", &format!("{name}:"), 0, 0, x, y, 0, 0);
 }
 
@@ -1780,7 +1983,11 @@ unsafe fn choose_color(owner: HWND, initial: (u8, u8, u8)) -> Option<(u8, u8, u8
     cc.Flags = CC_RGBINIT | CC_FULLOPEN;
     if ChooseColorW(&mut cc) != 0 {
         let v = cc.rgbResult;
-        Some(((v & 0xFF) as u8, ((v >> 8) & 0xFF) as u8, ((v >> 16) & 0xFF) as u8))
+        Some((
+            (v & 0xFF) as u8,
+            ((v >> 8) & 0xFF) as u8,
+            ((v >> 16) & 0xFF) as u8,
+        ))
     } else {
         None
     }
@@ -1792,7 +1999,10 @@ mod tests {
 
     #[test]
     fn input_identity_accepts_all_collections_of_the_selected_product_only() {
-        let mouse = UsbDeviceId { vendor_id: 0x1234, product_id: 0x00AB };
+        let mouse = UsbDeviceId {
+            vendor_id: 0x1234,
+            product_id: 0x00AB,
+        };
         for collection in ["MI_00&Col01", "mi_01&col02"] {
             let path = format!(r"\\?\HID#vid_1234&pid_00ab&{collection}#instance#class");
             assert!(mouse.matches_device_path(&path));
@@ -1804,7 +2014,10 @@ mod tests {
 
     #[test]
     fn input_identity_requires_exact_hardware_id_fields() {
-        let device = UsbDeviceId { vendor_id: 0x1234, product_id: 0x00AB };
+        let device = UsbDeviceId {
+            vendor_id: 0x1234,
+            product_id: 0x00AB,
+        };
         for path in [
             r"\\?\HID#VID_1234&PID_00AB0#instance#class",
             r"\\?\HID#XVID_1234&PID_00AB#instance#class",
@@ -1825,10 +2038,16 @@ mod tests {
         // The app supplies whichever attachment it opened. Neither path is
         // hardcoded by the platform or substituted with a canonical model id.
         for product_id in [0x00BE, 0x00BF] {
-            let device = UsbDeviceId { vendor_id: 0x1234, product_id };
+            let device = UsbDeviceId {
+                vendor_id: 0x1234,
+                product_id,
+            };
             let path = format!(r"\\?\HID#VID_1234&PID_{product_id:04X}&MI_01#instance#class");
             assert!(device.matches_device_path(&path));
-            let other = UsbDeviceId { product_id: product_id ^ 1, ..device };
+            let other = UsbDeviceId {
+                product_id: product_id ^ 1,
+                ..device
+            };
             assert!(!other.matches_device_path(&path));
         }
     }
@@ -2024,16 +2243,30 @@ mod tests {
     fn test_step_verdicts() {
         let key = Expect::Key("Ctrl+Shift+T".into());
         let (text, done) = verdict("Back", &key, &Got::Key("Ctrl+Shift+T".into())).unwrap();
-        assert!(done && text.starts_with("\u{2713} Back sent Ctrl+Shift+T"), "{text}");
+        assert!(
+            done && text.starts_with("\u{2713} Back sent Ctrl+Shift+T"),
+            "{text}"
+        );
         // The wrong thing arriving says what came and what to do.
         let (text, done) = verdict("Back", &key, &Got::Mouse(MouseSend::Back)).unwrap();
-        assert!(!done && text.contains("sent back, not Ctrl+Shift+T") && text.contains("Press Back"), "{text}");
+        assert!(
+            !done && text.contains("sent back, not Ctrl+Shift+T") && text.contains("Press Back"),
+            "{text}"
+        );
         // Clicking around the window isn't a failed test...
         assert_eq!(verdict("Back", &key, &Got::Mouse(MouseSend::Left)), None);
         // ...unless left click is the bind under test.
         let left = Expect::Mouse(MouseSend::Left);
-        assert!(verdict("Right", &left, &Got::Mouse(MouseSend::Left)).unwrap().1);
+        assert!(
+            verdict("Right", &left, &Got::Mouse(MouseSend::Left))
+                .unwrap()
+                .1
+        );
         let middle = Expect::Mouse(MouseSend::Middle);
-        assert!(verdict("Wheel click", &middle, &Got::Mouse(MouseSend::Middle)).unwrap().1);
+        assert!(
+            verdict("Wheel click", &middle, &Got::Mouse(MouseSend::Middle))
+                .unwrap()
+                .1
+        );
     }
 }

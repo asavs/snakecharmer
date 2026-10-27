@@ -37,7 +37,7 @@ A Cargo workspace with one app package and four library crates:
 | `crates/razer-hid` | `Mouse` (open a supported device, send a feature report, typed wrappers), `Listener` for input reports, `detected_mice` for naming unsupported devices. Uses `hidapi`. | HID |
 | `crates/device-diagram` | Immutable diagram schema, bounds, and SVG emitter shared by device specs and the native renderer | none (`unsafe_code = "forbid"`) |
 | `crates/platform` | All Win32 FFI and all `unsafe`: keystroke injection (`SendInput`), single-instance mutex, message boxes, tray icon, `WH_MOUSE_LL` hook, settings window, GDI+ diagram renderer, runtime-drawn icon, Run-key autostart, atomic file replace. Uses `windows-sys`. | Win32 |
-| `snakecharmer` (`src/`) | `daemon.rs` (session loop, tray and settings wiring), `config.rs`, `actions.rs` (action strings to key chords), `lighting.rs`, `onboard.rs`, `health.rs`, `logger.rs` | files |
+| `snakecharmer` (`src/`) | `daemon.rs` (session lifecycle and settings wiring), `daemon/menu.rs` (tray menu and command application), `daemon/config_application.rs` (validated config application and persistence), `config.rs`, `actions.rs` (action strings to key chords), `lighting.rs`, `onboard.rs`, `health.rs`, `logger.rs` | files |
 
 Binaries:
 
@@ -181,6 +181,12 @@ selector `0x00` and again with `0x01` for the V3 and both V4 Pro ids
 Snakecharmer retains only the `0x00` request; live read-back is not evidence of persistence.
 On-board keymaps and the Elite's DPI-button event codes remain separately recorded
 hardware/capture evidence, not facts supplied by this snapshot.
+
+The HID regressions distinguish local transport/verification-helper tests from `Mouse`
+boundary tests. The latter call the typed methods and production process-wide latch with
+private simulated devices, in isolated test subprocesses. Literal request fixtures pin
+the existing packets; fabricated success replies do not establish firmware acceptance.
+Enumeration, the Windows HID API, and physical mouse behavior still need hardware checks.
 
 ## Features
 

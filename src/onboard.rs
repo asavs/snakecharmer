@@ -34,7 +34,12 @@ pub fn read_binds(mouse: &Mouse, km: &KeymapSpec) -> Result<Vec<StoredBind>, raz
         .map(|&(button, name)| {
             let bind = mouse.get_button_binding(button)?;
             let is_default = Binding::default_for(button).map(|d| d == bind);
-            Ok(StoredBind { button, name, bind, is_default })
+            Ok(StoredBind {
+                button,
+                name,
+                bind,
+                is_default,
+            })
         })
         .collect()
 }
@@ -91,7 +96,10 @@ pub struct Wanted {
 
 /// Resolve the `[onboard]` config table (button name -> bind) against `km`.
 /// Every bad entry is reported, not just the first, so one save fixes them all.
-pub fn parse_config(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Result<Vec<Wanted>, String> {
+pub fn parse_config(
+    km: &KeymapSpec,
+    table: &BTreeMap<String, String>,
+) -> Result<Vec<Wanted>, String> {
     let mut wanted = Vec::new();
     let mut errors = Vec::new();
     for (key, value) in table {
@@ -115,7 +123,11 @@ pub fn parse_config(km: &KeymapSpec, table: &BTreeMap<String, String>) -> Result
             Err(e) => errors.push(format!("{name} = {value:?}: {e}")),
         }
     }
-    if errors.is_empty() { Ok(wanted) } else { Err(errors.join("; ")) }
+    if errors.is_empty() {
+        Ok(wanted)
+    } else {
+        Err(errors.join("; "))
+    }
 }
 
 /// One writable button as the settings window shows it: an editable dropdown
@@ -144,11 +156,16 @@ const PRESETS: [(&str, &str); 8] = [
 
 /// "Back (default)": the entry that names the button and puts it back.
 fn default_label(button: u8) -> String {
-    let default = Binding::default_for(button).map(|b| b.to_string()).unwrap_or_default();
+    let default = Binding::default_for(button)
+        .map(|b| b.to_string())
+        .unwrap_or_default();
     // "back (mouse button 4)" -> "Back"
     let short = default.split(" (").next().unwrap_or_default();
     let mut c = short.chars();
-    let short: String = c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default();
+    let short: String = c
+        .next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default();
     format!("{short} (default)")
 }
 
@@ -169,13 +186,19 @@ fn presets(button: u8) -> Vec<(String, &'static str)> {
 /// `[onboard]` sets opens on that entry; one it leaves alone opens on what the
 /// mouse stores (from `stored`, empty if the read failed), so a leftover bind
 /// shows as itself and picking the default entry is a change that resets it.
-pub fn controls(km: &KeymapSpec, table: &BTreeMap<String, String>, stored: &[StoredBind]) -> Vec<Control> {
+pub fn controls(
+    km: &KeymapSpec,
+    table: &BTreeMap<String, String>,
+    stored: &[StoredBind],
+) -> Vec<Control> {
     km.buttons
         .iter()
         .filter(|&&(button, _)| km.is_writable(button) && !MAIN_CLICKS.contains(&button))
         .map(|&(button, name)| {
             let presets = presets(button);
-            let entry = table.iter().find(|(k, _)| km.button(k).map(|(b, _)| b) == Some(button));
+            let entry = table
+                .iter()
+                .find(|(k, _)| km.button(k).map(|(b, _)| b) == Some(button));
             let (bind, typed) = match entry {
                 Some((_, v)) => (parse_bind(v, button).ok(), v.clone()),
                 None => match stored.iter().find(|s| s.button == button) {
@@ -188,7 +211,12 @@ pub fn controls(km: &KeymapSpec, table: &BTreeMap<String, String>, stored: &[Sto
                 .iter()
                 .find(|(_, p)| bind.is_some() && parse_bind(p, button).ok() == bind)
                 .map_or(typed, |(label, _)| label.clone());
-            Control { button, name, presets: presets.into_iter().map(|(l, _)| l).collect(), text }
+            Control {
+                button,
+                name,
+                presets: presets.into_iter().map(|(l, _)| l).collect(),
+                text,
+            }
         })
         .collect()
 }
@@ -235,10 +263,15 @@ pub fn set_entry(
     name: &str,
     value: &str,
 ) -> Result<Option<Wanted>, String> {
-    let (button, canon) = km.button(name).ok_or_else(|| format!("{name:?} isn't a button on this mouse"))?;
+    let (button, canon) = km
+        .button(name)
+        .ok_or_else(|| format!("{name:?} isn't a button on this mouse"))?;
     let value = value.trim();
-    let stale: Vec<String> =
-        table.keys().filter(|k| km.button(k).map(|(b, _)| b) == Some(button)).cloned().collect();
+    let stale: Vec<String> = table
+        .keys()
+        .filter(|k| km.button(k).map(|(b, _)| b) == Some(button))
+        .cloned()
+        .collect();
     if value.is_empty() {
         for k in stale {
             table.remove(&k);
@@ -266,15 +299,24 @@ pub fn migrate_thumbs(km: &KeymapSpec, cfg: &mut crate::config::Config) -> Vec<S
         if action.is_empty() || action.eq_ignore_ascii_case("none") || !km.is_writable(button) {
             continue;
         }
-        let Some(&(_, name)) = km.buttons.iter().find(|(b, _)| *b == button) else { continue };
-        let taken = cfg.onboard.keys().any(|k| km.button(k).map(|(b, _)| b) == Some(button));
+        let Some(&(_, name)) = km.buttons.iter().find(|(b, _)| *b == button) else {
+            continue;
+        };
+        let taken = cfg
+            .onboard
+            .keys()
+            .any(|k| km.button(k).map(|(b, _)| b) == Some(button));
         if taken {
             notes.push(format!("{name}: dropped the software remap {action:?}; the on-board bind already covers it"));
         } else if parse_bind(&action, button).is_ok() {
             cfg.onboard.insert(name.to_string(), action.clone());
-            notes.push(format!("{name}: moved the software remap {action:?} to the mouse's on-board memory"));
+            notes.push(format!(
+                "{name}: moved the software remap {action:?} to the mouse's on-board memory"
+            ));
         } else {
-            notes.push(format!("{name}: kept {action:?} as a software remap; the mouse can't store it"));
+            notes.push(format!(
+                "{name}: kept {action:?} as a software remap; the mouse can't store it"
+            ));
             continue;
         }
         *field = "none".to_string();
@@ -296,13 +338,21 @@ impl core::fmt::Display for Change {
 }
 
 /// Put `wanted` on the mouse, writing only buttons whose stored bind differs.
-pub fn apply(mouse: &Mouse, km: &KeymapSpec, wanted: &[Wanted]) -> Result<Vec<Change>, razer_hid::Error> {
+pub fn apply(
+    mouse: &Mouse,
+    km: &KeymapSpec,
+    wanted: &[Wanted],
+) -> Result<Vec<Change>, razer_hid::Error> {
     let mut changes = Vec::new();
     for w in wanted {
         let before = mouse.get_button_binding(w.button)?;
         if before != w.bind {
             let after = mouse.set_button_binding(km, w.button, &w.bind)?;
-            changes.push(Change { name: w.name, before, after });
+            changes.push(Change {
+                name: w.name,
+                before,
+                after,
+            });
         }
     }
     Ok(changes)
@@ -316,7 +366,11 @@ pub struct ResetOutcome {
 }
 
 /// Put every leftover back to its default bind, skipping `configured` buttons.
-pub fn reset(mouse: &Mouse, km: &KeymapSpec, configured: &[u8]) -> Result<ResetOutcome, razer_hid::Error> {
+pub fn reset(
+    mouse: &Mouse,
+    km: &KeymapSpec,
+    configured: &[u8],
+) -> Result<ResetOutcome, razer_hid::Error> {
     let binds = read_binds(mouse, km)?;
     let (wanted, stuck) = reset_plan(km, &leftovers(&binds, configured));
     let changes = apply(mouse, km, &wanted)?;
@@ -329,7 +383,11 @@ fn reset_plan(km: &KeymapSpec, leftovers: &[&StoredBind]) -> (Vec<Wanted>, Vec<S
     let mut stuck = Vec::new();
     for b in leftovers {
         match Binding::default_for(b.button) {
-            Some(bind) if km.is_writable(b.button) => wanted.push(Wanted { button: b.button, name: b.name, bind }),
+            Some(bind) if km.is_writable(b.button) => wanted.push(Wanted {
+                button: b.button,
+                name: b.name,
+                bind,
+            }),
             _ => stuck.push(format!("{} = {}", b.name, b.bind)),
         }
     }
@@ -345,14 +403,27 @@ mod tests {
     }
 
     fn sb(button: u8, name: &'static str, bind: Binding, is_default: Option<bool>) -> StoredBind {
-        StoredBind { button, name, bind, is_default }
+        StoredBind {
+            button,
+            name,
+            bind,
+            is_default,
+        }
     }
 
     #[test]
     fn leftovers_skip_defaults_unknown_defaults_and_configured() {
         let binds = vec![
             sb(0x01, "left", Binding::Mouse(1), Some(true)),
-            sb(0x04, "back", Binding::Key { modifiers: 0, usage: 0x27 }, Some(false)),
+            sb(
+                0x04,
+                "back",
+                Binding::Key {
+                    modifiers: 0,
+                    usage: 0x27,
+                },
+                Some(false),
+            ),
             sb(0x05, "forward", Binding::Disabled, Some(false)),
             sb(0x60, "underside", Binding::Disabled, None),
         ];
@@ -382,23 +453,57 @@ mod tests {
 
     #[test]
     fn config_resolves_names_and_reports_every_error() {
-        let table: BTreeMap<String, String> =
-            [("back", "ctrl+c"), ("wheel-click", "default"), ("right", "default")]
-                .map(|(k, v)| (k.into(), v.into()))
-                .into();
+        let table: BTreeMap<String, String> = [
+            ("back", "ctrl+c"),
+            ("wheel-click", "default"),
+            ("right", "default"),
+        ]
+        .map(|(k, v)| (k.into(), v.into()))
+        .into();
         let w = parse_config(v3(), &table).unwrap();
         assert_eq!(w.len(), 3, "right may go back to default");
-        assert_eq!(w[0], Wanted { button: 0x04, name: "back", bind: Binding::Key { modifiers: 1, usage: 0x06 } });
-        assert_eq!(w[1], Wanted { button: 0x02, name: "right", bind: Binding::Mouse(0x02) });
-        assert_eq!(w[2], Wanted { button: 0x03, name: "wheel click", bind: Binding::Mouse(0x03) });
+        assert_eq!(
+            w[0],
+            Wanted {
+                button: 0x04,
+                name: "back",
+                bind: Binding::Key {
+                    modifiers: 1,
+                    usage: 0x06
+                }
+            }
+        );
+        assert_eq!(
+            w[1],
+            Wanted {
+                button: 0x02,
+                name: "right",
+                bind: Binding::Mouse(0x02)
+            }
+        );
+        assert_eq!(
+            w[2],
+            Wanted {
+                button: 0x03,
+                name: "wheel click",
+                bind: Binding::Mouse(0x03)
+            }
+        );
 
-        let bad: BTreeMap<String, String> =
-            [("left", "a"), ("right", "disabled"), ("thumb", "a"), ("back", "ctrl+nope")]
-                .map(|(k, v)| (k.into(), v.into()))
-                .into();
+        let bad: BTreeMap<String, String> = [
+            ("left", "a"),
+            ("right", "disabled"),
+            ("thumb", "a"),
+            ("back", "ctrl+nope"),
+        ]
+        .map(|(k, v)| (k.into(), v.into()))
+        .into();
         let e = parse_config(v3(), &bad).unwrap_err();
         assert!(e.contains("left click can't be rebound"), "{e}");
-        assert!(e.contains("right click can only be set to \"default\""), "{e}");
+        assert!(
+            e.contains("right click can only be set to \"default\""),
+            "{e}"
+        );
         assert!(e.contains("\"thumb\" isn't a button"), "{e}");
         assert!(e.contains("back = \"ctrl+nope\""), "{e}");
     }
@@ -406,16 +511,30 @@ mod tests {
     #[test]
     fn controls_are_the_writable_buttons_opening_on_their_config() {
         let table: BTreeMap<String, String> =
-            [("wheel-click", "ctrl+c"), ("back", "f5"), ("left", "a")].map(|(k, v)| (k.into(), v.into())).into();
+            [("wheel-click", "ctrl+c"), ("back", "f5"), ("left", "a")]
+                .map(|(k, v)| (k.into(), v.into()))
+                .into();
         let c = controls(v3(), &table, &[]);
         let names: Vec<&str> = c.iter().map(|c| c.name).collect();
         // The main clicks aren't offered: right is writable only back to default.
-        assert_eq!(names, ["wheel click", "back", "forward", "wheel up", "wheel down"]);
-        assert_eq!(c[0].text, "Copy (Ctrl+C)", "an entry a preset covers shows the preset");
+        assert_eq!(
+            names,
+            ["wheel click", "back", "forward", "wheel up", "wheel down"]
+        );
+        assert_eq!(
+            c[0].text, "Copy (Ctrl+C)",
+            "an entry a preset covers shows the preset"
+        );
         assert_eq!(c[1].text, "f5", "anything else shows as typed");
         assert_eq!(c[1].presets[0], "Back (default)");
-        assert!(!c[1].presets.contains(&"Back".to_string()), "no duplicate of the default");
-        assert_eq!(c[2].text, "Forward (default)", "unmanaged, unread: the default entry");
+        assert!(
+            !c[1].presets.contains(&"Back".to_string()),
+            "no duplicate of the default"
+        );
+        assert_eq!(
+            c[2].text, "Forward (default)",
+            "unmanaged, unread: the default entry"
+        );
         assert_eq!(c[3].presets[0], "Scroll up (default)");
     }
 
@@ -426,15 +545,35 @@ mod tests {
         let stored = vec![
             sb(0x09, "wheel up", Binding::Mouse(0x09), Some(true)),
             sb(0x04, "back", Binding::Disabled, Some(false)),
-            sb(0x05, "forward", Binding::Key { modifiers: 0, usage: 0x27 }, Some(false)),
-            sb(0x03, "wheel click", Binding::Key { modifiers: 1, usage: 0x06 }, Some(false)),
+            sb(
+                0x05,
+                "forward",
+                Binding::Key {
+                    modifiers: 0,
+                    usage: 0x27,
+                },
+                Some(false),
+            ),
+            sb(
+                0x03,
+                "wheel click",
+                Binding::Key {
+                    modifiers: 1,
+                    usage: 0x06,
+                },
+                Some(false),
+            ),
         ];
         let table: BTreeMap<String, String> = [("back".to_string(), "f5".to_string())].into();
         let c = controls(v3(), &table, &stored);
         let text = |name| c.iter().find(|c| c.name == name).unwrap().text.clone();
         assert_eq!(text("wheel up"), "Scroll up (default)");
         assert_eq!(text("forward"), "0", "the leftover shows as itself");
-        assert_eq!(text("wheel click"), "Copy (Ctrl+C)", "a stored bind a preset covers");
+        assert_eq!(
+            text("wheel click"),
+            "Copy (Ctrl+C)",
+            "a stored bind a preset covers"
+        );
         assert_eq!(text("back"), "f5", "[onboard] wins over the stored value");
         // Picking the default entry on the leftover is a change, and resets it.
         assert_ne!(text("forward"), "Forward (default)");
@@ -446,12 +585,20 @@ mod tests {
         use platform::settings::{Expect, MouseSend};
         // A recorded chord, stored, must be expected under the same name the
         // window builds from the mouse's raw keystrokes.
-        for (vk, ctrl, shift) in [(0x54u16, true, true), (0xBF, false, false), (0x61, false, false), (0x7C, true, false)] {
+        for (vk, ctrl, shift) in [
+            (0x54u16, true, true),
+            (0xBF, false, false),
+            (0x61, false, false),
+            (0x7C, true, false),
+        ] {
             let name = platform::chord_name(vk, ctrl, shift, false, false).unwrap();
             let bind = parse_bind(&name, 0x04).unwrap();
             assert_eq!(expect_for(&bind), Expect::Key(name.clone()), "{name}");
         }
-        assert_eq!(expect_for(&Binding::Mouse(0x03)), Expect::Mouse(MouseSend::Middle));
+        assert_eq!(
+            expect_for(&Binding::Mouse(0x03)),
+            Expect::Mouse(MouseSend::Middle)
+        );
         assert_eq!(expect_for(&Binding::Disabled), Expect::Nothing);
     }
 
@@ -461,30 +608,56 @@ mod tests {
         // (razer-proto) keep separate key tables; they must agree.
         let mut named = 0;
         for vk in 0..=0xFFu16 {
-            let Some(name) = platform::key_name(vk) else { continue };
+            let Some(name) = platform::key_name(vk) else {
+                continue;
+            };
             named += 1;
-            assert!(parse_bind(&name, 0x04).is_ok(), "vk 0x{vk:02x} records {name:?}");
+            assert!(
+                parse_bind(&name, 0x04).is_ok(),
+                "vk 0x{vk:02x} records {name:?}"
+            );
             let chord = platform::chord_name(vk, true, true, true, true).unwrap();
             assert!(parse_bind(&chord, 0x04).is_ok(), "{chord:?}");
         }
         assert!(named > 90, "{named} keys");
-        assert_eq!(platform::chord_name(0x54, true, true, false, false).as_deref(), Some("Ctrl+Shift+T"));
-        assert_eq!(platform::key_name(0x10), None, "a bare modifier records nothing");
+        assert_eq!(
+            platform::chord_name(0x54, true, true, false, false).as_deref(),
+            Some("Ctrl+Shift+T")
+        );
+        assert_eq!(
+            platform::key_name(0x10),
+            None,
+            "a bare modifier records nothing"
+        );
     }
 
     #[test]
     fn thumb_remaps_move_on_board() {
         use crate::config::Config;
-        let mut cfg = Config { thumb_back: "copy".into(), thumb_forward: "key:f13".into(), ..Config::default() };
+        let mut cfg = Config {
+            thumb_back: "copy".into(),
+            thumb_forward: "key:f13".into(),
+            ..Config::default()
+        };
         let notes = migrate_thumbs(v3(), &mut cfg);
         assert_eq!(notes.len(), 2);
-        assert_eq!((cfg.thumb_back.as_str(), cfg.thumb_forward.as_str()), ("none", "none"));
+        assert_eq!(
+            (cfg.thumb_back.as_str(), cfg.thumb_forward.as_str()),
+            ("none", "none")
+        );
         assert_eq!(cfg.onboard.get("back").map(String::as_str), Some("copy"));
-        assert_eq!(cfg.onboard.get("forward").map(String::as_str), Some("key:f13"));
+        assert_eq!(
+            cfg.onboard.get("forward").map(String::as_str),
+            Some("key:f13")
+        );
         assert!(migrate_thumbs(v3(), &mut cfg).is_empty(), "runs once");
 
         // An existing [onboard] entry wins; a remap the mouse can't store stays.
-        let mut cfg = Config { thumb_back: "cut".into(), thumb_forward: "key:é".into(), ..Config::default() };
+        let mut cfg = Config {
+            thumb_back: "cut".into(),
+            thumb_forward: "key:é".into(),
+            ..Config::default()
+        };
         cfg.onboard.insert("back".into(), "f5".into());
         let notes = migrate_thumbs(v3(), &mut cfg);
         assert_eq!(cfg.onboard.get("back").map(String::as_str), Some("f5"));
@@ -502,17 +675,32 @@ mod tests {
         // Every preset is a bind the parser accepts, on every writable button.
         for &b in v3().writable {
             for (label, _) in presets(b) {
-                assert!(parse_bind(&choice_to_bind(b, &label), b).is_ok(), "{label} on 0x{b:02x}");
+                assert!(
+                    parse_bind(&choice_to_bind(b, &label), b).is_ok(),
+                    "{label} on 0x{b:02x}"
+                );
             }
         }
     }
 
     #[test]
     fn set_entry_validates_stores_canonically_and_clears() {
-        let mut t: BTreeMap<String, String> = [("wheel-click".to_string(), "disabled".to_string())].into();
-        let w = set_entry(v3(), &mut t, "wheel click", " ctrl+c ").unwrap().unwrap();
-        assert_eq!(w.bind, Binding::Key { modifiers: 1, usage: 0x06 });
-        assert_eq!(t, BTreeMap::from([("wheel_click".to_string(), "ctrl+c".to_string())]));
+        let mut t: BTreeMap<String, String> =
+            [("wheel-click".to_string(), "disabled".to_string())].into();
+        let w = set_entry(v3(), &mut t, "wheel click", " ctrl+c ")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            w.bind,
+            Binding::Key {
+                modifiers: 1,
+                usage: 0x06
+            }
+        );
+        assert_eq!(
+            t,
+            BTreeMap::from([("wheel_click".to_string(), "ctrl+c".to_string())])
+        );
 
         // A bad bind or an unwritable button is rejected and changes nothing.
         let before = t.clone();
@@ -521,7 +709,9 @@ mod tests {
         assert!(set_entry(v3(), &mut t, "thumb", "a").is_err());
         assert_eq!(t, before);
 
-        assert!(set_entry(v3(), &mut t, "wheel click", "  ").unwrap().is_none());
+        assert!(set_entry(v3(), &mut t, "wheel click", "  ")
+            .unwrap()
+            .is_none());
         assert!(t.is_empty());
     }
 
@@ -529,10 +719,25 @@ mod tests {
     fn reset_writes_defaults_and_reports_unwritable_leftovers() {
         let binds = vec![
             sb(0x01, "left", Binding::Mouse(0x02), Some(false)),
-            sb(0x03, "wheel click", Binding::Key { modifiers: 0, usage: 0x25 }, Some(false)),
+            sb(
+                0x03,
+                "wheel click",
+                Binding::Key {
+                    modifiers: 0,
+                    usage: 0x25,
+                },
+                Some(false),
+            ),
         ];
         let (wanted, stuck) = reset_plan(v3(), &leftovers(&binds, &[]));
-        assert_eq!(wanted, vec![Wanted { button: 0x03, name: "wheel click", bind: Binding::Mouse(0x03) }]);
+        assert_eq!(
+            wanted,
+            vec![Wanted {
+                button: 0x03,
+                name: "wheel click",
+                bind: Binding::Mouse(0x03)
+            }]
+        );
         assert_eq!(stuck, vec!["left = right click".to_string()]);
     }
 }
