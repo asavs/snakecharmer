@@ -23,8 +23,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     PostQuitMessage, RegisterClassW, SetForegroundWindow, SetWindowLongPtrW, TrackPopupMenu,
     TranslateMessage, CW_USEDEFAULT, GWLP_USERDATA, HICON, HMENU, IDI_APPLICATION, MF_CHECKED,
     MF_POPUP, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, MSG, TPM_LEFTALIGN, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, WM_APP, WM_COMMAND,
-    WM_DESTROY, WM_NCDESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    TPM_RIGHTBUTTON, WM_APP, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_NCDESTROY,
+    WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 const TRAY_CALLBACK_MSG: u32 = WM_APP + 1;
@@ -60,7 +60,11 @@ pub enum MenuItem {
     Action { id: u32, label: String },
     /// A checkable item. Reports `id` like an `Action`; `checked` is a *render*
     /// of state the app owns — the tray never toggles it itself.
-    Check { id: u32, label: String, checked: bool },
+    Check {
+        id: u32,
+        label: String,
+        checked: bool,
+    },
     /// A horizontal separator.
     Separator,
     /// A nested submenu.
@@ -69,13 +73,23 @@ pub enum MenuItem {
 
 impl MenuItem {
     pub fn action(id: u32, label: impl Into<String>) -> MenuItem {
-        MenuItem::Action { id, label: label.into() }
+        MenuItem::Action {
+            id,
+            label: label.into(),
+        }
     }
     pub fn check(id: u32, label: impl Into<String>, checked: bool) -> MenuItem {
-        MenuItem::Check { id, label: label.into(), checked }
+        MenuItem::Check {
+            id,
+            label: label.into(),
+            checked,
+        }
     }
     pub fn submenu(label: impl Into<String>, items: Vec<MenuItem>) -> MenuItem {
-        MenuItem::Submenu { label: label.into(), items }
+        MenuItem::Submenu {
+            label: label.into(),
+            items,
+        }
     }
 }
 
@@ -169,8 +183,11 @@ pub fn run(tooltip: &str, menu: Vec<MenuItem>, on_command: impl Fn(u32) + 'stati
 
         // Add the notification-area icon (our drawn mark, or the stock icon if
         // drawing failed).
-        let tray_icon =
-            if hicon.is_null() { LoadIconW(std::ptr::null_mut(), IDI_APPLICATION) } else { hicon };
+        let tray_icon = if hicon.is_null() {
+            LoadIconW(std::ptr::null_mut(), IDI_APPLICATION)
+        } else {
+            hicon
+        };
         let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
         nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
         nid.hWnd = hwnd;

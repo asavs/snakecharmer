@@ -17,12 +17,12 @@ The Razer control protocol is a 90-byte HID feature report (report ID 0):
   offset 88    crc = XOR of bytes 2..87
   offset 89    reserved (0)
 
-Commands used here (all documented in OpenRazer, nothing else is ever sent):
+Command layouts used here (see docs/SPEC.md for the DPI selector difference):
   set device mode : class 0x00, id 0x04, data_size 2, args [mode, 0x00]
                     mode 0x00 = hardware/normal, 0x03 = driver mode
   get device mode : class 0x00, id 0x84, data_size 2
   set DPI (xy)    : class 0x04, id 0x05, data_size 7,
-                    args [0x00 (no varstore), dpi_x_hi, dpi_x_lo, dpi_y_hi, dpi_y_lo]
+                    args [0x00 (existing selector), dpi_x_hi, dpi_x_lo, dpi_y_hi, dpi_y_lo]
   get DPI (xy)    : class 0x04, id 0x85, data_size 7
 
 The control endpoint on Windows is the interface-0 HID collection
@@ -158,7 +158,7 @@ def set_dpi(dev: "hid.device", dpi_x: int, dpi_y: int = None) -> tuple:
     for v in (dpi_x, dpi_y):
         if not (100 <= v <= 16000):
             raise ValueError("DPI must be 100..16000 for the DeathAdder Elite")
-    args = bytes([0x00,  # no variable storage (NOSTORE), per openrazer for this device
+    args = bytes([0x00,  # Existing selector differs from the pinned helper; see docs/SPEC.md.
                   (dpi_x >> 8) & 0xFF, dpi_x & 0xFF,
                   (dpi_y >> 8) & 0xFF, dpi_y & 0xFF,
                   0x00, 0x00])
