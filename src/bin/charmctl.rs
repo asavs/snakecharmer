@@ -19,10 +19,10 @@
 //!   charmctl self-test                      exercise keystroke injection (F13)
 //!   charmctl where                          print config/log paths
 
-use snakecharmer::config::Config;
-use snakecharmer::lighting::EffectSpec;
 use razer_hid::Mouse;
 use razer_proto::{DeviceMode, Rgb};
+use snakecharmer::config::Config;
+use snakecharmer::lighting::EffectSpec;
 
 /// Where an unsupported device is documented (same page the daemon's tray
 /// notice offers to open).
@@ -107,7 +107,11 @@ fn devices() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     for m in &mice {
-        let mark = if m.supported { "supported" } else { "not supported yet" };
+        let mark = if m.supported {
+            "supported"
+        } else {
+            "not supported yet"
+        };
         println!("  {m}  --  {mark}");
     }
     if mice.iter().any(|m| !m.supported) {
@@ -184,8 +188,12 @@ fn keymap(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 None => println!("  {} already stores {}\n", wanted[0].name, wanted[0].bind),
             }
         }
-        Some("set") => return Err("usage: keymap set <button> <bind>   e.g. keymap set back ctrl+c".into()),
-        Some(other) => return Err(format!("unknown keymap command {other:?} (expected reset or set)").into()),
+        Some("set") => {
+            return Err("usage: keymap set <button> <bind>   e.g. keymap set back ctrl+c".into())
+        }
+        Some(other) => {
+            return Err(format!("unknown keymap command {other:?} (expected reset or set)").into())
+        }
     }
     println!("On-board binds on the {}:", spec.name);
     let binds = onboard::read_binds(&mouse, km)?;
@@ -245,29 +253,49 @@ fn set_color(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let rgb = parse_color(args.first())?;
     let mouse = Mouse::open()?;
     if !mouse.spec().has_rgb() {
-        println!("{} has no lighting hardware; nothing to set.", mouse.spec().name);
+        println!(
+            "{} has no lighting hardware; nothing to set.",
+            mouse.spec().name
+        );
         return Ok(());
     }
     mouse.set_color(rgb)?;
-    println!("Sent static #{:02x}{:02x}{:02x} to all zones (device ack 0x02).", rgb.r, rgb.g, rgb.b);
+    println!(
+        "Sent static #{:02x}{:02x}{:02x} to all zones (device ack 0x02).",
+        rgb.r, rgb.g, rgb.b
+    );
     Ok(())
 }
 
 fn set_effect(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let kind = args.first().map(|s| s.as_str()).ok_or(
-        "usage: set-effect static|breathing|spectrum|off [#RRGGBB]",
-    )?;
+    let kind = args
+        .first()
+        .map(|s| s.as_str())
+        .ok_or("usage: set-effect static|breathing|spectrum|off [#RRGGBB]")?;
     let default_color = Rgb::new(0x00, 0xFF, 0x00);
     let spec = match kind {
-        "static" => EffectSpec::Static(args.get(1).map(|s| Rgb::parse_hex(s)).transpose()?.unwrap_or(default_color)),
-        "breathing" => EffectSpec::Breathing(args.get(1).map(|s| Rgb::parse_hex(s)).transpose()?.unwrap_or(default_color)),
+        "static" => EffectSpec::Static(
+            args.get(1)
+                .map(|s| Rgb::parse_hex(s))
+                .transpose()?
+                .unwrap_or(default_color),
+        ),
+        "breathing" => EffectSpec::Breathing(
+            args.get(1)
+                .map(|s| Rgb::parse_hex(s))
+                .transpose()?
+                .unwrap_or(default_color),
+        ),
         "spectrum" => EffectSpec::Spectrum,
         "off" | "none" => EffectSpec::Off,
         other => return Err(format!("unknown effect {other:?}").into()),
     };
     let mouse = Mouse::open()?;
     if !mouse.spec().has_rgb() {
-        println!("{} has no lighting hardware; nothing to set.", mouse.spec().name);
+        println!(
+            "{} has no lighting hardware; nothing to set.",
+            mouse.spec().name
+        );
         return Ok(());
     }
     spec.apply(&mouse)?;
@@ -277,7 +305,13 @@ fn set_effect(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
 fn self_test() -> Result<(), Box<dyn std::error::Error>> {
     let (cfg, _) = Config::load_or_create(&Config::config_path())?;
-    println!("Config: dpi={:?} up={:?} down={:?} lighting={:?}", cfg.dpi_xy(), cfg.dpi_up, cfg.dpi_down, cfg.lighting);
+    println!(
+        "Config: dpi={:?} up={:?} down={:?} lighting={:?}",
+        cfg.dpi_xy(),
+        cfg.dpi_up,
+        cfg.dpi_down,
+        cfg.lighting
+    );
     for (label, spec) in [("dpi_up", &cfg.dpi_up), ("dpi_down", &cfg.dpi_down)] {
         match snakecharmer::actions::parse(spec) {
             Ok(a) => println!("  {label} = {spec:?} -> {:?}", a.chord()),
