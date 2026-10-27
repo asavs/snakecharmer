@@ -105,13 +105,18 @@ For a device port, just record the mouse's on-board profile count in the PR.
 ## Acceptance
 
 ```
+cargo fmt --all -- --check
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo build --release
 python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe
+python -m unittest discover -s reference -p "test_*.py"
+python reference/keymap_diff.py --self-test
+python -m unittest discover -s tools -p "test_wishlist*.py"
 ```
 
-CI runs these checks; [`CONTRIBUTING.md`](CONTRIBUTING.md) covers development setup.
+CI also runs the Rust tests, Clippy, and build with `--features pc-vitals` and checks
+those binaries' imports; [`CONTRIBUTING.md`](CONTRIBUTING.md) covers development setup.
 
 A change is not done until those are green. Tests for protocol code assert **exact bytes**
 against the OpenRazer reference. See the `*_matches_openrazer` tests for the pattern.

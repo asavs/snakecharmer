@@ -68,7 +68,10 @@ impl KeymapSpec {
     /// (`wheel-click`, `WheelClick`, `wheel click`).
     pub fn button(&self, name: &str) -> Option<(u8, &'static str)> {
         let want = squash(name);
-        self.buttons.iter().copied().find(|(_, n)| squash(n) == want)
+        self.buttons
+            .iter()
+            .copied()
+            .find(|(_, n)| squash(n) == want)
     }
 
     pub fn is_writable(&self, button: u8) -> bool {
@@ -87,14 +90,23 @@ pub fn rebinds_main_click(button: u8, bind: &Binding) -> bool {
 }
 
 fn squash(s: &str) -> String {
-    s.chars().filter(|c| !matches!(c, ' ' | '-' | '_')).flat_map(char::to_lowercase).collect()
+    s.chars()
+        .filter(|c| !matches!(c, ' ' | '-' | '_'))
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 /// The read for one button. Synapse numbers its transactions; the device's
 /// usual transaction id is used here, as for every other command.
 pub fn read_binding_report(transaction_id: u8, button: u8) -> [u8; REPORT_LEN] {
-    build_report(transaction_id, CLASS, READ_ID, DATA_SIZE, &[ARG0, button, 0x00])
-        .expect("3 args always valid")
+    build_report(
+        transaction_id,
+        CLASS,
+        READ_ID,
+        DATA_SIZE,
+        &[ARG0, button, 0x00],
+    )
+    .expect("3 args always valid")
 }
 
 /// The write for one button. Refuses a button whose write wasn't captured, a
@@ -140,9 +152,15 @@ pub enum Binding {
     /// button's own id: back (`0x04`) defaults to function `0x04`.
     Mouse(u8),
     /// A key: HID modifier bitmask and HID keyboard usage.
-    Key { modifiers: u8, usage: u8 },
+    Key {
+        modifiers: u8,
+        usage: u8,
+    },
     /// A category not decoded yet (`0x06` on the V3's underside button).
-    Unknown { category: u8, payload: Vec<u8> },
+    Unknown {
+        category: u8,
+        payload: Vec<u8>,
+    },
 }
 
 impl Binding {
@@ -155,7 +173,10 @@ impl Binding {
 /// Parse a validated read or write reply for `button`.
 pub fn parse_binding(response: &[u8], button: u8) -> Result<Binding, ProtoError> {
     if response[9] != button {
-        return Err(ProtoError::KeymapButtonMismatch { sent: button, got: response[9] });
+        return Err(ProtoError::KeymapButtonMismatch {
+            sent: button,
+            got: response[9],
+        });
     }
     let category = response[11];
     let len = response[12] as usize;
@@ -166,8 +187,14 @@ pub fn parse_binding(response: &[u8], button: u8) -> Result<Binding, ProtoError>
     Ok(match (category, payload) {
         (0x00, _) => Binding::Disabled,
         (0x01, [f]) => Binding::Mouse(*f),
-        (0x02, [m, u]) => Binding::Key { modifiers: *m, usage: *u },
-        _ => Binding::Unknown { category, payload: payload.to_vec() },
+        (0x02, [m, u]) => Binding::Key {
+            modifiers: *m,
+            usage: *u,
+        },
+        _ => Binding::Unknown {
+            category,
+            payload: payload.to_vec(),
+        },
     })
 }
 
@@ -184,10 +211,16 @@ pub fn parse_bind(spec: &str, button: u8) -> Result<Binding, String> {
     let lower = spec.trim().to_ascii_lowercase();
     let s = lower.strip_prefix("key:").unwrap_or(&lower);
     let mouse = |f| Ok(Binding::Mouse(f));
-    let ctrl = |usage| Ok(Binding::Key { modifiers: 0x01, usage });
+    let ctrl = |usage| {
+        Ok(Binding::Key {
+            modifiers: 0x01,
+            usage,
+        })
+    };
     match s {
         "default" => {
-            return Binding::default_for(button).ok_or_else(|| "this button has no known default".into())
+            return Binding::default_for(button)
+                .ok_or_else(|| "this button has no known default".into())
         }
         "disabled" | "off" => return Ok(Binding::Disabled),
         "left click" => return mouse(0x01),
@@ -203,7 +236,11 @@ pub fn parse_bind(spec: &str, button: u8) -> Result<Binding, String> {
         _ => {}
     }
     // A lone "+" or "-" is a key, not a chord separator.
-    let parts: Vec<&str> = if s.len() > 1 { s.split('+').map(str::trim).collect() } else { vec![s] };
+    let parts: Vec<&str> = if s.len() > 1 {
+        s.split('+').map(str::trim).collect()
+    } else {
+        vec![s]
+    };
     let (key, mods) = parts.split_last().ok_or("empty bind")?;
     let mut modifiers = 0u8;
     for m in mods {
@@ -237,7 +274,11 @@ impl core::fmt::Display for Binding {
             }
             Binding::Unknown { category, payload } => {
                 let hex: Vec<String> = payload.iter().map(|b| format!("{b:02x}")).collect();
-                write!(f, "undecoded (category 0x{category:02x}: {})", hex.join(" "))
+                write!(
+                    f,
+                    "undecoded (category 0x{category:02x}: {})",
+                    hex.join(" ")
+                )
             }
         }
     }
@@ -337,7 +378,9 @@ fn usage_for(name: &str) -> Option<u8> {
         .iter()
         .find(|(_, n)| n.eq_ignore_ascii_case(name))
         .map(|&(u, _)| u)
-        .or_else(|| (0x04..=0x73).find(|&u| usage_name(u).is_some_and(|k| k.eq_ignore_ascii_case(name))))
+        .or_else(|| {
+            (0x04..=0x73).find(|&u| usage_name(u).is_some_and(|k| k.eq_ignore_ascii_case(name)))
+        })
 }
 
 #[cfg(test)]
@@ -370,16 +413,57 @@ mod tests {
     fn parses_captured_replies() {
         // Launch read replies (defaults) and session acks, which share the layout.
         let cases: [(&[u8], u8, Binding, &str); 7] = [
-            (&[0x01, 0x04, 0x00, 0x01, 0x01, 0x04], 0x04, Binding::Mouse(4), "back (mouse button 4)"),
-            (&[0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0x01, Binding::Mouse(1), "left click"),
-            (&[0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x1E], 0x04,
-             Binding::Key { modifiers: 0, usage: 0x1E }, "1"),
-            (&[0x01, 0x04, 0x00, 0x02, 0x02, 0x01, 0x06], 0x04,
-             Binding::Key { modifiers: 0x01, usage: 0x06 }, "Ctrl+C"),
-            (&[0x01, 0x04, 0x00, 0x01, 0x01, 0x03], 0x04, Binding::Mouse(3), "middle click"),
-            (&[0x01, 0x04, 0x00, 0x00, 0x00], 0x04, Binding::Disabled, "disabled"),
-            (&[0x01, 0x60, 0x00, 0x06, 0x01, 0x06], 0x60,
-             Binding::Unknown { category: 0x06, payload: vec![0x06] }, "undecoded (category 0x06: 06)"),
+            (
+                &[0x01, 0x04, 0x00, 0x01, 0x01, 0x04],
+                0x04,
+                Binding::Mouse(4),
+                "back (mouse button 4)",
+            ),
+            (
+                &[0x01, 0x01, 0x01, 0x01, 0x01, 0x01],
+                0x01,
+                Binding::Mouse(1),
+                "left click",
+            ),
+            (
+                &[0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x1E],
+                0x04,
+                Binding::Key {
+                    modifiers: 0,
+                    usage: 0x1E,
+                },
+                "1",
+            ),
+            (
+                &[0x01, 0x04, 0x00, 0x02, 0x02, 0x01, 0x06],
+                0x04,
+                Binding::Key {
+                    modifiers: 0x01,
+                    usage: 0x06,
+                },
+                "Ctrl+C",
+            ),
+            (
+                &[0x01, 0x04, 0x00, 0x01, 0x01, 0x03],
+                0x04,
+                Binding::Mouse(3),
+                "middle click",
+            ),
+            (
+                &[0x01, 0x04, 0x00, 0x00, 0x00],
+                0x04,
+                Binding::Disabled,
+                "disabled",
+            ),
+            (
+                &[0x01, 0x60, 0x00, 0x06, 0x01, 0x06],
+                0x60,
+                Binding::Unknown {
+                    category: 0x06,
+                    payload: vec![0x06],
+                },
+                "undecoded (category 0x06: 06)",
+            ),
         ];
         for (args, button, want, shown) in cases {
             let got = parse_binding(&reply(args), button).unwrap();
@@ -393,15 +477,31 @@ mod tests {
         // The V3's binds before Synapse 4 reset them: back typed 0, wheel click 8.
         assert_eq!(usage_name(0x27).as_deref(), Some("0"));
         assert_eq!(usage_name(0x25).as_deref(), Some("8"));
-        assert_ne!(Some(Binding::Key { modifiers: 0, usage: 0x27 }), Binding::default_for(0x04));
+        assert_ne!(
+            Some(Binding::Key {
+                modifiers: 0,
+                usage: 0x27
+            }),
+            Binding::default_for(0x04)
+        );
         assert_eq!(Binding::default_for(0x04), Some(Binding::Mouse(4)));
-        assert_eq!(Binding::default_for(0x60), None, "underside default not established");
+        assert_eq!(
+            Binding::default_for(0x60),
+            None,
+            "underside default not established"
+        );
     }
 
     #[test]
     fn reply_for_another_button_is_rejected() {
         let e = parse_binding(&reply(&[0x01, 0x05, 0x00, 0x01, 0x01, 0x05]), 0x04);
-        assert_eq!(e, Err(ProtoError::KeymapButtonMismatch { sent: 0x04, got: 0x05 }));
+        assert_eq!(
+            e,
+            Err(ProtoError::KeymapButtonMismatch {
+                sent: 0x04,
+                got: 0x05
+            })
+        );
     }
 
     /// Every write Synapse sent to the V3, rebuilt from its bind:
@@ -409,22 +509,90 @@ mod tests {
     /// `docs/captures/V3-20261016-additional-buttons/` (the rest).
     #[test]
     fn write_matches_capture() {
-        let one = Binding::Key { modifiers: 0, usage: 0x1E };
+        let one = Binding::Key {
+            modifiers: 0,
+            usage: 0x1E,
+        };
         let cases: [(u8, Binding, [u8; 7]); 15] = [
-            (0x04, one.clone(), [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x1E]),
-            (0x04, Binding::Key { modifiers: 0, usage: 0x1F }, [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x1F]),
-            (0x04, Binding::Key { modifiers: 0, usage: 0x04 }, [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x04]),
-            (0x04, Binding::Key { modifiers: 0x01, usage: 0x06 }, [0x01, 0x04, 0x00, 0x02, 0x02, 0x01, 0x06]),
-            (0x04, Binding::Mouse(0x03), [0x01, 0x04, 0x00, 0x01, 0x01, 0x03, 0x00]),
-            (0x04, Binding::Disabled, [0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00]),
-            (0x05, one.clone(), [0x01, 0x05, 0x00, 0x02, 0x02, 0x00, 0x1E]),
-            (0x05, Binding::Mouse(0x05), [0x01, 0x05, 0x00, 0x01, 0x01, 0x05, 0x00]),
-            (0x04, Binding::Mouse(0x04), [0x01, 0x04, 0x00, 0x01, 0x01, 0x04, 0x00]),
-            (0x03, one.clone(), [0x01, 0x03, 0x00, 0x02, 0x02, 0x00, 0x1E]),
-            (0x03, Binding::Mouse(0x03), [0x01, 0x03, 0x00, 0x01, 0x01, 0x03, 0x00]),
-            (0x02, Binding::Mouse(0x02), [0x01, 0x02, 0x00, 0x01, 0x01, 0x02, 0x00]),
-            (0x09, one.clone(), [0x01, 0x09, 0x00, 0x02, 0x02, 0x00, 0x1E]),
-            (0x09, Binding::Mouse(0x09), [0x01, 0x09, 0x00, 0x01, 0x01, 0x09, 0x00]),
+            (
+                0x04,
+                one.clone(),
+                [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x1E],
+            ),
+            (
+                0x04,
+                Binding::Key {
+                    modifiers: 0,
+                    usage: 0x1F,
+                },
+                [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x1F],
+            ),
+            (
+                0x04,
+                Binding::Key {
+                    modifiers: 0,
+                    usage: 0x04,
+                },
+                [0x01, 0x04, 0x00, 0x02, 0x02, 0x00, 0x04],
+            ),
+            (
+                0x04,
+                Binding::Key {
+                    modifiers: 0x01,
+                    usage: 0x06,
+                },
+                [0x01, 0x04, 0x00, 0x02, 0x02, 0x01, 0x06],
+            ),
+            (
+                0x04,
+                Binding::Mouse(0x03),
+                [0x01, 0x04, 0x00, 0x01, 0x01, 0x03, 0x00],
+            ),
+            (
+                0x04,
+                Binding::Disabled,
+                [0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00],
+            ),
+            (
+                0x05,
+                one.clone(),
+                [0x01, 0x05, 0x00, 0x02, 0x02, 0x00, 0x1E],
+            ),
+            (
+                0x05,
+                Binding::Mouse(0x05),
+                [0x01, 0x05, 0x00, 0x01, 0x01, 0x05, 0x00],
+            ),
+            (
+                0x04,
+                Binding::Mouse(0x04),
+                [0x01, 0x04, 0x00, 0x01, 0x01, 0x04, 0x00],
+            ),
+            (
+                0x03,
+                one.clone(),
+                [0x01, 0x03, 0x00, 0x02, 0x02, 0x00, 0x1E],
+            ),
+            (
+                0x03,
+                Binding::Mouse(0x03),
+                [0x01, 0x03, 0x00, 0x01, 0x01, 0x03, 0x00],
+            ),
+            (
+                0x02,
+                Binding::Mouse(0x02),
+                [0x01, 0x02, 0x00, 0x01, 0x01, 0x02, 0x00],
+            ),
+            (
+                0x09,
+                one.clone(),
+                [0x01, 0x09, 0x00, 0x02, 0x02, 0x00, 0x1E],
+            ),
+            (
+                0x09,
+                Binding::Mouse(0x09),
+                [0x01, 0x09, 0x00, 0x01, 0x01, 0x09, 0x00],
+            ),
             (0x0A, one, [0x01, 0x0A, 0x00, 0x02, 0x02, 0x00, 0x1E]),
         ];
         for (button, bind, args) in cases {
@@ -442,7 +610,10 @@ mod tests {
     }
 
     fn one_key() -> Binding {
-        Binding::Key { modifiers: 0, usage: 0x1E }
+        Binding::Key {
+            modifiers: 0,
+            usage: 0x1E,
+        }
     }
 
     #[test]
@@ -454,17 +625,46 @@ mod tests {
         assert!(w(one_key()).is_err());
         assert!(rebinds_main_click(0x01, &Binding::Disabled));
         assert!(!rebinds_main_click(0x01, &Binding::Mouse(0x01)));
-        assert!(!rebinds_main_click(0x04, &Binding::Disabled), "back isn't a main click");
+        assert!(
+            !rebinds_main_click(0x04, &Binding::Disabled),
+            "back isn't a main click"
+        );
     }
 
     #[test]
     fn refuses_uncaptured_or_undecoded_writes() {
         let w = |button, bind: Binding| write_binding_report(v3(), 0x1F, button, &bind);
-        assert!(w(0x01, Binding::Mouse(0x01)).is_err(), "left: no captured write");
-        assert!(w(0x60, Binding::Mouse(0x01)).is_err(), "underside: no captured write");
-        assert!(w(0x04, Binding::Unknown { category: 0x06, payload: vec![0x06] }).is_err());
-        assert!(w(0x04, Binding::Mouse(0x42)).is_err(), "unseen mouse function");
-        assert!(w(0x04, Binding::Key { modifiers: 0, usage: 0xE0 }).is_err(), "unnamed key");
+        assert!(
+            w(0x01, Binding::Mouse(0x01)).is_err(),
+            "left: no captured write"
+        );
+        assert!(
+            w(0x60, Binding::Mouse(0x01)).is_err(),
+            "underside: no captured write"
+        );
+        assert!(w(
+            0x04,
+            Binding::Unknown {
+                category: 0x06,
+                payload: vec![0x06]
+            }
+        )
+        .is_err());
+        assert!(
+            w(0x04, Binding::Mouse(0x42)).is_err(),
+            "unseen mouse function"
+        );
+        assert!(
+            w(
+                0x04,
+                Binding::Key {
+                    modifiers: 0,
+                    usage: 0xE0
+                }
+            )
+            .is_err(),
+            "unnamed key"
+        );
     }
 
     #[test]
@@ -485,12 +685,19 @@ mod tests {
         assert!(parse_bind("ctrl+nope", 0x04).is_err());
         assert!(parse_bind("default", 0x60).is_err());
         for b in [
-            Binding::Key { modifiers: 0x03, usage: 0x17 },
+            Binding::Key {
+                modifiers: 0x03,
+                usage: 0x17,
+            },
             Binding::Mouse(0x03),
             Binding::Mouse(0x04),
             Binding::Disabled,
         ] {
-            assert_eq!(parse_bind(&b.to_string(), 0x04), Ok(b.clone()), "{b} round-trips");
+            assert_eq!(
+                parse_bind(&b.to_string(), 0x04),
+                Ok(b.clone()),
+                "{b} round-trips"
+            );
         }
     }
 
@@ -500,14 +707,48 @@ mod tests {
         for u in 0x04..=0x73u8 {
             let Some(name) = usage_name(u) else { continue };
             assert!(!name.contains('+'), "{name} would split as a chord");
-            assert_eq!(parse_bind(&name, 0x04), Ok(Binding::Key { modifiers: 0, usage: u }), "{name}");
+            assert_eq!(
+                parse_bind(&name, 0x04),
+                Ok(Binding::Key {
+                    modifiers: 0,
+                    usage: u
+                }),
+                "{name}"
+            );
             let chord = format!("Ctrl+Shift+{name}");
-            assert_eq!(parse_bind(&chord, 0x04), Ok(Binding::Key { modifiers: 0x03, usage: u }), "{chord}");
+            assert_eq!(
+                parse_bind(&chord, 0x04),
+                Ok(Binding::Key {
+                    modifiers: 0x03,
+                    usage: u
+                }),
+                "{chord}"
+            );
         }
         assert_eq!(parse_bind("escape", 0x04), parse_bind("esc", 0x04));
-        assert_eq!(parse_bind("num7", 0x04), Ok(Binding::Key { modifiers: 0, usage: 0x5F }));
-        assert_eq!(parse_bind("/", 0x04), Ok(Binding::Key { modifiers: 0, usage: 0x38 }));
-        assert_eq!(Binding::Key { modifiers: 0, usage: 0x29 }.to_string(), "Esc", "first spelling displays");
+        assert_eq!(
+            parse_bind("num7", 0x04),
+            Ok(Binding::Key {
+                modifiers: 0,
+                usage: 0x5F
+            })
+        );
+        assert_eq!(
+            parse_bind("/", 0x04),
+            Ok(Binding::Key {
+                modifiers: 0,
+                usage: 0x38
+            })
+        );
+        assert_eq!(
+            Binding::Key {
+                modifiers: 0,
+                usage: 0x29
+            }
+            .to_string(),
+            "Esc",
+            "first spelling displays"
+        );
     }
 
     #[test]

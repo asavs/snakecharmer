@@ -51,7 +51,7 @@ Fill these in. Together they are the whole "crack":
 - [ ] The `docs/SUPPORTED-DEVICES.md` row matches the format the `supported_devices_doc_matches_table` test checks: model name, transaction id as `0xNN`, DPI range with an en dash (`100–30000`), polling rates joined by `/`.
 - [ ] Added the PID to `CLAIMED` in `tools/wishlist-from-openrazer.py` and regenerated `docs/DEVICE-WISHLIST.md` (or edited the row by hand).
 - [ ] `dpi_buttons` is `None` unless I read the codes off my own mouse with `reference/button_listener.ps1`.
-- [ ] `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` are green (the commands CI runs; see CONTRIBUTING.md).
+- [ ] `cargo fmt --all -- --check` and the remaining acceptance checks in CONTRIBUTING.md are green.
 - [ ] **No changes were needed** to `razer-hid` or the daemon. *(If you did have to touch them, say why here. It usually means a generic gap to lift into the shared layer rather than device-specific code.)*
 - [ ] Existing devices are unaffected: the byte-exact report tests still pass unchanged.
 
