@@ -40,7 +40,11 @@ impl Logger {
                 let _ = fs::rename(&self.inner.path, self.inner.path.with_extension("log.old"));
             }
         }
-        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&self.inner.path) {
+        if let Ok(mut f) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.inner.path)
+        {
             let _ = writeln!(f, "{line}");
         }
     }
