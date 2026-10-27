@@ -14,6 +14,7 @@ pub mod autostart;
 pub mod diagram;
 pub mod icon;
 pub mod mouse_hook;
+pub mod process_lease;
 pub mod settings;
 pub mod tray;
 
@@ -155,7 +156,12 @@ pub fn is_modifier(vk: u16) -> bool {
 pub fn chord_name(vk: u16, ctrl: bool, shift: bool, alt: bool, win: bool) -> Option<String> {
     let key = key_name(vk)?;
     let mut s = String::new();
-    for (on, name) in [(ctrl, "Ctrl+"), (shift, "Shift+"), (alt, "Alt+"), (win, "Win+")] {
+    for (on, name) in [
+        (ctrl, "Ctrl+"),
+        (shift, "Shift+"),
+        (alt, "Alt+"),
+        (win, "Win+"),
+    ] {
         if on {
             s.push_str(name);
         }
@@ -196,13 +202,7 @@ pub fn send_chord(vks: &[u16]) -> Result<(), InjectError> {
     // SAFETY: `events` is a valid, contiguous slice of `wanted` INPUT structs
     // that outlives the call; we pass the correct count and element size, exactly
     // as the SendInput contract requires. SendInput does not retain the pointer.
-    let sent = unsafe {
-        SendInput(
-            wanted,
-            events.as_ptr(),
-            std::mem::size_of::<INPUT>() as i32,
-        )
-    };
+    let sent = unsafe { SendInput(wanted, events.as_ptr(), std::mem::size_of::<INPUT>() as i32) };
     if sent == wanted {
         Ok(())
     } else {
@@ -216,7 +216,10 @@ pub fn send_chord(vks: &[u16]) -> Result<(), InjectError> {
 /// process already holds the named mutex. The mutex handle is intentionally
 /// leaked so it lives for the whole process; Windows releases it on exit.
 pub fn acquire_single_instance(name: &str) -> bool {
-    let wide: Vec<u16> = OsStr::new(name).encode_wide().chain(std::iter::once(0)).collect();
+    let wide: Vec<u16> = OsStr::new(name)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
     // SAFETY: `wide` is a valid NUL-terminated UTF-16 buffer that outlives the
     // call. A null security-attributes pointer is explicitly allowed. We never
     // close the returned handle, so the mutex persists for the process lifetime.

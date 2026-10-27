@@ -8,6 +8,7 @@ rust-version.workspace = true
 description = "Device access for supported Razer mice: open the control collection, send feature reports, read responses."
 
 [dependencies]
+platform = { path = "../platform" }
 razer-proto = { path = "../razer-proto" }
 hidapi = "2"
 

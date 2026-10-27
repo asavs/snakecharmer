@@ -12,8 +12,7 @@ pub use deathadder_v3::DEATHADDER_V3;
 pub use deathadder_v4_pro::DEATHADDER_V4_PRO;
 
 /// Every device Snakecharmer knows how to drive.
-pub const SUPPORTED: &[crate::DeviceSpec] =
-    &[DEATHADDER_ELITE, DEATHADDER_V3, DEATHADDER_V4_PRO];
+pub const SUPPORTED: &[crate::DeviceSpec] = &[DEATHADDER_ELITE, DEATHADDER_V3, DEATHADDER_V4_PRO];
 
 #[cfg(test)]
 mod tests {

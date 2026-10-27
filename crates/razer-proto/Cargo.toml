@@ -8,6 +8,7 @@ rust-version.workspace = true
 description = "Pure Razer HID protocol for supported mice: report builder, CRC, device specs, and the device-mode, DPI, polling, lighting and on-board keymap commands. No I/O."
 
 [dependencies]
+device-diagram = { path = "../device-diagram" }
 
 [lints.rust]
 unsafe_code = "forbid"
