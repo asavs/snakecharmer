@@ -14,11 +14,10 @@ use windows_sys::Win32::Graphics::Gdi::{
     TA_CENTER, TA_LEFT, TA_RIGHT, TRANSPARENT,
 };
 use windows_sys::Win32::Graphics::GdiPlus::{
-    GdipAddPathArc, GdipAddPathBezier, GdipClosePathFigure, GdipCreateFromHDC,
+    FillModeAlternate, GdipAddPathArc, GdipAddPathBezier, GdipClosePathFigure, GdipCreateFromHDC,
     GdipCreatePath, GdipCreatePen1, GdipDeleteGraphics, GdipDeletePath, GdipDeletePen,
     GdipDrawEllipse, GdipDrawLines, GdipDrawPath, GdipSetSmoothingMode, GdiplusShutdown,
-    GdiplusStartup, FillModeAlternate, GdiplusStartupInput, GpPath, GpPen, PointF,
-    SmoothingModeAntiAlias, UnitPixel,
+    GdiplusStartup, GdiplusStartupInput, GpPath, GpPen, PointF, SmoothingModeAntiAlias, UnitPixel,
 };
 
 pub use device_diagram::{Anchor, CalloutSlot, Curve, Diagram, Role, Shape};
@@ -42,11 +41,7 @@ const CALLOUT_COMBO_DY_BARE: i32 = 8 - CALLOUT_COMBO_H / 2;
 /// The rect (design units: x, y, w, h) a callout reserves for its dropdown.
 /// `has_caption` selects the stacked (below the caption lines) or bare
 /// (centered on the caption block) mount — see the two `CALLOUT_COMBO_DY*`.
-fn callout_combo_rect(
-    slot: CalloutSlot,
-    at: (i32, i32),
-    anchor: Anchor,
-) -> (i32, i32, i32, i32) {
+fn callout_combo_rect(slot: CalloutSlot, at: (i32, i32), anchor: Anchor) -> (i32, i32, i32, i32) {
     let w = match slot {
         CalloutSlot::Lighting(_) => LIGHT_ROW_W,
         _ => CALLOUT_COMBO_W,
@@ -66,10 +61,9 @@ pub fn callout_combo_rects(diagram: &Diagram) -> Vec<(CalloutSlot, (i32, i32, i3
         .shapes
         .iter()
         .filter_map(|s| match s {
-            Shape::Callout { slot, at, anchor, .. } => Some((
-                *slot,
-                callout_combo_rect(*slot, *at, *anchor),
-            )),
+            Shape::Callout {
+                slot, at, anchor, ..
+            } => Some((*slot, callout_combo_rect(*slot, *at, *anchor))),
             _ => None,
         })
         .collect()
@@ -113,7 +107,10 @@ fn to_wide_no_nul(s: &str) -> Vec<u16> {
 ///
 /// SAFETY: plain `CreateFontW` with a NUL-terminated face name.
 unsafe fn make_font(px: i32) -> HFONT {
-    let face: Vec<u16> = "Segoe UI".encode_utf16().chain(std::iter::once(0)).collect();
+    let face: Vec<u16> = "Segoe UI"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
     CreateFontW(
         -px,
         0,
@@ -136,7 +133,15 @@ unsafe fn make_font(px: i32) -> HFONT {
 ///
 /// # Safety
 /// `hdc` must be a valid device context and `font` a valid font handle.
-unsafe fn draw_gdi_text(hdc: HDC, font: HFONT, color: u32, x: i32, y: i32, anchor: Anchor, text: &str) {
+unsafe fn draw_gdi_text(
+    hdc: HDC,
+    font: HFONT,
+    color: u32,
+    x: i32,
+    y: i32,
+    anchor: Anchor,
+    text: &str,
+) {
     let old = SelectObject(hdc, font as _);
     SetTextColor(hdc, color);
     let align = match anchor {
@@ -201,7 +206,12 @@ pub fn measure(diagram: &Diagram) -> (i32, i32, i32, i32) {
                         add(x, y);
                     }
                 }
-                Shape::Text { role, at, anchor, text } => {
+                Shape::Text {
+                    role,
+                    at,
+                    anchor,
+                    text,
+                } => {
                     let size = role.font_size();
                     let font = if size >= 13 { f_label } else { f_note };
                     let w = text_width(hdc, font, text);
@@ -213,7 +223,9 @@ pub fn measure(diagram: &Diagram) -> (i32, i32, i32, i32) {
                     add(tx0, at.1 - size);
                     add(tx1, at.1 + size / 3);
                 }
-                Shape::Callout { slot, at, anchor, .. } => {
+                Shape::Callout {
+                    slot, at, anchor, ..
+                } => {
                     let (cx, cy, cw, ch) = callout_combo_rect(*slot, *at, *anchor);
                     add(cx, cy);
                     add(cx + cw, cy + ch);
@@ -243,7 +255,12 @@ pub fn body_x_bounds(diagram: &Diagram) -> Option<(i32, i32)> {
     };
     for s in diagram.shapes {
         match s {
-            Shape::Path { role: Role::Body, start, curves, .. } => {
+            Shape::Path {
+                role: Role::Body,
+                start,
+                curves,
+                ..
+            } => {
                 add(start.0);
                 for &((c1x, _), (c2x, _), (ex, _)) in curves.iter() {
                     add(c1x);
@@ -251,15 +268,28 @@ pub fn body_x_bounds(diagram: &Diagram) -> Option<(i32, i32)> {
                     add(ex);
                 }
             }
-            Shape::RoundRect { role: Role::Body, x, w, .. } => {
+            Shape::RoundRect {
+                role: Role::Body,
+                x,
+                w,
+                ..
+            } => {
                 add(*x);
                 add(x + w);
             }
-            Shape::Circle { role: Role::Body, cx, r, .. } => {
+            Shape::Circle {
+                role: Role::Body,
+                cx,
+                r,
+                ..
+            } => {
                 add(cx - r);
                 add(cx + r);
             }
-            Shape::Polyline { role: Role::Body, points } => {
+            Shape::Polyline {
+                role: Role::Body,
+                points,
+            } => {
                 for &(x, _) in points.iter() {
                     add(x);
                 }
@@ -325,7 +355,13 @@ pub unsafe fn shutdown(token: usize) {
 /// # Safety
 /// `hdc` must be a valid device context for the duration of the call, and
 /// GDI+ must have been initialized via [`startup`].
-pub unsafe fn render(hdc: HDC, diagram: &Diagram, origin: (i32, i32), scale: f32, palette: &Palette) {
+pub unsafe fn render(
+    hdc: HDC,
+    diagram: &Diagram,
+    origin: (i32, i32),
+    scale: f32,
+    palette: &Palette,
+) {
     let (min_x, min_y, _, _) = measure(diagram);
     let tx = |x: i32| origin.0 as f32 + (x - min_x) as f32 * scale;
     let ty = |y: i32| origin.1 as f32 + (y - min_y) as f32 * scale;
@@ -340,7 +376,12 @@ pub unsafe fn render(hdc: HDC, diagram: &Diagram, origin: (i32, i32), scale: f32
     let make_pen = |role: Role| -> *mut GpPen {
         let (argb, _) = role_colors(role, palette);
         let mut pen = std::ptr::null_mut();
-        GdipCreatePen1(argb, role.stroke_width_100() as f32 / 100.0 * scale, UnitPixel, &mut pen);
+        GdipCreatePen1(
+            argb,
+            role.stroke_width_100() as f32 / 100.0 * scale,
+            UnitPixel,
+            &mut pen,
+        );
         pen
     };
 
@@ -352,7 +393,12 @@ pub unsafe fn render(hdc: HDC, diagram: &Diagram, origin: (i32, i32), scale: f32
 
     for s in diagram.shapes {
         match s {
-            Shape::Path { role, start, curves, closed } => {
+            Shape::Path {
+                role,
+                start,
+                curves,
+                closed,
+            } => {
                 let mut path: *mut GpPath = std::ptr::null_mut();
                 GdipCreatePath(FillModeAlternate, &mut path);
                 let (mut cx, mut cy) = (tx(start.0), ty(start.1));
@@ -378,7 +424,14 @@ pub unsafe fn render(hdc: HDC, diagram: &Diagram, origin: (i32, i32), scale: f32
                 GdipDeletePen(pen);
                 GdipDeletePath(path);
             }
-            Shape::RoundRect { role, x, y, w, h, r } => {
+            Shape::RoundRect {
+                role,
+                x,
+                y,
+                w,
+                h,
+                r,
+            } => {
                 let (rx, ry, rw, rh) = (tx(*x), ty(*y), *w as f32 * scale, *h as f32 * scale);
                 let d = (2.0 * *r as f32 * scale).min(rw).min(rh);
                 let mut path: *mut GpPath = std::ptr::null_mut();
@@ -403,15 +456,34 @@ pub unsafe fn render(hdc: HDC, diagram: &Diagram, origin: (i32, i32), scale: f32
                 if points.len() < 2 {
                     continue;
                 }
-                let pts: Vec<PointF> =
-                    points.iter().map(|&(x, y)| PointF { X: tx(x), Y: ty(y) }).collect();
+                let pts: Vec<PointF> = points
+                    .iter()
+                    .map(|&(x, y)| PointF { X: tx(x), Y: ty(y) })
+                    .collect();
                 let pen = make_pen(*role);
                 GdipDrawLines(graphics, pen, pts.as_ptr(), pts.len() as i32);
                 GdipDeletePen(pen);
             }
-            Shape::Text { role, at, anchor, text } => {
-                let font = if role.font_size() >= 13 { f_label } else { f_note };
-                draw_gdi_text(hdc, font, role_colors(*role, palette).1, tx(at.0) as i32, ty(at.1) as i32, *anchor, text);
+            Shape::Text {
+                role,
+                at,
+                anchor,
+                text,
+            } => {
+                let font = if role.font_size() >= 13 {
+                    f_label
+                } else {
+                    f_note
+                };
+                draw_gdi_text(
+                    hdc,
+                    font,
+                    role_colors(*role, palette).1,
+                    tx(at.0) as i32,
+                    ty(at.1) as i32,
+                    *anchor,
+                    text,
+                );
             }
             // The native control itself supplies the callout's identity.
             Shape::Callout { .. } => {}
@@ -462,11 +534,14 @@ mod tests {
     fn native_controls_keep_the_captionless_anchor_rects() {
         // These are the old native mapper's rectangles after it stripped SVG
         // captions. Sharing the original captioned shapes must not move them.
-        assert_eq!(callout_combo_rects(&CAPTIONED), vec![
-            (CalloutSlot::Button(0x03), (-45, 89, 145, 24)),
-            (CalloutSlot::Lighting(0), (402, 89, 154, 24)),
-            (CalloutSlot::DpiUp, (156, 150, 145, 24)),
-        ]);
+        assert_eq!(
+            callout_combo_rects(&CAPTIONED),
+            vec![
+                (CalloutSlot::Button(0x03), (-45, 89, 145, 24)),
+                (CalloutSlot::Lighting(0), (402, 89, 154, 24)),
+                (CalloutSlot::DpiUp, (156, 150, 145, 24)),
+            ]
+        );
         let svg = CAPTIONED.to_svg();
         assert!(svg.contains("Middle click"));
         assert!(svg.contains("SVG caption only"));

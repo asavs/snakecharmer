@@ -56,7 +56,11 @@ pub enum Registration {
 
 impl Registration {
     fn from_command(command: Option<String>) -> Self {
-        if command.is_some() { Self::Registered } else { Self::Absent }
+        if command.is_some() {
+            Self::Registered
+        } else {
+            Self::Absent
+        }
     }
 }
 
@@ -112,7 +116,8 @@ fn current_command() -> Result<String, Error> {
 /// Whether two registered commands point at the same exe: compared
 /// case-insensitively (Windows paths) after stripping the quoting.
 fn command_matches(a: &str, b: &str) -> bool {
-    a.trim_matches('"').eq_ignore_ascii_case(b.trim_matches('"'))
+    a.trim_matches('"')
+        .eq_ignore_ascii_case(b.trim_matches('"'))
 }
 
 fn to_wide(s: &str) -> Vec<u16> {
@@ -123,7 +128,10 @@ fn value_present(status: u32) -> Result<bool, Error> {
     match status {
         0 => Ok(true),
         ERROR_FILE_NOT_FOUND => Ok(false),
-        status => Err(Error::Os { call: "RegGetValueW", status }),
+        status => Err(Error::Os {
+            call: "RegGetValueW",
+            status,
+        }),
     }
 }
 
@@ -151,7 +159,10 @@ unsafe fn read_command() -> Result<Option<String>, Error> {
         return Ok(None);
     }
     if size == 0 {
-        return Err(Error::Os { call: "RegGetValueW", status: ERROR_INVALID_DATA });
+        return Err(Error::Os {
+            call: "RegGetValueW",
+            status: ERROR_INVALID_DATA,
+        });
     }
     let mut buf = vec![0u16; (size as usize).div_ceil(2)];
     let ok = RegGetValueW(
@@ -167,8 +178,10 @@ unsafe fn read_command() -> Result<Option<String>, Error> {
         return Ok(None);
     }
     let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    let command = String::from_utf16(&buf[..len])
-        .map_err(|_| Error::Os { call: "RegGetValueW", status: ERROR_INVALID_DATA })?;
+    let command = String::from_utf16(&buf[..len]).map_err(|_| Error::Os {
+        call: "RegGetValueW",
+        status: ERROR_INVALID_DATA,
+    })?;
     Ok(Some(command))
 }
 
@@ -192,7 +205,10 @@ unsafe fn write_command(command: &str) -> Result<(), Error> {
         std::ptr::null_mut(),
     );
     if ok != 0 {
-        return Err(Error::Os { call: "RegCreateKeyExW", status: ok });
+        return Err(Error::Os {
+            call: "RegCreateKeyExW",
+            status: ok,
+        });
     }
     let val = to_wide(VALUE_NAME);
     let wide = to_wide(command);
@@ -206,7 +222,10 @@ unsafe fn write_command(command: &str) -> Result<(), Error> {
     );
     RegCloseKey(hkey);
     if ok != 0 {
-        return Err(Error::Os { call: "RegSetValueExW", status: ok });
+        return Err(Error::Os {
+            call: "RegSetValueExW",
+            status: ok,
+        });
     }
     Ok(())
 }
@@ -224,13 +243,19 @@ unsafe fn delete_command() -> Result<(), Error> {
         return Ok(());
     }
     if ok != 0 {
-        return Err(Error::Os { call: "RegOpenKeyExW", status: ok });
+        return Err(Error::Os {
+            call: "RegOpenKeyExW",
+            status: ok,
+        });
     }
     let val = to_wide(VALUE_NAME);
     let ok = RegDeleteValueW(hkey, val.as_ptr());
     RegCloseKey(hkey);
     if ok != 0 && ok != ERROR_FILE_NOT_FOUND {
-        return Err(Error::Os { call: "RegDeleteValueW", status: ok });
+        return Err(Error::Os {
+            call: "RegDeleteValueW",
+            status: ok,
+        });
     }
     Ok(())
 }
@@ -241,25 +266,48 @@ mod tests {
 
     #[test]
     fn command_matching_ignores_quotes_and_case() {
-        assert!(command_matches("\"C:\\Apps\\snakecharmer.exe\"", "\"c:\\apps\\SNAKECHARMER.EXE\""));
-        assert!(command_matches("C:\\Apps\\snakecharmer.exe", "\"C:\\Apps\\snakecharmer.exe\""));
-        assert!(!command_matches("\"C:\\old\\snakecharmer.exe\"", "\"C:\\new\\snakecharmer.exe\""));
+        assert!(command_matches(
+            "\"C:\\Apps\\snakecharmer.exe\"",
+            "\"c:\\apps\\SNAKECHARMER.EXE\""
+        ));
+        assert!(command_matches(
+            "C:\\Apps\\snakecharmer.exe",
+            "\"C:\\Apps\\snakecharmer.exe\""
+        ));
+        assert!(!command_matches(
+            "\"C:\\old\\snakecharmer.exe\"",
+            "\"C:\\new\\snakecharmer.exe\""
+        ));
     }
 
     #[test]
     fn current_command_is_quoted() {
         let cmd = current_command().unwrap();
-        assert!(cmd.starts_with('"') && cmd.ends_with('"'), "unquoted: {cmd}");
-        assert!(cmd.to_ascii_lowercase().contains(".exe"), "not an exe path: {cmd}");
+        assert!(
+            cmd.starts_with('"') && cmd.ends_with('"'),
+            "unquoted: {cmd}"
+        );
+        assert!(
+            cmd.to_ascii_lowercase().contains(".exe"),
+            "not an exe path: {cmd}"
+        );
     }
 
     #[test]
     fn read_failures_do_not_mean_absent_registration() {
-        use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_MORE_DATA, ERROR_UNSUPPORTED_TYPE};
+        use windows_sys::Win32::Foundation::{
+            ERROR_ACCESS_DENIED, ERROR_MORE_DATA, ERROR_UNSUPPORTED_TYPE,
+        };
         assert_eq!(value_present(0), Ok(true));
         assert_eq!(value_present(ERROR_FILE_NOT_FOUND), Ok(false));
         for status in [ERROR_ACCESS_DENIED, ERROR_MORE_DATA, ERROR_UNSUPPORTED_TYPE] {
-            assert_eq!(value_present(status), Err(Error::Os { call: "RegGetValueW", status }));
+            assert_eq!(
+                value_present(status),
+                Err(Error::Os {
+                    call: "RegGetValueW",
+                    status
+                })
+            );
         }
     }
 

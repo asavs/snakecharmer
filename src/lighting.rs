@@ -79,7 +79,10 @@ mod tests {
         let (l, c) = e.to_config();
         assert_eq!(l, "static");
         assert_eq!(c.as_deref(), Some("#112233"));
-        assert_eq!(EffectSpec::from_config("static", "#112233").unwrap(), Some(e));
+        assert_eq!(
+            EffectSpec::from_config("static", "#112233").unwrap(),
+            Some(e)
+        );
     }
 
     #[test]
@@ -89,8 +92,14 @@ mod tests {
 
     #[test]
     fn parses_all_effects() {
-        assert_eq!(EffectSpec::from_config("spectrum", "#000000").unwrap(), Some(EffectSpec::Spectrum));
-        assert_eq!(EffectSpec::from_config("off", "#000000").unwrap(), Some(EffectSpec::Off));
+        assert_eq!(
+            EffectSpec::from_config("spectrum", "#000000").unwrap(),
+            Some(EffectSpec::Spectrum)
+        );
+        assert_eq!(
+            EffectSpec::from_config("off", "#000000").unwrap(),
+            Some(EffectSpec::Off)
+        );
         assert!(EffectSpec::from_config("bogus", "#000000").is_err());
     }
 }
