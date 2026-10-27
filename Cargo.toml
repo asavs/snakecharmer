@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/razer-proto", "crates/razer-hid", "crates/platform"]
+members = ["crates/device-diagram", "crates/razer-proto", "crates/razer-hid", "crates/platform"]
 
 [workspace.package]
 edition = "2021"

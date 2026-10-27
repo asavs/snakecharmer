@@ -109,7 +109,13 @@ mod tests {
     fn dpi_range_is_enforced() {
         let (t, lo, hi) = (DEATHADDER_V4_PRO.transaction_id, 100, 45000);
         assert!(set_dpi_report(t, lo, hi, 45000, 45000).is_ok());
-        assert_eq!(set_dpi_report(t, lo, hi, 45001, 45001), Err(ProtoError::DpiOutOfRange(45001)));
-        assert_eq!(set_dpi_report(t, lo, hi, 50, 50), Err(ProtoError::DpiOutOfRange(50)));
+        assert_eq!(
+            set_dpi_report(t, lo, hi, 45001, 45001),
+            Err(ProtoError::DpiOutOfRange(45001))
+        );
+        assert_eq!(
+            set_dpi_report(t, lo, hi, 50, 50),
+            Err(ProtoError::DpiOutOfRange(50))
+        );
     }
 }
