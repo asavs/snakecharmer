@@ -10,11 +10,12 @@
 //! caller owns it and frees it with `DestroyIcon`.
 
 use windows_sys::Win32::Graphics::GdiPlus::{
-    GdipAddPathBezier, GdipCreateBitmapFromScan0, GdipCreateHICONFromBitmap, GdipCreatePath,
-    GdipCreatePen1, GdipCreateSolidFill, GdipDeleteBrush, GdipDeleteGraphics, GdipDeletePath,
-    GdipDeletePen, GdipDisposeImage, GdipDrawPath, GdipFillEllipseI, GdipGetImageGraphicsContext,
-    GdipSetPenEndCap, GdipSetPenStartCap, GdipSetSmoothingMode, FillModeAlternate, GpBitmap,
-    GpBrush, GpGraphics, GpImage, GpPath, GpPen, LineCapRound, SmoothingModeAntiAlias, UnitPixel,
+    FillModeAlternate, GdipAddPathBezier, GdipCreateBitmapFromScan0, GdipCreateHICONFromBitmap,
+    GdipCreatePath, GdipCreatePen1, GdipCreateSolidFill, GdipDeleteBrush, GdipDeleteGraphics,
+    GdipDeletePath, GdipDeletePen, GdipDisposeImage, GdipDrawPath, GdipFillEllipseI,
+    GdipGetImageGraphicsContext, GdipSetPenEndCap, GdipSetPenStartCap, GdipSetSmoothingMode,
+    GpBitmap, GpBrush, GpGraphics, GpImage, GpPath, GpPen, LineCapRound, SmoothingModeAntiAlias,
+    UnitPixel,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::HICON;
 
@@ -39,15 +40,22 @@ const CURVE: u32 = 0xFFF2_FBF6;
 /// GDI+ must be active for the duration of the call.
 pub unsafe fn create_app_icon() -> HICON {
     let mut bitmap: *mut GpBitmap = std::ptr::null_mut();
-    if GdipCreateBitmapFromScan0(SIZE, SIZE, 0, PIXEL_FORMAT_32BPP_ARGB, std::ptr::null(), &mut bitmap)
-        != 0
+    if GdipCreateBitmapFromScan0(
+        SIZE,
+        SIZE,
+        0,
+        PIXEL_FORMAT_32BPP_ARGB,
+        std::ptr::null(),
+        &mut bitmap,
+    ) != 0
         || bitmap.is_null()
     {
         return std::ptr::null_mut();
     }
 
     let mut graphics: *mut GpGraphics = std::ptr::null_mut();
-    if GdipGetImageGraphicsContext(bitmap as *mut GpImage, &mut graphics) == 0 && !graphics.is_null()
+    if GdipGetImageGraphicsContext(bitmap as *mut GpImage, &mut graphics) == 0
+        && !graphics.is_null()
     {
         GdipSetSmoothingMode(graphics, SmoothingModeAntiAlias);
 
