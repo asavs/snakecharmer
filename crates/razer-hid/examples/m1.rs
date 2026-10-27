@@ -10,12 +10,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mouse = Mouse::open()?;
     let mode = mouse.get_device_mode()?;
     let (x, y) = mouse.get_dpi()?;
+    let poll = mouse.get_polling_rate()?;
     println!("device: {}", mouse.spec().name);
     println!("device mode byte: 0x{mode:02x}");
     println!("dpi: {x} x {y}");
-    match mouse.get_polling_rate() {
-        Ok(hz) => println!("polling: {hz} Hz"),
-        Err(e) => println!("polling: unavailable ({e})"),
-    }
+    println!("polling: {poll} Hz");
     Ok(())
 }

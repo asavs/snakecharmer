@@ -47,6 +47,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-diagram"
+version = "0.9.1"
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,6 +139,8 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 name = "platform"
 version = "0.9.1"
 dependencies = [
+ "device-diagram",
+ "razer-proto",
  "windows-sys",
 ]
 
@@ -168,6 +174,9 @@ dependencies = [
 [[package]]
 name = "razer-proto"
 version = "0.9.1"
+dependencies = [
+ "device-diagram",
+]
 
 [[package]]
 name = "serde"

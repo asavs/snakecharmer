@@ -29,14 +29,15 @@ cost this project exists to avoid. The README's
 
 ## Architecture
 
-A Cargo workspace with one app package and three library crates:
+A Cargo workspace with one app package and four library crates:
 
 | Crate | Contents | I/O |
 |---|---|---|
-| `crates/razer-proto` | 90-byte report builder, CRC, response validation; device mode, DPI, polling and lighting commands; `DeviceSpec` and `SUPPORTED` (`devices/`); the on-board keymap protocol (`keymap.rs`); device schematics as data (`diagram.rs`) | none (`unsafe_code = "forbid"`) |
+| `crates/razer-proto` | 90-byte report builder, CRC, response validation; device mode, DPI, polling and lighting commands; `DeviceSpec` and `SUPPORTED` (`devices/`); the on-board keymap protocol (`keymap.rs`); references to shared device diagrams | none (`unsafe_code = "forbid"`) |
 | `crates/razer-hid` | `Mouse` (open a supported device, send a feature report, typed wrappers), `Listener` for input reports, `detected_mice` for naming unsupported devices. Uses `hidapi`. | HID |
+| `crates/device-diagram` | Immutable diagram schema, bounds, and SVG emitter shared by device specs and the native renderer | none (`unsafe_code = "forbid"`) |
 | `crates/platform` | All Win32 FFI and all `unsafe`: keystroke injection (`SendInput`), single-instance mutex, message boxes, tray icon, `WH_MOUSE_LL` hook, settings window, GDI+ diagram renderer, runtime-drawn icon, Run-key autostart, atomic file replace. Uses `windows-sys`. | Win32 |
-| `snakecharmer` (`src/`) | `daemon.rs` (session loop, tray and settings wiring), `config.rs`, `actions.rs` (action strings to key chords), `lighting.rs`, `onboard.rs`, `health.rs`, `logger.rs` | files |
+| `snakecharmer` (`src/`) | `daemon.rs` (session lifecycle and settings wiring), `daemon/menu.rs` (tray menu and command application), `daemon/config_application.rs` (validated config application and persistence), `config.rs`, `actions.rs` (action strings to key chords), `lighting.rs`, `onboard.rs`, `health.rs`, `logger.rs` | files |
 
 Binaries:
 
@@ -71,6 +72,9 @@ Binaries:
    polling rate, and on DPI-button mice the device mode, and rewrite any that drifted.
    Lighting is not re-asserted. A mouse without DPI buttons has no blocking read to notice
    an unplug, so the daemon reads its DPI every 5 seconds as a liveness check.
+   Maintenance deadlines run after events as well as timeouts, so button presses and
+   settings activity cannot postpone them. Reloading config updates the reassert interval
+   within the current session.
 6. A failed device command, read-back mismatch, or closed input collection stops device
    communication. The daemon logs and displays the failure, removes the mouse hook, and
    exits when the notice is dismissed, without recovery writes. If no supported device
@@ -121,7 +125,7 @@ out an unknown protocol is covered in [CRACKING-MICE-GUIDE.md](CRACKING-MICE-GUI
 Every command is a 90-byte feature report (report ID 0, sent as a 91-byte buffer with a
 leading `0x00`), and every response is 90 bytes. The layout is documented at the top of
 `crates/razer-proto/src/lib.rs`: status, transaction id, data size, command class and id,
-80 argument bytes, and a CRC that is the XOR of bytes 2 to 87. `Mouse::send_command`
+80 argument bytes, and a CRC that is the XOR of bytes 2 to 87. The shared HID transport
 sends each report once and requires status `0x02` and a matching command echo. BUSY is
 terminal too. A process-wide latch blocks every subsequent command after a transport,
 response, or verification failure, including commands on another handle or the reset
@@ -141,8 +145,48 @@ device commands and do not trip the device-failure latch.
 Mode, DPI, polling-rate, and on-board bind setters read their corresponding command
 before writing and verify it afterward. Lighting has no effect-read command; it confirms
 the control channel with the existing DPI read and checks the effect acknowledgement.
-No color-read command is invented. Tests compare exact bytes against OpenRazer
-(`*_matches_openrazer`) and exercise failures through a simulated feature-report transport.
+No color-read command is invented. Tests assert encoded reports and exercise failures
+through a simulated feature-report transport. The reference comparison has the
+exceptions below; passing local byte tests does not resolve them.
+
+### Reference snapshot
+
+The 2026-10-26 source review uses
+[OpenRazer `477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d`](https://github.com/openrazer/openrazer/tree/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d).
+[`reference/openrazer-source.json`](../reference/openrazer-source.json) records exact Git
+blob IDs for the six reviewed files. This is a later review, not the unrecorded original
+port revision, and it adds no hardware verification.
+
+| Checked facts | Immutable source |
+|---|---|
+| 90-byte report layout, initialized header, XOR bytes 2 through 87 | [`razercommon.h`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razercommon.h#L124), [`razercommon.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razercommon.c#L111) |
+| Mode read/write classes, ids, size and allowed modes | [`razerchromacommon.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razerchromacommon.c#L24) |
+| DPI read layout; polling command families/rate bytes | [`razerchromacommon.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razerchromacommon.c#L1092) |
+| Extended lighting none, static, spectrum, single-color breathing layouts | [`razerchromacommon.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razerchromacommon.c#L477) |
+| Elite transaction `0x3F`/classic polling; V3 and both V4 Pro ids `0x1F`/extended polling | [`razermouse_driver.c`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razermouse_driver.c#L2129) |
+| USB ids, DPI ceilings 16000/30000/45000, Elite lighting, V3/V4 Pro polling rates | [`razermouse_driver.h`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razermouse_driver.h), [`mouse.py`](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/daemon/openrazer_daemon/hardware/mouse.py) |
+
+**Unresolved DPI-write difference:** Snakecharmer sends argument 0 as `0x00`, named
+`NOSTORE` by OpenRazer. The pinned mouse driver chooses `NOSTORE` for the supported mice,
+but its [`razer_chroma_misc_set_dpi_xy` helper](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razerchromacommon.c#L1211)
+ignores that parameter and unconditionally writes `VARSTORE` (`0x01`). Therefore the
+current DPI write is not an exact match to that helper's output, and the source review
+does not establish its persistence semantics. No selector, CRC, or other packet byte
+was changed to work around this mismatch. It requires separate reference/capture
+investigation under AGENTS.md before claiming equivalence or changing device code.
+
+**Recorded polling difference:** the pinned driver sends extended polling once with
+selector `0x00` and again with `0x01` for the V3 and both V4 Pro ids
+([source](https://github.com/openrazer/openrazer/blob/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d/driver/razermouse_driver.c#L2282)).
+Snakecharmer retains only the `0x00` request; live read-back is not evidence of persistence.
+On-board keymaps and the Elite's DPI-button event codes remain separately recorded
+hardware/capture evidence, not facts supplied by this snapshot.
+
+The HID regressions distinguish local transport/verification-helper tests from `Mouse`
+boundary tests. The latter call the typed methods and production process-wide latch with
+private simulated devices, in isolated test subprocesses. Literal request fixtures pin
+the existing packets; fabricated success replies do not establish firmware acceptance.
+Enumeration, the Windows HID API, and physical mouse behavior still need hardware checks.
 
 ## Features
 
@@ -162,8 +206,11 @@ Back and Forward are ordinary mouse buttons, so a software remap needs a global
 is configured. With `thumb_back` and `thumb_forward` both `none` (the default) there is no
 hook, and mouse events never pass through Snakecharmer. When the hook is installed, it
 passes through everything except a remapped thumb button, ignores injected events, and
-never blocks: it uses `try_lock` and passes the event through if the lock is taken. It
-applies to every mouse on the PC, not only the Razer one.
+uses `try_lock` and passes the event through without waiting for that mutex when it is
+taken. Chord allocation and `SendInput` still run synchronously, so callback latency is
+not bounded. Windows can silently remove a hook that exceeds its configured
+[`LowLevelHooksTimeout`](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelmouseproc).
+The hook applies to every mouse on the PC, not only the Razer one.
 
 On a mouse that stores binds (the V3), Back and Forward are bound on-board instead, and an
 existing software remap moves into `[onboard]` on first connect.
@@ -218,10 +265,19 @@ file and replace the destination atomically. The log is
 `autostart_bootstrapped`, `[zones.*]`, `[onboard]`. Defaults and examples are in the
 [README](../README.md#configuration).
 
+After a supported mouse is opened, startup validates every setting that model will
+apply before sending any device command. A semantic error (such as an unsupported
+polling rate) reports the configuration error and exits without applying earlier
+settings. Reload normalizes thumb remaps and validates the complete candidate before
+device application; invalid candidates leave the healthy session and active config
+intact. Unsupported lighting, DPI-button actions and on-board tables remain ignored.
+Valid candidates replace the active config only after their device application succeeds;
+a device failure still stops communication rather than rolling back or retrying writes.
+
 ### Tray and settings window
 
 The tray menu has DPI presets within the device's range, lighting presets, Settings, a
-Start with Windows check, Reload config, and Quit. A left-click on the icon opens
+Request start with Windows check, Reload config, and Quit. A left-click on the icon opens
 settings.
 
 The settings window is built from plain Win32 common controls, with no GUI framework. It
@@ -230,18 +286,36 @@ drawn with GDI+, with each button's control placed on the schematic at its callo
 window doesn't create controls for features the device lacks. Every change goes to the
 mouse and the config file right away. After writing an on-board bind, the window asks you
 to press the button and uses raw input to confirm what the mouse actually sent.
+The app supplies the opened device's USB vendor and product ids to that test;
+another product from the same vendor cannot satisfy it. The platform reader has
+no built-in vendor selection, and settings-only previews do not register raw input.
 
 ### Start with Windows
 
 On first run the daemon adds a `Snakecharmer` value under
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, which needs no admin rights.
-`autostart_bootstrapped` records that this happened, so if you turn it off it stays off.
-The tray check reads the registry, which is the only source of truth.
+`autostart_bootstrapped` records that this happened so a removed registration stays
+removed. The tray's **Request start with Windows** check represents this registration,
+not Windows' effective startup setting. Read failures are `Unknown`, displayed as
+**Startup request unavailable**; neither a toggle nor bootstrap writes an unreadable
+registration. Mutation read-back errors are reported instead of being treated as off.
+
+Windows startup settings and Task Manager can independently disable a registered app.
+This unpackaged Run-key backend does not query or override that setting, so a checked
+request does not establish that the app will start. Microsoft's documented
+[`StartupTask.State`](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask)
+applies to startup tasks declared in an app package; no StartupApproved binary layout is
+guessed here. See the [README](../README.md#start-with-windows) for the user-facing behavior.
 
 ### PC Vitals health capsule
 
+The `pc-vitals` Cargo feature enables this integration and its SHA-256 dependency.
+It is disabled by default, including in release artifacts. The disabled reporter is
+zero-sized: lifecycle calls do nothing and its lease deadline is `Duration::MAX`, so
+default builds perform no health file I/O or lease time checks. CI tests and builds both modes.
+
 PC Vitals is a separate local health monitor that reads status files from provider apps.
-Snakecharmer is one provider: it writes a JSON capsule to
+With the feature enabled, Snakecharmer is one provider: it writes a JSON capsule to
 `%LOCALAPPDATA%\PCVitals\providers\snakecharmer.json`. The file is written only on events
 (start, connect, session failure, polling change, quit). A lease refresh every 45 minutes
 runs inside the session loop's existing wait, so it adds no thread and no device I/O. The
@@ -262,9 +336,9 @@ short:
   device that stops responding.
 - Never touch firmware, the bootloader, or DFU.
 - Never rebind left or right click.
-- On-board binds persist on the mouse until changed or reset. DPI is sent with the
-  no-store flag; lighting effects are sent with the variable-storage flag, as OpenRazer
-  sends them.
+- On-board binds persist on the mouse until changed or reset. Lighting effects use
+  OpenRazer's variable-storage selector. DPI writes retain selector `0x00`; the pinned
+  helper differs, so this document does not claim verified DPI persistence semantics.
 
 ## Resource budget
 
@@ -272,11 +346,21 @@ Measured figures, from the [README](../README.md#why):
 
 | | Measured |
 |---|---|
-| Exe size | 0.61 MB, one static exe (`crt-static`; release profile with `opt-level = "z"`, LTO, `panic = "abort"`, stripped) |
+| Exe size | 0.74 MB (738,304 bytes), default x64 MSVC release with static CRT (`opt-level = "z"`, LTO, `panic = "abort"`, stripped) |
 | Idle RAM | 17 MB working set, 2.5 MB private |
 | Idle CPU | about 0.06 CPU-hours per day |
 | Processes | 1 |
 | Kernel drivers | 0 |
+
+MSVC builds enable `crt-static` in [`.cargo/config.toml`](../.cargo/config.toml).
+CI and release builds inspect both shipped executables with
+[`check-static-crt.py`](../tools/check-static-crt.py), rejecting ordinary or
+delay-loaded imports of the dynamic Microsoft CRT. Windows system DLLs are
+still required. Executable size was measured on 2026-10-26; RAM and CPU remain
+the earlier runtime measurements.
+
+Enabling `pc-vitals` produces an 828,416-byte daemon in the same build, adding
+90,112 bytes. RAM and CPU have not been remeasured for the feature split.
 
 Weigh every new dependency against these numbers. The app uses raw `windows-sys` instead
 of a GUI framework, draws with the GDI+ that ships in Windows, and has no async runtime.

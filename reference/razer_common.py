@@ -17,12 +17,12 @@ The Razer control protocol is a 90-byte HID feature report (report ID 0):
   offset 88    crc = XOR of bytes 2..87
   offset 89    reserved (0)
 
-Commands used here (all documented in OpenRazer, nothing else is ever sent):
+Command layouts used here (see docs/SPEC.md for the DPI selector difference):
   set device mode : class 0x00, id 0x04, data_size 2, args [mode, 0x00]
                     mode 0x00 = hardware/normal, 0x03 = driver mode
   get device mode : class 0x00, id 0x84, data_size 2
   set DPI (xy)    : class 0x04, id 0x05, data_size 7,
-                    args [0x00 (no varstore), dpi_x_hi, dpi_x_lo, dpi_y_hi, dpi_y_lo]
+                    args [0x00 (existing selector), dpi_x_hi, dpi_x_lo, dpi_y_hi, dpi_y_lo]
   get DPI (xy)    : class 0x04, id 0x85, data_size 7
 
 The control endpoint on Windows is the interface-0 HID collection
@@ -30,6 +30,7 @@ The control endpoint on Windows is the interface-0 HID collection
 """
 
 import time
+import threading
 
 import hid
 
@@ -50,6 +51,23 @@ MODE_DRIVER = 0x03
 
 class RazerError(Exception):
     pass
+
+
+_commands_lock = threading.RLock()
+_stop_reason = None
+
+
+def stop_commands(error: Exception) -> None:
+    """Latch the first failure across every control handle in this process."""
+    global _stop_reason
+    with _commands_lock:
+        if _stop_reason is None:
+            _stop_reason = str(error)
+
+
+def _ensure_active() -> None:
+    if _stop_reason is not None:
+        raise RazerError(f"device commands stopped: {_stop_reason}")
 
 
 def build_report(command_class: int, command_id: int, data_size: int,
@@ -81,33 +99,34 @@ def find_control_path() -> bytes:
 def send_command(dev: "hid.device", report: bytes) -> bytes:
     """Send one 90-byte report as feature report 0 and return the 90-byte response.
 
-    Retries on BUSY, mirroring openrazer's razer_send_payload retry loop.
+    Every non-success status, including BUSY, is terminal under AGENTS.md.
+    Never retry or send a later command after a transport or response failure.
     """
-    last_status = None
-    for _ in range(5):
-        n = dev.send_feature_report(b"\x00" + report)
-        if n < 0:
-            raise RazerError(f"send_feature_report failed: {dev.error()}")
-        time.sleep(0.06)
-        resp = bytes(dev.get_feature_report(0x00, 91))
-        if len(resp) == 91:
-            resp = resp[1:]  # strip report ID byte
-        if len(resp) != 90:
-            raise RazerError(f"unexpected response length {len(resp)}")
-        last_status = resp[0]
-        if last_status == STATUS_BUSY:
-            time.sleep(0.1)
-            continue
-        if last_status != STATUS_SUCCESS:
-            raise RazerError(f"device returned status 0x{last_status:02x} "
-                             f"for command {report[6]:02x}/{report[7]:02x}")
-        if resp[6] != report[6] or resp[7] != report[7]:
-            raise RazerError("response does not match command echo")
-        return resp
-    raise RazerError(f"device stayed busy (status 0x{last_status:02x})")
+    with _commands_lock:
+        _ensure_active()
+        try:
+            n = dev.send_feature_report(b"\x00" + report)
+            if n != 91:
+                raise RazerError(f"send_feature_report wrote {n} bytes, expected 91")
+            time.sleep(0.06)
+            resp = bytes(dev.get_feature_report(0x00, 91))
+            if len(resp) == 91:
+                resp = resp[1:]  # strip report ID byte
+            if len(resp) != 90:
+                raise RazerError(f"unexpected response length {len(resp)}")
+            if resp[0] != STATUS_SUCCESS:
+                raise RazerError(f"device returned status 0x{resp[0]:02x} "
+                                 f"for command {report[6]:02x}/{report[7]:02x}")
+            if resp[6] != report[6] or resp[7] != report[7]:
+                raise RazerError("response does not match command echo")
+            return resp
+        except (RazerError, OSError, ValueError) as error:
+            stop_commands(error)
+            raise
 
 
 def open_control() -> "hid.device":
+    _ensure_active()
     dev = hid.device()
     dev.open_path(find_control_path())
     return dev
@@ -119,12 +138,11 @@ def get_device_mode(dev: "hid.device") -> int:
 
 
 def set_device_mode(dev: "hid.device", mode: int) -> int:
-    """Set device mode and return the read-back mode for verification."""
+    """Confirm the read command, set device mode, and require its read-back."""
     if mode not in (MODE_HARDWARE, MODE_DRIVER):
         raise ValueError("mode must be 0x00 (hardware) or 0x03 (driver)")
-    send_command(dev, build_report(0x00, 0x04, 0x02, bytes([mode, 0x00])))
-    time.sleep(0.05)
-    return get_device_mode(dev)
+    return _write_verified(dev, build_report(0x00, 0x04, 0x02, bytes([mode, 0x00])),
+                           mode, get_device_mode)
 
 
 def get_dpi(dev: "hid.device") -> tuple:
@@ -140,10 +158,24 @@ def set_dpi(dev: "hid.device", dpi_x: int, dpi_y: int = None) -> tuple:
     for v in (dpi_x, dpi_y):
         if not (100 <= v <= 16000):
             raise ValueError("DPI must be 100..16000 for the DeathAdder Elite")
-    args = bytes([0x00,  # no variable storage (NOSTORE), per openrazer for this device
+    args = bytes([0x00,  # Existing selector differs from the pinned helper; see docs/SPEC.md.
                   (dpi_x >> 8) & 0xFF, dpi_x & 0xFF,
                   (dpi_y >> 8) & 0xFF, dpi_y & 0xFF,
                   0x00, 0x00])
-    send_command(dev, build_report(0x04, 0x05, 0x07, args))
-    time.sleep(0.05)
-    return get_dpi(dev)
+    return _write_verified(dev, build_report(0x04, 0x05, 0x07, args),
+                           (dpi_x, dpi_y), get_dpi)
+
+
+def _write_verified(dev, report, expected, read):
+    # Hold the same lock through the whole operation; individual exchanges
+    # cannot interleave even when a caller uses more than one handle/thread.
+    with _commands_lock:
+        read(dev)
+        send_command(dev, report)
+        time.sleep(0.05)
+        actual = read(dev)
+        if actual != expected:
+            error = RazerError(f"read-back mismatch: requested {expected!r}, got {actual!r}")
+            stop_commands(error)
+            raise error
+        return actual
