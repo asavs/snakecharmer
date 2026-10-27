@@ -1,0 +1,3 @@
+# Ship the MSVC C runtime inside each executable; Windows system DLLs stay dynamic.
+[target.'cfg(all(target_os = "windows", target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

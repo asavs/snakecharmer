@@ -5,6 +5,10 @@
 pub mod actions;
 pub mod config;
 pub mod daemon;
+#[cfg(feature = "pc-vitals")]
+pub mod health;
+#[cfg(not(feature = "pc-vitals"))]
+#[path = "health_disabled.rs"]
 pub mod health;
 pub mod lighting;
 pub mod logger;

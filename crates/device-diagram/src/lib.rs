@@ -1,16 +1,10 @@
-//! Device diagrams as data: a tiny shape DSL each [`crate::DeviceSpec`]
-//! carries, describing a top-down schematic of the physical controls.
+//! Shared immutable device diagrams and their standalone SVG rendering.
 //!
-//! One definition per device drives two renderers, so the art can never fork:
-//! * the settings window draws it with GDI+ (the `platform` crate),
-//! * [`Diagram::to_svg`] emits the `docs/assets/<device>.svg` shown in
-//!   `docs/SUPPORTED-DEVICES.md` (a drift-check test regenerates the SVG and
-//!   fails if the committed asset differs).
-//!
-//! Coordinates are integer design units (rendered 1 unit = 1 px at 96 dpi;
-//! the emitter derives the viewBox from the content, so nothing can clip).
-//! Authoring a new device's diagram is ~15 lines of data — start from an
-//! existing device and move points; no artwork skills or tools required.
+//! Both the native settings renderer and documentation consume these const
+//! shapes. This crate has no device protocol, platform I/O, or dependencies.
+//! Native controls identify their callouts; SVG uses the stored caption text.
+
+#![forbid(unsafe_code)]
 
 /// How an element is styled. Rendering picks stroke/fill color, width and
 /// font size from the role, so diagrams stay theme-agnostic data.
@@ -65,46 +59,66 @@ pub type Curve = ((i32, i32), (i32, i32), (i32, i32));
 /// Which interactive control a [`Shape::Callout`] anchors. The settings
 /// window mounts the matching dropdown at the callout's position; the SVG
 /// emitter (a static picture) renders the caption text only.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CalloutSlot {
     DpiUp,
     DpiDown,
     ThumbBack,
     ThumbForward,
-    /// The scroll wheel / middle click. Scaffold only: the settings window
-    /// mounts a disabled, identity-only dropdown here (middle-click remap is
-    /// not yet implemented).
-    Wheel,
     /// A lighting zone's controls (effect dropdown + color swatch + picker),
     /// mounted beside that zone's marker on the schematic. Carries the zone's
-    /// index into `DeviceSpec::rgb_zones` (= the settings window's lighting
-    /// rows), so diagrams stay generic over zone count.
+    /// index into the application's lighting zones (= the settings window's
+    /// lighting rows), so diagrams stay generic over zone count.
     Lighting(u8),
     /// A button whose bind is stored in the mouse's own memory: the settings
     /// window mounts its on-board bind control here. Carries the keymap button
-    /// id (`crate::keymap`), so it only appears on mice with a recorded keymap.
+    /// id supplied by the application.
     Button(u8),
 }
 
 /// A drawing primitive. Everything is const-constructible so diagrams live
-/// in the `DeviceSpec` table as plain `static` data.
+/// in device specifications as plain `static` data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
     /// Cubic-bezier path from `start` through `curves`, optionally closed.
-    Path { role: Role, start: (i32, i32), curves: &'static [Curve], closed: bool },
+    Path {
+        role: Role,
+        start: (i32, i32),
+        curves: &'static [Curve],
+        closed: bool,
+    },
     /// Axis-aligned rectangle with corner radius `r`.
-    RoundRect { role: Role, x: i32, y: i32, w: i32, h: i32, r: i32 },
-    Circle { role: Role, cx: i32, cy: i32, r: i32 },
+    RoundRect {
+        role: Role,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        r: i32,
+    },
+    Circle {
+        role: Role,
+        cx: i32,
+        cy: i32,
+        r: i32,
+    },
     /// Straight segments through `points` (used for leads, seams, splits).
-    Polyline { role: Role, points: &'static [(i32, i32)] },
+    Polyline {
+        role: Role,
+        points: &'static [(i32, i32)],
+    },
     /// One line of text; `at` is the baseline point (SVG semantics).
-    Text { role: Role, at: (i32, i32), anchor: Anchor, text: &'static str },
+    Text {
+        role: Role,
+        at: (i32, i32),
+        anchor: Anchor,
+        text: &'static str,
+    },
     /// A remappable control's caption block *and* control anchor: `label` at
     /// baseline `at` (main caption style) with `note` 16 units below (styled
     /// by `note_role`). In the SVG this is just those two text lines; in the
-    /// settings window the caption is drawn and the slot's actual dropdown is
-    /// mounted directly beneath it — the diagram callout IS the control, so
-    /// the fact is never stated twice.
+    /// native settings window only the control is mounted at this anchor;
+    /// its selected entry identifies the button without duplicating captions.
     Callout {
         slot: CalloutSlot,
         at: (i32, i32),
@@ -141,8 +155,8 @@ fn text_extent_x(x: i32, anchor: Anchor, w: i32) -> (i32, i32) {
 
 impl Diagram {
     /// Content bounding box `(x0, y0, x1, y1)` over every shape, including
-    /// estimated text extents — the emitter and the window renderer both size
-    /// from this, which is what guarantees captions can't clip.
+    /// estimated text extents, for the SVG viewBox. The native renderer measures
+    /// its font and control extents separately from the same shape data.
     pub fn bounds(&self) -> (i32, i32, i32, i32) {
         let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
         let mut add = |x: i32, y: i32| {
@@ -174,13 +188,25 @@ impl Diagram {
                         add(x, y);
                     }
                 }
-                Shape::Text { role, at, anchor, text } => {
+                Shape::Text {
+                    role,
+                    at,
+                    anchor,
+                    text,
+                } => {
                     let size = role.font_size();
                     let (tx0, tx1) = text_extent_x(at.0, anchor, est_text_width(text, size));
                     add(tx0, at.1 - size); // ascent
                     add(tx1, at.1 + size / 3); // descent
                 }
-                Shape::Callout { at, anchor, label, note, note_role, .. } => {
+                Shape::Callout {
+                    at,
+                    anchor,
+                    label,
+                    note,
+                    note_role,
+                    ..
+                } => {
                     let (lx0, lx1) =
                         text_extent_x(at.0, anchor, est_text_width(label, Role::Label.font_size()));
                     add(lx0, at.1 - Role::Label.font_size());
@@ -235,7 +261,12 @@ impl Diagram {
 
         for s in self.shapes {
             match *s {
-                Shape::Path { role, start, curves, closed } => {
+                Shape::Path {
+                    role,
+                    start,
+                    curves,
+                    closed,
+                } => {
                     let mut d = format!("M{} {}", start.0, start.1);
                     for &((c1x, c1y), (c2x, c2y), (ex, ey)) in curves {
                         d.push_str(&format!(" C{c1x} {c1y} {c2x} {c2y} {ex} {ey}"));
@@ -248,7 +279,14 @@ impl Diagram {
                         stroke_class(role)
                     ));
                 }
-                Shape::RoundRect { role, x, y, w, h, r } => {
+                Shape::RoundRect {
+                    role,
+                    x,
+                    y,
+                    w,
+                    h,
+                    r,
+                } => {
                     out.push_str(&format!(
                         "  <rect class=\"{}\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" rx=\"{r}\"/>\n",
                         stroke_class(role)
@@ -269,13 +307,25 @@ impl Diagram {
                         pts.join(" ")
                     ));
                 }
-                Shape::Text { role, at, anchor, text } => {
+                Shape::Text {
+                    role,
+                    at,
+                    anchor,
+                    text,
+                } => {
                     out.push_str(&svg_text(text_class(role), at, anchor, text));
                 }
                 // A static picture has no dropdown to mount, so a callout is
                 // simply its caption: label line + note line (each emitted only
-                // when non-empty, e.g. the wheel callout carries a label only).
-                Shape::Callout { at, anchor, label, note, note_role, .. } => {
+                // when non-empty).
+                Shape::Callout {
+                    at,
+                    anchor,
+                    label,
+                    note,
+                    note_role,
+                    ..
+                } => {
                     if !label.is_empty() {
                         out.push_str(&svg_text(text_class(Role::Label), at, anchor, label));
                     }
@@ -338,7 +388,9 @@ fn text_class(role: Role) -> &'static str {
 
 /// Minimal XML escaping for text content.
 fn escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// File-name slug for a device's generated SVG asset
@@ -364,8 +416,18 @@ mod tests {
         width: 100,
         height: 50,
         shapes: &[
-            Shape::Circle { role: Role::RgbZone, cx: 20, cy: 20, r: 10 },
-            Shape::Text { role: Role::Label, at: (30, 40), anchor: Anchor::Start, text: "a<b&c" },
+            Shape::Circle {
+                role: Role::RgbZone,
+                cx: 20,
+                cy: 20,
+                r: 10,
+            },
+            Shape::Text {
+                role: Role::Label,
+                at: (30, 40),
+                anchor: Anchor::Start,
+                text: "a<b&c",
+            },
         ],
     };
 
@@ -373,23 +435,41 @@ mod tests {
     fn bounds_cover_shapes_and_text() {
         let (x0, y0, x1, y1) = D.bounds();
         assert_eq!((x0, y0), (10, 10), "circle drives the min corner");
-        assert!(x1 >= 30 + est_text_width("a<b&c", 13), "text width extends the max corner");
+        assert!(
+            x1 >= 30 + est_text_width("a<b&c", 13),
+            "text width extends the max corner"
+        );
         assert!(y1 >= 40, "text descent extends below the baseline");
     }
 
     #[test]
     fn svg_is_escaped_and_padded() {
         let svg = D.to_svg();
-        assert!(svg.contains("a&lt;b&amp;c"), "text content must be XML-escaped");
-        assert!(svg.contains("viewBox=\"-2 -2"), "viewBox = bounds min - 12 padding");
-        assert!(svg.contains("prefers-color-scheme: dark"), "dark-mode aware");
-        assert!(!svg.contains("http://") || svg.matches("http://").count() == 1,
-            "no external references beyond the xmlns");
+        assert!(
+            svg.contains("a&lt;b&amp;c"),
+            "text content must be XML-escaped"
+        );
+        assert!(
+            svg.contains("viewBox=\"-2 -2"),
+            "viewBox = bounds min - 12 padding"
+        );
+        assert!(
+            svg.contains("prefers-color-scheme: dark"),
+            "dark-mode aware"
+        );
+        assert!(
+            !svg.contains("http://") || svg.matches("http://").count() == 1,
+            "no external references beyond the xmlns"
+        );
     }
 
     #[test]
     fn empty_diagram_falls_back_to_canvas() {
-        let d = Diagram { width: 10, height: 20, shapes: &[] };
+        let d = Diagram {
+            width: 10,
+            height: 20,
+            shapes: &[],
+        };
         assert_eq!(d.bounds(), (0, 0, 10, 20));
     }
 

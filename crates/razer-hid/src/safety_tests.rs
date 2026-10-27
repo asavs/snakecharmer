@@ -1,9 +1,14 @@
+//! Helper-level fault cases below use independent local gates. The Mouse
+//! boundary cases use the production typed methods and process-wide COMMANDS
+//! gate, in isolated test subprocesses with simulated feature transports.
+//! Neither layer exercises HID enumeration, HidD_* calls, or device firmware.
+
 use super::*;
 use std::collections::VecDeque;
 
 type Report = [u8; REPORT_LEN];
 
-struct Fake {
+pub(super) struct Fake {
     steps: VecDeque<(Report, Vec<u8>)>,
     sends: usize,
     receives: usize,
@@ -64,7 +69,7 @@ fn gate() -> SafetyGate {
 }
 
 #[test]
-fn every_non_success_status_stops_without_retry_or_another_handle() {
+fn every_non_success_status_stops_the_shared_helper_gate_without_retry() {
     for status in [0x00, 0x01, 0x03, 0x04, 0x05, 0xff] {
         let request = proto::get_dpi_report(0x1f);
         let mut response = reply(request);
@@ -75,9 +80,12 @@ fn every_non_success_status_stops_without_retry_or_another_handle() {
             Err(Error::Proto(proto::ProtoError::DeviceStatus(s))) if s == status));
         assert_eq!((first.sends, first.receives), (1, 1));
 
-        // A fresh handle cannot bypass the process's existing latch.
+        // Another transport under this same local gate must not send.
         let mut reopened = Fake::new([]);
-        assert!(matches!(safety.run(|| reopened.exchange(&request)), Err(Error::SafetyStop(_))));
+        assert!(matches!(
+            safety.run(|| reopened.exchange(&request)),
+            Err(Error::SafetyStop(_))
+        ));
         assert_eq!((reopened.sends, reopened.receives), (0, 0));
     }
 }
@@ -100,7 +108,9 @@ fn malformed_response_and_wrong_echo_stop_the_channel() {
 fn report_id_is_optional_in_feature_response() {
     let request = proto::get_dpi_report(0x1f);
     let without_id = reply(request);
-    let with_id = std::iter::once(0).chain(without_id.iter().copied()).collect();
+    let with_id = std::iter::once(0)
+        .chain(without_id.iter().copied())
+        .collect();
     for response in [without_id, with_id] {
         let mut io = Fake::new([(request, response)]);
         assert_eq!(io.exchange(&request).unwrap()[0], proto::status::SUCCESS);
@@ -121,7 +131,10 @@ fn transport_failures_stop_without_retry() {
             io.receive_error = Some(error);
         }
         let mut safety = gate();
-        assert!(matches!(safety.run(|| io.exchange(&request)), Err(Error::Hid(_))));
+        assert!(matches!(
+            safety.run(|| io.exchange(&request)),
+            Err(Error::Hid(_))
+        ));
         assert!(safety.check().is_err());
         assert_eq!(io.sends, 1);
         assert_eq!(io.receives, usize::from(!on_send));
@@ -129,7 +142,7 @@ fn transport_failures_stop_without_retry() {
 }
 
 #[test]
-fn dpi_writes_read_before_and_after_on_every_supported_device() {
+fn dpi_verification_helper_covers_each_device_spec() {
     for spec in proto::SUPPORTED {
         let get = proto::get_dpi_report(spec.transaction_id);
         let set =
@@ -142,10 +155,12 @@ fn dpi_writes_read_before_and_after_on_every_supported_device() {
         ]);
         assert_eq!(
             gate()
-                .run(|| write_verified(&mut io, &set, (1600, 1600), |io| read_dpi(
-                    io,
-                    spec.transaction_id
-                )))
+                .run(
+                    || write_verified(&mut io, &set, (1600, 1600), |io| read_dpi(
+                        io,
+                        spec.transaction_id
+                    ))
+                )
                 .unwrap(),
             (1600, 1600)
         );
@@ -165,7 +180,12 @@ fn failed_pre_read_never_writes() {
     let mut io = Fake::new([(get, response)]);
     let mut safety = gate();
     assert!(safety
-        .run(|| write_verified(&mut io, &set, (1600, 1600), |io| read_dpi(io, spec.transaction_id)))
+        .run(
+            || write_verified(&mut io, &set, (1600, 1600), |io| read_dpi(
+                io,
+                spec.transaction_id
+            ))
+        )
         .is_err());
     assert_eq!(io.sends, 1);
     assert!(safety.check().is_err());
@@ -182,7 +202,9 @@ fn failed_write_never_reads_back_or_runs_the_next_setting() {
     let mut io = Fake::new([(get, dpi_reply(get, 1800)), (set, failed)]);
     let mut safety = gate();
     let result = safety.run(|| {
-        write_verified(&mut io, &set, (1600, 1600), |io| read_dpi(io, spec.transaction_id))?;
+        write_verified(&mut io, &set, (1600, 1600), |io| {
+            read_dpi(io, spec.transaction_id)
+        })?;
         read_polling(&mut io, spec)
     });
     assert!(result.is_err());
@@ -197,11 +219,18 @@ fn read_back_mismatch_latches_and_preserves_the_original_reason() {
     let get = proto::get_dpi_report(spec.transaction_id);
     let set =
         proto::set_dpi_report(spec.transaction_id, spec.dpi_min, spec.dpi_max, 1600, 1600).unwrap();
-    let mut io =
-        Fake::new([(get, dpi_reply(get, 1800)), (set, reply(set)), (get, dpi_reply(get, 800))]);
+    let mut io = Fake::new([
+        (get, dpi_reply(get, 1800)),
+        (set, reply(set)),
+        (get, dpi_reply(get, 800)),
+    ]);
     let mut safety = gate();
     let error = safety
-        .run(|| write_verified(&mut io, &set, (1600, 1600), |io| read_dpi(io, spec.transaction_id)))
+        .run(|| {
+            write_verified(&mut io, &set, (1600, 1600), |io| {
+                read_dpi(io, spec.transaction_id)
+            })
+        })
         .unwrap_err();
     assert!(matches!(error, Error::Verify(_)));
     let reason = safety.stopped.clone();
@@ -211,7 +240,7 @@ fn read_back_mismatch_latches_and_preserves_the_original_reason() {
 }
 
 #[test]
-fn mode_and_both_polling_families_use_read_write_read() {
+fn verification_helper_handles_mode_and_both_polling_families() {
     let txn = 0x3f;
     let get = proto::get_device_mode_report(txn);
     let set = proto::set_device_mode_report(txn, DeviceMode::Driver);
@@ -220,7 +249,9 @@ fn mode_and_both_polling_families_use_read_write_read() {
     let mut io = Fake::new([(get, reply(get)), (set, reply(set)), (get, after)]);
     gate()
         .run(|| {
-            write_verified(&mut io, &set, DeviceMode::Driver.as_byte(), |io| read_mode(io, txn))
+            write_verified(&mut io, &set, DeviceMode::Driver.as_byte(), |io| {
+                read_mode(io, txn)
+            })
         })
         .unwrap();
     assert!(io.steps.is_empty());
@@ -234,13 +265,15 @@ fn mode_and_both_polling_families_use_read_write_read() {
             proto::PollingProtocol::Extended => response[9] = 0x10,
         }
         let mut io = Fake::new([(get, response.clone()), (set, reply(set)), (get, response)]);
-        gate().run(|| write_verified(&mut io, &set, 500, |io| read_polling(io, spec))).unwrap();
+        gate()
+            .run(|| write_verified(&mut io, &set, 500, |io| read_polling(io, spec)))
+            .unwrap();
         assert!(io.steps.is_empty());
     }
 }
 
 #[test]
-fn captured_binding_uses_read_write_read() {
+fn verification_helper_handles_captured_binding() {
     let km = proto::keymap::spec_for(0x00b2).unwrap();
     let bind = proto::keymap::Binding::Disabled;
     let get = proto::keymap::read_binding_report(0x1f, 0x04);
@@ -250,7 +283,11 @@ fn captured_binding_uses_read_write_read() {
     let after = reply(get); // captured disabled category and length are both zero
     let mut io = Fake::new([(get, before), (set, reply(set)), (get, after)]);
     gate()
-        .run(|| write_verified(&mut io, &set, bind.clone(), |io| read_binding(io, 0x1f, 0x04)))
+        .run(|| {
+            write_verified(&mut io, &set, bind.clone(), |io| {
+                read_binding(io, 0x1f, 0x04)
+            })
+        })
         .unwrap();
     assert!(io.steps.is_empty());
 }
@@ -273,6 +310,13 @@ fn parser_failures_stop_and_local_validation_does_not() {
         .is_err());
     assert!(safety.check().is_ok());
     assert!(!Error::DeviceNotFound.requires_stop());
+    assert!(!Error::ControlOwnership(platform::process_lease::Error::Busy).requires_stop());
+    assert!(
+        !Error::ControlOwnership(platform::process_lease::Error::Os(std::io::Error::other(
+            "ownership unavailable"
+        )))
+        .requires_stop()
+    );
     assert!(Error::Verify("input collection closed".into()).requires_stop());
 }
 
@@ -288,9 +332,11 @@ fn wrong_button_reply_stops_before_an_onboard_write() {
     let mut io = Fake::new([(get, wrong_button)]);
     let mut safety = gate();
     assert!(matches!(
-        safety.run(|| write_verified(&mut io, &set, proto::keymap::Binding::Disabled, |io| {
-            read_binding(io, 0x1f, 0x04)
-        })),
+        safety.run(
+            || write_verified(&mut io, &set, proto::keymap::Binding::Disabled, |io| {
+                read_binding(io, 0x1f, 0x04)
+            })
+        ),
         Err(Error::Proto(proto::ProtoError::KeymapButtonMismatch { .. }))
     ));
     assert_eq!(io.sends, 1);
@@ -308,3 +354,6 @@ fn external_stop_blocks_commands_and_keeps_the_first_failure() {
     assert!(safety.run(|| read_dpi(&mut io, 0x1f)).is_err());
     assert_eq!(io.sends, 0);
 }
+
+#[path = "mouse_boundary_tests.rs"]
+mod mouse_boundary;
