@@ -13,16 +13,30 @@ Attribution
 Snakecharmer's Razer HID protocol implementation is derived from OpenRazer:
 
     OpenRazer — https://github.com/openrazer/openrazer
-    Licensed under the GNU General Public License v2.0.
+    Referenced sources carry SPDX-License-Identifier: GPL-2.0-or-later.
 
 Specifically, the report structure, CRC, transaction IDs, command classes, and
-Chroma matrix-effect encodings in the `razer-proto` crate are a port of, and are
-validated byte-for-byte against, the following OpenRazer sources:
+Chroma matrix-effect encodings in the `razer-proto` crate are derived from the
+following OpenRazer sources:
 
     driver/razercommon.c
     driver/razercommon.h
     driver/razerchromacommon.c
     driver/razermouse_driver.c
+    driver/razermouse_driver.h
+    daemon/openrazer_daemon/hardware/mouse.py
+
+Reference snapshot reviewed on 2026-10-26:
+    https://github.com/openrazer/openrazer/tree/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d
+Exact file identities: reference/openrazer-source.json.
+
+This is a later source review, not a record of the original port's unrecorded
+revision or a new hardware verification. It found a DPI-write selector mismatch:
+the pinned helper emits VARSTORE (0x01), while Snakecharmer emits 0x00. Extended
+polling also omits the reference driver's second selector-0x01 request. See
+docs/SPEC.md, "Reference snapshot", for the scope and unresolved differences.
+Existing byte tests assert Snakecharmer's chosen reports; they do not establish
+that every report is identical to this snapshot's output.
 
 OpenRazer is the work of its many contributors and performed the original
 reverse-engineering of Razer's USB HID control protocol. Snakecharmer would not exist

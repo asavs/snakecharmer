@@ -12,7 +12,7 @@
 //!
 //! A chord is a `Vec<u16>` of VKs pressed in order then released in reverse.
 
-use platform::{vk_for_char, vk_function, VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN};
+use platform::{vk_for_char, vk_function, VK_CONTROL, VK_LWIN, VK_MENU, VK_SHIFT};
 
 /// A parsed action: either a keystroke chord or an explicit no-op.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,15 +100,27 @@ mod tests {
     #[test]
     fn copy_paste_are_ctrl_chords() {
         let copy = parse("copy").unwrap();
-        assert_eq!(copy, Action::Chord(vec![VK_CONTROL, vk_for_char('c').unwrap()]));
+        assert_eq!(
+            copy,
+            Action::Chord(vec![VK_CONTROL, vk_for_char('c').unwrap()])
+        );
         let paste = parse("paste").unwrap();
-        assert_eq!(paste, Action::Chord(vec![VK_CONTROL, vk_for_char('v').unwrap()]));
+        assert_eq!(
+            paste,
+            Action::Chord(vec![VK_CONTROL, vk_for_char('v').unwrap()])
+        );
     }
 
     #[test]
     fn key_digits_and_function_keys() {
-        assert_eq!(parse("key:9").unwrap(), Action::Chord(vec![vk_for_char('9').unwrap()]));
-        assert_eq!(parse("key:0").unwrap(), Action::Chord(vec![vk_for_char('0').unwrap()]));
+        assert_eq!(
+            parse("key:9").unwrap(),
+            Action::Chord(vec![vk_for_char('9').unwrap()])
+        );
+        assert_eq!(
+            parse("key:0").unwrap(),
+            Action::Chord(vec![vk_for_char('0').unwrap()])
+        );
         assert_eq!(parse("key:f13").unwrap(), Action::Chord(vec![0x7C]));
         assert_eq!(parse("key:f24").unwrap(), Action::Chord(vec![0x87]));
     }

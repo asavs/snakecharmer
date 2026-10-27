@@ -126,6 +126,8 @@ once someone has checked its case arms and added it there.
 
 <!-- BEGIN GENERATED TABLES -->
 
+Source snapshot: [OpenRazer `477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d`](https://github.com/openrazer/openrazer/tree/477f4d6d3ab7e9deb6310d5bd3742560c5cbe80d). File identities are recorded in [`reference/openrazer-source.json`](../reference/openrazer-source.json).
+
 ### DeathAdder
 
 | Model | USB id | txn | Max DPI | RGB zones | Polling | Status |
@@ -172,6 +174,8 @@ once someone has checked its case arms and added it there.
 | Viper V3 HyperSpeed | `1532:00B8` | `0x1F`<br><sub>copy V3</sub> | 30000 | — | Classic | open |
 | Viper V3 Pro (Wired) | `1532:00C0` | `0x1F`<br><sub>copy V3</sub> | 35000 | — | Classic | open |
 | Viper V3 Pro (Wireless) | `1532:00C1` | `0x1F`<br><sub>copy V3</sub> | 35000 | — | Extended<br><sub>→ 8000 Hz</sub> | open |
+| Viper V3 Pro SE (Wired) | `1532:00DE` | `0x1F`<br><sub>copy V3</sub> | 35000 | — | Classic | open |
+| Viper V3 Pro SE (Wireless) | `1532:00DF` | `0x1F`<br><sub>copy V3</sub> | 35000 | — | Classic | open |
 
 ### Basilisk
 
@@ -225,6 +229,8 @@ once someone has checked its case arms and added it there.
 | Cobra | `1532:00A3` | `0xFF`<br><sub>new txn path</sub> | 8500 | logo | Classic | open |
 | Cobra Pro (Wired) | `1532:00AF` | `0x1F`<br><sub>copy V3</sub> | 30000 | logo, wheel | Classic | open |
 | Cobra Pro (Wireless) | `1532:00B0` | `0x1F`<br><sub>copy V3</sub> | 30000 | logo, wheel | Classic | open |
+| Cobra HyperSpeed | `1532:00DA` | `0x1F`<br><sub>copy V3</sub> | 26000 | logo | Classic | open |
+| Cobra HyperSpeed Receiver | `1532:00DB` | `0x1F`<br><sub>copy V3</sub> | 26000 | logo | Classic | open |
 
 ### Mamba
 
