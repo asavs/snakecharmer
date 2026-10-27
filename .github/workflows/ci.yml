@@ -14,6 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
@@ -22,8 +24,10 @@ jobs:
       - run: python reference/keymap_diff.py --self-test
       # The full gate for add-device PRs: byte-exact protocol tests plus the
       # SUPPORTED-DEVICES.md drift check.
+      - run: cargo fmt --all -- --check
       - run: cargo test --workspace ${{ matrix.features }}
       - run: cargo clippy --workspace --all-targets ${{ matrix.features }} -- -D warnings
       - run: cargo build --release ${{ matrix.features }}
       - name: Verify static CRT linkage
         run: python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe
+      - run: python -m unittest discover -s tools -p "test_wishlist*.py"

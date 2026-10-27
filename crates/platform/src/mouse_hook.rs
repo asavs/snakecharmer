@@ -12,9 +12,11 @@
 //! * [`install`]/[`sync`] MUST be called on a thread that pumps messages (the
 //!   tray GUI thread) — Windows silently drops a `WH_MOUSE_LL` hook whose
 //!   thread doesn't pump. [`uninstall`] removes it.
-//! * The hook proc must be fast (Windows enforces `LowLevelHooksTimeout`, ~300 ms)
-//!   and must never block: it uses `try_lock` and falls back to **pass-through**
-//!   on the (near-impossible) contended case, so it can never freeze input.
+//! * The hook proc uses `try_lock`: it does not wait for the state mutex and
+//!   falls back to **pass-through** on contention. Chord cloning/allocation
+//!   and `SendInput` still run synchronously; no callback latency bound is
+//!   guaranteed. Windows can silently remove a hook that exceeds its configured
+//!   `LowLevelHooksTimeout` (see Microsoft's LowLevelMouseProc documentation).
 //! * **Default is pass-through.** Only a thumb button with a configured remap is
 //!   suppressed; every other event (left/right/middle/move/scroll, and thumb
 //!   buttons with no remap) goes straight to `CallNextHookEx`.
