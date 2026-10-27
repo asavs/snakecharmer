@@ -20,7 +20,9 @@ fn main() {
     let (cfg, note) = match Config::load_or_create(&Config::config_path()) {
         Ok(loaded) => loaded,
         Err(e) => {
-            let message = format!("{e}\n\nThe config has been left unchanged. Fix the file and restart Snakecharmer.");
+            let message = format!(
+                "{e}\n\nThe config has been left unchanged. Fix the file and restart Snakecharmer."
+            );
             log.log(&message);
             platform::alert("Snakecharmer: configuration error", &message);
             return;

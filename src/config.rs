@@ -123,13 +123,15 @@ impl Config {
     pub fn validate_for(&self, spec: razer_proto::DeviceSpec) -> Result<(), String> {
         let mut errors = Vec::new();
         let (x, y) = self.dpi_xy();
-        if let Err(e) = razer_proto::set_dpi_report(
-            spec.transaction_id, spec.dpi_min, spec.dpi_max, x, y,
-        ) {
+        if let Err(e) =
+            razer_proto::set_dpi_report(spec.transaction_id, spec.dpi_min, spec.dpi_max, x, y)
+        {
             errors.push(format!("dpi/dpi_y: {e}"));
         }
         if let Some(hz) = self.polling_rate {
-            if let Err(e) = razer_proto::set_polling_rate_report(spec.transaction_id, spec.polling, hz) {
+            if let Err(e) =
+                razer_proto::set_polling_rate_report(spec.transaction_id, spec.polling, hz)
+            {
                 errors.push(format!("polling_rate: {e}"));
             }
         }
@@ -148,7 +150,8 @@ impl Config {
         for &zone in spec.rgb_zones {
             let name = razer_proto::led::name(zone);
             if let Err(e) = crate::lighting::EffectSpec::from_config(
-                self.zone_lighting(name), self.zone_color(name),
+                self.zone_lighting(name),
+                self.zone_color(name),
             ) {
                 errors.push(format!("lighting ({name}): {e}"));
             }
@@ -158,7 +161,11 @@ impl Config {
                 errors.push(format!("[onboard]: {e}"));
             }
         }
-        if errors.is_empty() { Ok(()) } else { Err(errors.join("; ")) }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("; "))
+        }
     }
 
     /// Config directory: `%LOCALAPPDATA%\Snakecharmer` (falls back to CWD).
@@ -186,32 +193,44 @@ impl Config {
         match fs::read_to_string(path) {
             Ok(text) => {
                 let cfg = toml::from_str::<Config>(&text).map_err(|e| {
-                    io::Error::new(io::ErrorKind::InvalidData,
-                        format!("could not parse config {}: {e}", path.display()))
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("could not parse config {}: {e}", path.display()),
+                    )
                 })?;
                 Ok((cfg, None))
             }
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 let cfg = Config::default();
                 cfg.save(path)?;
-                Ok((cfg, Some(format!("wrote default config to {}", path.display()))))
+                Ok((
+                    cfg,
+                    Some(format!("wrote default config to {}", path.display())),
+                ))
             }
-            Err(e) => Err(io::Error::new(e.kind(),
-                format!("could not read config {}: {e}", path.display()))),
+            Err(e) => Err(io::Error::new(
+                e.kind(),
+                format!("could not read config {}: {e}", path.display()),
+            )),
         }
     }
 
     /// Publish a complete, flushed file in one same-directory replacement.
     pub fn save(&self, path: &Path) -> io::Result<()> {
-        let text = toml::to_string_pretty(self)
-            .map_err(io::Error::other)?;
-        let parent = path.parent().filter(|p| !p.as_os_str().is_empty())
+        let text = toml::to_string_pretty(self).map_err(io::Error::other)?;
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
         fs::create_dir_all(parent)?;
         let (temporary, mut file) = loop {
             let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
             let temporary = parent.join(format!(".config.tmp.{}.{sequence}", std::process::id()));
-            match OpenOptions::new().write(true).create_new(true).open(&temporary) {
+            match OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)
+            {
                 Ok(file) => break (TemporaryConfig(temporary), file),
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
                 Err(e) => return Err(e),
@@ -231,43 +250,97 @@ mod tests {
 
     #[test]
     fn validates_both_dpi_axes_and_polling_before_application() {
-        let cfg = Config { dpi: 1600, dpi_y: Some(30001), polling_rate: Some(250), ..Config::default() };
+        let cfg = Config {
+            dpi: 1600,
+            dpi_y: Some(30001),
+            polling_rate: Some(250),
+            ..Config::default()
+        };
         let error = cfg.validate_for(razer_proto::DEATHADDER_V3).unwrap_err();
         assert!(error.contains("dpi/dpi_y"));
         assert!(error.contains("polling_rate"));
-        assert!(Config { dpi: 16001, ..Config::default() }
-            .validate_for(razer_proto::DEATHADDER_ELITE).is_err());
-        assert!(Config { dpi: 45000, polling_rate: Some(8000), ..Config::default() }
-            .validate_for(razer_proto::DEATHADDER_V4_PRO).is_ok());
+        assert!(Config {
+            dpi: 16001,
+            ..Config::default()
+        }
+        .validate_for(razer_proto::DEATHADDER_ELITE)
+        .is_err());
+        assert!(Config {
+            dpi: 45000,
+            polling_rate: Some(8000),
+            ..Config::default()
+        }
+        .validate_for(razer_proto::DEATHADDER_V4_PRO)
+        .is_ok());
     }
 
     #[test]
     fn validates_actions_that_the_device_uses() {
-        let mut cfg = Config { dpi_up: "not-an-action".into(), ..Config::default() };
-        assert!(cfg.validate_for(razer_proto::DEATHADDER_ELITE).unwrap_err().contains("dpi_up"));
-        assert!(cfg.validate_for(razer_proto::DEATHADDER_V3).is_ok(), "no DPI buttons on the V3");
+        let mut cfg = Config {
+            dpi_up: "not-an-action".into(),
+            ..Config::default()
+        };
+        assert!(cfg
+            .validate_for(razer_proto::DEATHADDER_ELITE)
+            .unwrap_err()
+            .contains("dpi_up"));
+        assert!(
+            cfg.validate_for(razer_proto::DEATHADDER_V3).is_ok(),
+            "no DPI buttons on the V3"
+        );
         cfg.thumb_forward = "not-an-action".into();
-        assert!(cfg.validate_for(razer_proto::DEATHADDER_V3).unwrap_err().contains("thumb_forward"));
+        assert!(cfg
+            .validate_for(razer_proto::DEATHADDER_V3)
+            .unwrap_err()
+            .contains("thumb_forward"));
     }
 
     #[test]
     fn validates_effective_zone_effects_and_colors() {
-        let mut cfg = Config { lighting: "static".into(), color: "bad-color".into(), ..Config::default() };
-        assert!(cfg.validate_for(razer_proto::DEATHADDER_ELITE).unwrap_err().contains("lighting (wheel)"));
+        let mut cfg = Config {
+            lighting: "static".into(),
+            color: "bad-color".into(),
+            ..Config::default()
+        };
+        assert!(cfg
+            .validate_for(razer_proto::DEATHADDER_ELITE)
+            .unwrap_err()
+            .contains("lighting (wheel)"));
         for name in ["wheel", "logo"] {
-            cfg.zones.insert(name.into(), ZoneConfig { lighting: Some("off".into()), color: None });
+            cfg.zones.insert(
+                name.into(),
+                ZoneConfig {
+                    lighting: Some("off".into()),
+                    color: None,
+                },
+            );
         }
-        assert!(cfg.validate_for(razer_proto::DEATHADDER_ELITE).is_ok(), "off ignores unused color");
+        assert!(
+            cfg.validate_for(razer_proto::DEATHADDER_ELITE).is_ok(),
+            "off ignores unused color"
+        );
         cfg.zones.get_mut("logo").unwrap().lighting = Some("not-an-effect".into());
-        assert!(cfg.validate_for(razer_proto::DEATHADDER_ELITE).unwrap_err().contains("lighting (logo)"));
+        assert!(cfg
+            .validate_for(razer_proto::DEATHADDER_ELITE)
+            .unwrap_err()
+            .contains("lighting (logo)"));
     }
 
     #[test]
     fn validates_captured_onboard_entries_and_keeps_unsupported_features_ignored() {
-        let mut cfg = Config { lighting: "not-an-effect".into(), ..Config::default() };
+        let mut cfg = Config {
+            lighting: "not-an-effect".into(),
+            ..Config::default()
+        };
         cfg.onboard.insert("left".into(), "disabled".into());
-        assert!(cfg.validate_for(razer_proto::DEATHADDER_V3).unwrap_err().contains("[onboard]"));
-        assert!(cfg.validate_for(razer_proto::DEATHADDER_V4_PRO).is_ok(), "no lighting or keymap on V4 Pro");
+        assert!(cfg
+            .validate_for(razer_proto::DEATHADDER_V3)
+            .unwrap_err()
+            .contains("[onboard]"));
+        assert!(
+            cfg.validate_for(razer_proto::DEATHADDER_V4_PRO).is_ok(),
+            "no lighting or keymap on V4 Pro"
+        );
         cfg.onboard.clear();
         cfg.onboard.insert("wheel_click".into(), "ctrl+c".into());
         assert!(cfg.validate_for(razer_proto::DEATHADDER_V3).is_ok());
@@ -279,7 +352,8 @@ mod tests {
         fn new() -> Self {
             let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "snakecharmer-config-test-{}-{sequence}", std::process::id()
+                "snakecharmer-config-test-{}-{sequence}",
+                std::process::id()
             ));
             fs::create_dir(&path).unwrap();
             Self(path)
@@ -290,8 +364,10 @@ mod tests {
         }
 
         fn assert_no_temporaries(&self) {
-            let names: Vec<_> = fs::read_dir(&self.0).unwrap()
-                .map(|entry| entry.unwrap().file_name()).collect();
+            let names: Vec<_> = fs::read_dir(&self.0)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect();
             assert_eq!(names, vec![std::ffi::OsString::from("config.toml")]);
         }
     }
@@ -331,8 +407,10 @@ mod tests {
         let dir = TestDir::new();
         let original = [0xff, 0xfe, 0x80];
         fs::write(dir.config(), original).unwrap();
-        assert_eq!(Config::load_or_create(&dir.config()).unwrap_err().kind(),
-            io::ErrorKind::InvalidData);
+        assert_eq!(
+            Config::load_or_create(&dir.config()).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
         assert_eq!(fs::read(dir.config()).unwrap(), original);
         dir.assert_no_temporaries();
     }
@@ -342,7 +420,11 @@ mod tests {
         let dir = TestDir::new();
         let original = b"dpi = 1200\n";
         fs::write(dir.config(), original).unwrap();
-        let locked = OpenOptions::new().read(true).share_mode(0).open(dir.config()).unwrap();
+        let locked = OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(dir.config())
+            .unwrap();
         let error = Config::load_or_create(&dir.config()).unwrap_err();
         assert!(error.to_string().contains("could not read config"));
         drop(locked);
@@ -355,7 +437,11 @@ mod tests {
         let dir = TestDir::new();
         let original = b"dpi = 1200\n# preserve this even if saving fails\n";
         fs::write(dir.config(), original).unwrap();
-        let locked = OpenOptions::new().read(true).share_mode(0).open(dir.config()).unwrap();
+        let locked = OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(dir.config())
+            .unwrap();
         assert!(Config::default().save(&dir.config()).is_err());
         drop(locked);
         assert_eq!(fs::read(dir.config()).unwrap(), original);
@@ -366,7 +452,10 @@ mod tests {
     fn save_replaces_an_existing_file_with_a_complete_config() {
         let dir = TestDir::new();
         fs::write(dir.config(), "dpi = 1200\n").unwrap();
-        let cfg = Config { dpi: 2400, ..Config::default() };
+        let cfg = Config {
+            dpi: 2400,
+            ..Config::default()
+        };
         cfg.save(&dir.config()).unwrap();
         assert_eq!(Config::load_or_create(&dir.config()).unwrap().0, cfg);
         dir.assert_no_temporaries();
@@ -398,7 +487,10 @@ mod tests {
             autostart_bootstrapped: true,
             zones: BTreeMap::from([(
                 "logo".to_string(),
-                ZoneConfig { lighting: Some("breathing".into()), color: None },
+                ZoneConfig {
+                    lighting: Some("breathing".into()),
+                    color: None,
+                },
             )]),
             onboard: BTreeMap::from([("back".to_string(), "ctrl+c".to_string())]),
         };
@@ -416,9 +508,18 @@ mod tests {
 
         c.zones.insert(
             "wheel".into(),
-            ZoneConfig { lighting: Some("static".into()), color: Some("#ff0000".into()) },
+            ZoneConfig {
+                lighting: Some("static".into()),
+                color: Some("#ff0000".into()),
+            },
         );
-        c.zones.insert("logo".into(), ZoneConfig { lighting: Some("spectrum".into()), color: None });
+        c.zones.insert(
+            "logo".into(),
+            ZoneConfig {
+                lighting: Some("spectrum".into()),
+                color: None,
+            },
+        );
         assert_eq!(c.zone_lighting("wheel"), "static");
         assert_eq!(c.zone_color("wheel"), "#ff0000");
         assert_eq!(c.zone_lighting("logo"), "spectrum");
@@ -429,7 +530,10 @@ mod tests {
     fn empty_zones_stay_out_of_the_toml() {
         let text = toml::to_string_pretty(&Config::default()).unwrap();
         assert!(!text.contains("zones"), "no empty [zones] table:\n{text}");
-        assert!(!text.contains("onboard"), "no empty [onboard] table:\n{text}");
+        assert!(
+            !text.contains("onboard"),
+            "no empty [onboard] table:\n{text}"
+        );
     }
 
     #[test]
@@ -438,7 +542,10 @@ mod tests {
         let back: Config = toml::from_str("dpi = 1200\n").unwrap();
         assert_eq!(back.dpi, 1200);
         assert_eq!(back.dpi_up, "copy");
-        assert_eq!(back.polling_rate, None, "absent polling_rate must mean leave-as-is");
+        assert_eq!(
+            back.polling_rate, None,
+            "absent polling_rate must mean leave-as-is"
+        );
         assert_eq!(back.reassert_interval_secs, 60);
         assert!(
             !back.autostart_bootstrapped,
@@ -451,10 +558,15 @@ mod tests {
         let mut c = Config::default();
         c.zones.insert(
             "logo".into(),
-            ZoneConfig { lighting: Some("static".into()), color: None },
+            ZoneConfig {
+                lighting: Some("static".into()),
+                color: None,
+            },
         );
         let text = toml::to_string_pretty(&c).unwrap();
-        let latch = text.find("autostart_bootstrapped").expect("latch must serialize");
+        let latch = text
+            .find("autostart_bootstrapped")
+            .expect("latch must serialize");
         let table = text.find('[').expect("zones table must serialize");
         assert!(latch < table, "TOML scalars must precede tables:\n{text}");
     }

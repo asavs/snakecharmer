@@ -71,12 +71,19 @@ impl std::error::Error for Error {}
 impl Error {
     /// Device failures are terminal. Invalid local settings never reached the device.
     pub fn requires_stop(&self) -> bool {
-        matches!(self, Self::Hid(_) | Self::SafetyStop(_) | Self::Verify(_)
-            | Self::Proto(proto::ProtoError::DeviceStatus(_)
-                | proto::ProtoError::BadResponseLen(_)
-                | proto::ProtoError::CommandEchoMismatch { .. }
-                | proto::ProtoError::UnknownPollingRate(_)
-                | proto::ProtoError::KeymapButtonMismatch { .. }))
+        matches!(
+            self,
+            Self::Hid(_)
+                | Self::SafetyStop(_)
+                | Self::Verify(_)
+                | Self::Proto(
+                    proto::ProtoError::DeviceStatus(_)
+                        | proto::ProtoError::BadResponseLen(_)
+                        | proto::ProtoError::CommandEchoMismatch { .. }
+                        | proto::ProtoError::UnknownPollingRate(_)
+                        | proto::ProtoError::KeymapButtonMismatch { .. }
+                )
+        )
     }
 
     /// Preserve a native OS error when hidapi exposes one; other variants remain typed
@@ -114,13 +121,16 @@ const CONTROL_LEASE_NAME: &str = "Global\\SnakecharmerDeviceControl";
 static CONTROL_LEASE: Mutex<Weak<platform::process_lease::ProcessLease>> = Mutex::new(Weak::new());
 
 fn control_lease() -> Result<Arc<platform::process_lease::ProcessLease>> {
-    let mut slot = CONTROL_LEASE.lock()
+    let mut slot = CONTROL_LEASE
+        .lock()
         .map_err(|_| Error::SafetyStop("control ownership lock poisoned".into()))?;
     if let Some(lease) = slot.upgrade() {
         return Ok(lease);
     }
-    let lease = Arc::new(platform::process_lease::ProcessLease::acquire(CONTROL_LEASE_NAME)
-        .map_err(Error::ControlOwnership)?);
+    let lease = Arc::new(
+        platform::process_lease::ProcessLease::acquire(CONTROL_LEASE_NAME)
+            .map_err(Error::ControlOwnership)?,
+    );
     *slot = Arc::downgrade(&lease);
     Ok(lease)
 }
@@ -157,7 +167,10 @@ impl SafetyGate {
 
 /// Check the process-wide latch without sending a report or opening a device.
 pub fn ensure_active() -> Result<()> {
-    COMMANDS.lock().map_err(|_| Error::SafetyStop("command lock poisoned".into()))?.check()
+    COMMANDS
+        .lock()
+        .map_err(|_| Error::SafetyStop("command lock poisoned".into()))?
+        .check()
 }
 
 /// Stop commands after a failure detected outside the control transport too.
@@ -217,7 +230,11 @@ impl<T: FeatureIo> CommandIo for T {
         sleep(Duration::from_millis(60));
         let mut input = [0u8; REPORT_LEN + 1];
         let n = self.receive(&mut input)?;
-        let response = if n == REPORT_LEN + 1 { &input[1..] } else { &input[..n] };
+        let response = if n == REPORT_LEN + 1 {
+            &input[1..]
+        } else {
+            &input[..n]
+        };
         // BUSY is a non-success status too: AGENTS.md requires stopping, not retrying.
         let validated = proto::validate_response(request, response)?;
         let mut owned = [0u8; REPORT_LEN];
@@ -231,11 +248,16 @@ fn read_dpi(io: &mut impl CommandIo, txn: u8) -> Result<(u16, u16)> {
 }
 
 fn read_mode(io: &mut impl CommandIo, txn: u8) -> Result<u8> {
-    Ok(proto::parse_device_mode(&io.exchange(&proto::get_device_mode_report(txn))?))
+    Ok(proto::parse_device_mode(
+        &io.exchange(&proto::get_device_mode_report(txn))?,
+    ))
 }
 
 fn read_polling(io: &mut impl CommandIo, spec: proto::DeviceSpec) -> Result<u16> {
-    let response = io.exchange(&proto::get_polling_rate_report(spec.transaction_id, spec.polling.protocol))?;
+    let response = io.exchange(&proto::get_polling_rate_report(
+        spec.transaction_id,
+        spec.polling.protocol,
+    ))?;
     Ok(proto::parse_polling_rate(spec.polling.protocol, &response)?)
 }
 
@@ -255,7 +277,9 @@ fn write_verified<I: CommandIo, T: PartialEq + std::fmt::Debug>(
     sleep(Duration::from_millis(50));
     let actual = read(io)?;
     if actual != expected {
-        return Err(Error::Verify(format!("requested {expected:?}, device reports {actual:?}")));
+        return Err(Error::Verify(format!(
+            "requested {expected:?}, device reports {actual:?}"
+        )));
     }
     Ok(actual)
 }
@@ -304,7 +328,10 @@ impl Mouse {
             .device_list()
             .filter_map(|d| {
                 let spec = proto::spec_for(d.product_id())?;
-                let rank = spec.product_ids.iter().position(|&id| id == d.product_id())?;
+                let rank = spec
+                    .product_ids
+                    .iter()
+                    .position(|&id| id == d.product_id())?;
                 (d.vendor_id() == proto::VENDOR_ID
                     && d.interface_number() == 0
                     && d.usage_page() == 0x0001
@@ -320,7 +347,12 @@ impl Mouse {
         // supported device, but before opening its control endpoint.
         let lease = control_lease()?;
         let dev = info.open_device(api)?;
-        Ok(Mouse { dev: ControlDevice::Hid(dev), spec, product_id, _control_lease: lease })
+        Ok(Mouse {
+            dev: ControlDevice::Hid(dev),
+            spec,
+            product_id,
+            _control_lease: lease,
+        })
     }
 
     /// The matched device's [`DeviceSpec`] — name, transaction id, and which
@@ -336,15 +368,20 @@ impl Mouse {
         self.product_id
     }
 
-    fn with_channel<T>(&self, operation: impl FnOnce(&mut HidChannel<'_>) -> Result<T>) -> Result<T> {
-        COMMANDS.lock()
+    fn with_channel<T>(
+        &self,
+        operation: impl FnOnce(&mut HidChannel<'_>) -> Result<T>,
+    ) -> Result<T> {
+        COMMANDS
+            .lock()
             .map_err(|_| Error::SafetyStop("command lock poisoned".into()))?
             .run(|| match &self.dev {
                 ControlDevice::Hid(dev) => operation(&mut HidChannel::Hid(dev)),
                 #[cfg(test)]
                 ControlDevice::Simulated(io) => {
-                    let mut io = io.lock()
-                        .map_err(|_| Error::SafetyStop("simulated transport lock poisoned".into()))?;
+                    let mut io = io.lock().map_err(|_| {
+                        Error::SafetyStop("simulated transport lock poisoned".into())
+                    })?;
                     operation(&mut HidChannel::Simulated(&mut io))
                 }
             })
@@ -370,7 +407,8 @@ impl Mouse {
     /// Confirm the read channel, set DPI, and verify its read-back.
     pub fn set_dpi(&self, dpi_x: u16, dpi_y: u16) -> Result<(u16, u16)> {
         let txn = self.spec.transaction_id;
-        let report = proto::set_dpi_report(txn, self.spec.dpi_min, self.spec.dpi_max, dpi_x, dpi_y)?;
+        let report =
+            proto::set_dpi_report(txn, self.spec.dpi_min, self.spec.dpi_max, dpi_x, dpi_y)?;
         self.with_channel(|io| write_verified(io, &report, (dpi_x, dpi_y), |io| read_dpi(io, txn)))
     }
 
@@ -381,7 +419,8 @@ impl Mouse {
 
     /// Validate the rate locally, confirm the read channel, write, and verify.
     pub fn set_polling_rate(&self, hz: u16) -> Result<u16> {
-        let report = proto::set_polling_rate_report(self.spec.transaction_id, self.spec.polling, hz)?;
+        let report =
+            proto::set_polling_rate_report(self.spec.transaction_id, self.spec.polling, hz)?;
         self.with_channel(|io| write_verified(io, &report, hz, |io| read_polling(io, self.spec)))
     }
 
@@ -389,7 +428,11 @@ impl Mouse {
     pub fn get_button_binding(&self, button: u8) -> Result<proto::keymap::Binding> {
         proto::keymap::spec_for(self.spec.product_id)
             .filter(|km| km.buttons.iter().any(|&(id, _)| id == button))
-            .ok_or_else(|| Error::Proto(proto::ProtoError::KeymapNotWritable("no captured read for this device/button".into())))?;
+            .ok_or_else(|| {
+                Error::Proto(proto::ProtoError::KeymapNotWritable(
+                    "no captured read for this device/button".into(),
+                ))
+            })?;
         self.with_channel(|io| read_binding(io, self.spec.transaction_id, button))
     }
 
@@ -401,11 +444,17 @@ impl Mouse {
         bind: &proto::keymap::Binding,
     ) -> Result<proto::keymap::Binding> {
         if proto::keymap::spec_for(self.spec.product_id).is_none_or(|known| known != km) {
-            return Err(Error::Proto(proto::ProtoError::KeymapNotWritable("keymap does not belong to this device".into())));
+            return Err(Error::Proto(proto::ProtoError::KeymapNotWritable(
+                "keymap does not belong to this device".into(),
+            )));
         }
         let txn = self.spec.transaction_id;
         let report = proto::keymap::write_binding_report(km, txn, button, bind)?;
-        self.with_channel(|io| write_verified(io, &report, bind.clone(), |io| read_binding(io, txn, button)))
+        self.with_channel(|io| {
+            write_verified(io, &report, bind.clone(), |io| {
+                read_binding(io, txn, button)
+            })
+        })
     }
 
     // --- Chroma / RGB lighting ---------------------------------------------
@@ -478,22 +527,34 @@ impl Mouse {
 
     /// Static single color on one zone (a `led` id from the spec's `rgb_zones`).
     pub fn set_zone_color(&self, zone: u8, rgb: Rgb) -> Result<()> {
-        self.apply_zone(zone, proto::effect_static_report(self.spec.transaction_id, zone, rgb))
+        self.apply_zone(
+            zone,
+            proto::effect_static_report(self.spec.transaction_id, zone, rgb),
+        )
     }
 
     /// Breathing (single color) on one zone.
     pub fn set_zone_breathing(&self, zone: u8, rgb: Rgb) -> Result<()> {
-        self.apply_zone(zone, proto::effect_breathing_report(self.spec.transaction_id, zone, rgb))
+        self.apply_zone(
+            zone,
+            proto::effect_breathing_report(self.spec.transaction_id, zone, rgb),
+        )
     }
 
     /// Spectrum cycling on one zone.
     pub fn set_zone_spectrum(&self, zone: u8) -> Result<()> {
-        self.apply_zone(zone, proto::effect_spectrum_report(self.spec.transaction_id, zone))
+        self.apply_zone(
+            zone,
+            proto::effect_spectrum_report(self.spec.transaction_id, zone),
+        )
     }
 
     /// Lighting off (none) on one zone.
     pub fn set_zone_off(&self, zone: u8) -> Result<()> {
-        self.apply_zone(zone, proto::effect_none_report(self.spec.transaction_id, zone))
+        self.apply_zone(
+            zone,
+            proto::effect_none_report(self.spec.transaction_id, zone),
+        )
     }
 }
 
@@ -553,7 +614,10 @@ pub fn detected_mice(api: &HidApi) -> Vec<DetectedMouse> {
         }
         // One device exposes several collections; keep one entry per product
         // id, upgrading it if a later collection is the one carrying the name.
-        let name = d.product_string().map(str::to_owned).filter(|s| !s.is_empty());
+        let name = d
+            .product_string()
+            .map(str::to_owned)
+            .filter(|s| !s.is_empty());
         match found.iter_mut().find(|m| m.product_id == d.product_id()) {
             Some(existing) => existing.name = existing.name.take().or(name),
             None => found.push(DetectedMouse {
