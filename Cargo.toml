@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/razer-proto", "crates/razer-hid", "crates/platform"]
+members = ["crates/device-diagram", "crates/razer-proto", "crates/razer-hid", "crates/platform"]
 
 [workspace.package]
 edition = "2021"
@@ -10,7 +10,7 @@ repository = "https://github.com/asavs/snakecharmer"
 
 [package]
 name = "snakecharmer"
-version = "0.9.1"
+version = "0.10.0"
 edition = "2021"
 description = "A tiny native Windows replacement for Razer Synapse, with a toolkit to crack your own peripherals"
 repository = "https://github.com/asavs/snakecharmer"
@@ -21,13 +21,17 @@ default-run = "snakecharmer"
 name = "snakecharmer"
 path = "src/main.rs"
 
+[features]
+default = []
+pc-vitals = ["dep:sha2"]
+
 [dependencies]
 razer-proto = { path = "crates/razer-proto" }
 razer-hid = { path = "crates/razer-hid" }
 platform = { path = "crates/platform" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
+sha2 = { version = "0.10", optional = true }
 toml = "0.8"
 
 # Footprint-focused release profile: smallest static exe, no unwinding.

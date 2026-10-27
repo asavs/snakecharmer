@@ -8,7 +8,7 @@ main job people bring here does not need a frontier model.
 
 Snakecharmer is a Windows daemon that configures Razer mice over USB HID (DPI, polling
 rate, RGB, button remapping) as a replacement for Razer Synapse. It is Rust, Windows-only,
-and deliberately small: one static ~0.6 MB exe, about 17 MB idle (measured).
+and deliberately small: one ~0.74 MB exe with a static CRT, about 17 MB idle (measured).
 
 All protocol knowledge comes from [OpenRazer](https://github.com/openrazer/openrazer). This
 project ports slices of it to Windows; it does not invent protocol.
@@ -37,6 +37,7 @@ the one way to actually break someone's hardware.
 ```
 crates/razer-proto/   pure protocol: report building, CRC, commands, DeviceSpec. No I/O.
 crates/razer-hid/     device open/enumerate, feature reports, input-report listener
+crates/device-diagram/ shared immutable shapes and SVG rendering. No I/O.
 crates/platform/      Win32 FFI: single-instance, keystroke injection, mouse hook, tray, settings UI
 src/                  daemon, config, lighting, on-board binds, charmctl
 reference/            runnable Python recon toolkit — poke a device with no compile cycle
@@ -76,7 +77,8 @@ shared layer, and that is a different change.
    [`docs/SUPPORTED-DEVICES.md`](docs/SUPPORTED-DEVICES.md). A test fails if the doc and the
    table disagree.
 5. **Verify on hardware.** This part needs the human who owns the mouse. Ask them to run
-   the daemon and confirm the log line, then `charmctl set-dpi <n>` and `charmctl status`
+   the daemon and confirm the log line, quit it from the tray to release device control,
+   then run `charmctl set-dpi <n>` and `charmctl status`
    round-trip, including a value near the device's maximum. Do not mark a device verified
    on hardware because the tests passed; that column means a person plugged it in.
 
@@ -103,12 +105,18 @@ For a device port, just record the mouse's on-board profile count in the PR.
 ## Acceptance
 
 ```
+cargo fmt --all -- --check
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo build --release
+python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe
+python -m unittest discover -s reference -p "test_*.py"
+python reference/keymap_diff.py --self-test
+python -m unittest discover -s tools -p "test_wishlist*.py"
 ```
 
-These match CI; [`CONTRIBUTING.md`](CONTRIBUTING.md) has the same block.
+CI also runs the Rust tests, Clippy, and build with `--features pc-vitals` and checks
+those binaries' imports; [`CONTRIBUTING.md`](CONTRIBUTING.md) covers development setup.
 
 A change is not done until those are green. Tests for protocol code assert **exact bytes**
 against the OpenRazer reference. See the `*_matches_openrazer` tests for the pattern.

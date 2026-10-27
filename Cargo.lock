@@ -47,6 +47,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-diagram"
+version = "0.10.0"
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -133,8 +137,10 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
+ "device-diagram",
+ "razer-proto",
  "windows-sys",
 ]
 
@@ -158,15 +164,19 @@ dependencies = [
 
 [[package]]
 name = "razer-hid"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "hidapi",
+ "platform",
  "razer-proto",
 ]
 
 [[package]]
 name = "razer-proto"
-version = "0.9.1"
+version = "0.10.0"
+dependencies = [
+ "device-diagram",
+]
 
 [[package]]
 name = "serde"
@@ -239,7 +249,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "snakecharmer"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "platform",
  "razer-hid",

@@ -401,8 +401,9 @@ fn error_code(error: &razer_hid::Error) -> &'static str {
     match error {
         razer_hid::Error::Hid(_) => "hid_io_failed",
         razer_hid::Error::DeviceNotFound => "device_not_found",
+        razer_hid::Error::ControlOwnership(_) => "device_control_unavailable",
         razer_hid::Error::Proto(_) => "device_protocol_failed",
-        razer_hid::Error::Busy(_) => "device_busy_timeout",
+        razer_hid::Error::SafetyStop(_) => "device_safety_stop",
         razer_hid::Error::Verify(_) => "device_verification_failed",
     }
 }

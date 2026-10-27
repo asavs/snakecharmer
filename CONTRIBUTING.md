@@ -96,15 +96,22 @@ amount of wiring. Keep unsafe code confined to `platform`.
 ## Dev setup
 
 ```powershell
-cargo build --release                                     # release exes
-cargo test --workspace                                    # what CI runs
-cargo clippy --workspace --all-targets -- -D warnings     # what CI runs; no warnings allowed
+cargo fmt --all -- --check
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo build --release
+python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe
+python -m unittest discover -s reference -p "test_*.py"
+python reference/keymap_diff.py --self-test
+python -m unittest discover -s tools -p "test_wishlist*.py"
 ```
 
 The build produces `snakecharmer.exe` (the daemon) and `charmctl.exe` (the CLI) in
-`targetelease`, plus `diagram-editor.exe`, a dev tool for drawing button maps. These are
-the same test and clippy commands CI runs (`.github/workflows/ci.yml`), so run them before
-you push.
+`target/release`, plus `diagram-editor.exe`, a dev tool for drawing button maps. These are
+the same acceptance commands CI runs (`.github/workflows/ci.yml`), so run them before
+you push. CI also runs the Rust tests, Clippy, and build with `--features pc-vitals`
+and checks those binaries' imports to cover the optional health integration. Run
+`cargo fmt --all` to apply the formatting required by the check.
 
 Keep it small: the release exe is under 1 MB and idle RAM about 17 MB. Weigh new
 dependencies against that (`docs/SPEC.md` has the targets).
@@ -121,7 +128,7 @@ attribution does.
 
 ## PR checklist
 
-- [ ] `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` are clean (see Dev setup).
+- [ ] Formatting and all acceptance checks above are green, including the `pc-vitals` variant when changing the health integration.
 - [ ] New protocol code has **byte-exact tests** against the reference implementation.
 - [ ] You verified on **real hardware**, and unplug/replug restores the mouse's normal behavior.
 - [ ] `NOTICE` credits any project you sourced the protocol from.

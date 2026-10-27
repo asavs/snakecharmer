@@ -9,7 +9,8 @@ What it does, forever, with tiny footprint:
      code 0x21 = DPI down / rear button - same values openrazer translates
      to F13/F14 on Linux).
   3. Injects the keystrokes you configure below via SendInput.
-  4. Re-asserts driver mode after unplug/replug, sleep/resume, etc.
+  4. Periodically confirms driver mode while the connection remains healthy.
+     A device failure stops the process; there are no recovery writes.
 
 Configure the two buttons here:
 """
@@ -141,12 +142,19 @@ def open_listeners():
     for d in hid.enumerate(rz.VENDOR_ID, rz.PRODUCT_ID):
         if d["interface_number"] == 0:
             continue
+        dev = None
         try:
             dev = hid.device()
             dev.open_path(d["path"])
             dev.set_nonblocking(1)
+            dev.read(32)  # Reject initially unreadable collections before the session.
             listeners.append((dev, d["path"]))
         except OSError:
+            if dev is not None:
+                try:
+                    dev.close()
+                except OSError:
+                    pass
             continue
     return listeners
 
@@ -164,15 +172,12 @@ def run_session() -> None:
         last_check = time.monotonic()
         while True:
             got = False
-            dead = []
             for dev, path in listeners:
                 try:
                     data = dev.read(32)
-                except (OSError, IOError, ValueError):
-                    # Windows opens keyboard-class collections without read
-                    # access; reading them fails. Drop just that collection.
-                    dead.append((dev, path))
-                    continue
+                except (OSError, ValueError) as error:
+                    rz.stop_commands(error)
+                    raise rz.RazerError(f"an active input collection failed: {error}") from error
                 if not data:
                     continue
                 got = True
@@ -190,20 +195,10 @@ def run_session() -> None:
                     else:
                         log(f"Unmapped vendor code 0x{code:02x} (report {bytes(data).hex(' ')})")
                 pressed[path] = codes
-            if dead:
-                for dev, path in dead:
-                    listeners.remove((dev, path))
-                    try:
-                        dev.close()
-                    except Exception:
-                        pass
-                log(f"Dropped {len(dead)} unreadable collection(s); {len(listeners)} remain.")
-                if not listeners:
-                    raise rz.RazerError("all listener collections became unreadable")
             if not got:
                 time.sleep(POLL_SLEEP_S)
             if time.monotonic() - last_check > MODE_RECHECK_S:
-                ensure_driver_mode(ctrl)   # re-assert after sleep/resume etc.
+                ensure_driver_mode(ctrl)
                 last_check = time.monotonic()
     finally:
         for dev, _ in listeners:
@@ -220,18 +215,19 @@ def run_session() -> None:
 def main():
     if not single_instance():
         print("Another instance is already running; exiting.")
-        return
+        return 0
     log(f"Daemon starting. Actions: {ACTIONS}")
-    while True:
-        try:
-            run_session()
-        except (rz.RazerError, OSError, ValueError) as e:
-            log(f"Session ended: {e}. Retrying in 3 s (mouse unplugged/asleep?).")
-            time.sleep(3)
-        except KeyboardInterrupt:
-            log("Stopped by user.")
-            return
+    try:
+        run_session()
+    except (rz.RazerError, OSError, ValueError) as error:
+        rz.stop_commands(error)
+        log(f"Device communication stopped: {error}. Check that the mouse still moves "
+            "and clicks before restarting this script.")
+        return 1
+    except KeyboardInterrupt:
+        log("Stopped by user.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

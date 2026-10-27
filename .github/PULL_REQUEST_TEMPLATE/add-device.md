@@ -51,7 +51,7 @@ Fill these in. Together they are the whole "crack":
 - [ ] The `docs/SUPPORTED-DEVICES.md` row matches the format the `supported_devices_doc_matches_table` test checks: model name, transaction id as `0xNN`, DPI range with an en dash (`100–30000`), polling rates joined by `/`.
 - [ ] Added the PID to `CLAIMED` in `tools/wishlist-from-openrazer.py` and regenerated `docs/DEVICE-WISHLIST.md` (or edited the row by hand).
 - [ ] `dpi_buttons` is `None` unless I read the codes off my own mouse with `reference/button_listener.ps1`.
-- [ ] `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` are green (the commands CI runs; see CONTRIBUTING.md).
+- [ ] `cargo fmt --all -- --check` and the remaining acceptance checks in CONTRIBUTING.md are green.
 - [ ] **No changes were needed** to `razer-hid` or the daemon. *(If you did have to touch them, say why here. It usually means a generic gap to lift into the shared layer rather than device-specific code.)*
 - [ ] Existing devices are unaffected: the byte-exact report tests still pass unchanged.
 
@@ -60,7 +60,7 @@ Fill these in. Together they are the whole "crack":
 Adding a device to the table is a claim about real hardware. Back it up.
 
 - [ ] Plugged the device in and ran the daemon; the log shows `Opened <model> (PID …, txn …; rgb=…, dpi_buttons=…)` with the expected values and **no crash-loop**.
-- [ ] Ran `charmctl set-dpi <n>`, then `charmctl status`. DPI applies and reads back, including a value near the device's max.
+- [ ] Quit the daemon from its tray menu to release device control, then ran `charmctl set-dpi <n>` and `charmctl status`. DPI applies and reads back, including a value near the device's max.
 - [ ] Feature flags behave: RGB works (or is correctly skipped), DPI-button remap works (or is correctly absent).
 
 <!-- Paste the relevant daemon.log lines / charmctl output here. -->
