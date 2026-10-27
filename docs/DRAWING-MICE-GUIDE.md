@@ -23,7 +23,7 @@
 A diagram here is **data, not artwork**. You are not drawing a mouse; you are stating
 facts with coordinates: *there is a button at this position, it maps to this config key,
 it emits this vendor code*. The DSL
-([`crates/razer-proto/src/diagram.rs`](../crates/razer-proto/src/diagram.rs)) has five
+([`crates/device-diagram/src/lib.rs`](../crates/device-diagram/src/lib.rs)) has six
 primitives and seven styling roles. The renderers decide everything else: colors, stroke
 weights, font sizes, dark/light theming. That is why:
 
@@ -37,7 +37,7 @@ One definition, three consumers:
 | surface | renderer | where |
 |---|---|---|
 | settings window pane | GDI+ (anti-aliased) + GDI ClearType text | `crates/platform/src/diagram.rs` |
-| `docs/assets/<device>.svg` | `Diagram::to_svg()` emitter | `crates/razer-proto/src/diagram.rs` |
+| `docs/assets/<device>.svg` | `Diagram::to_svg()` emitter | `crates/device-diagram/src/lib.rs` |
 | CI drift check | byte-compares the committed SVG against the emitter | `supported_devices_doc_matches_table` |
 
 ---
@@ -269,13 +269,16 @@ Each feature gets a two-line caption block, baseline 3 units above the lead's y,
 line +16:
 
 - **`Label` line, the config-key fact**: `dpi_up — default: copy`,
-  `scroll wheel — middle click`, `"forward"`.
+  `wheel_click — default: middle click`, `"forward"`.
 - **Accent/`Note` line, the context**: vendor code, zone id, and *positional
   description* so a human can find the physical button: `code 0x20 · front button,
   nearer the wheel`, `RGB zone 0x01`, `XBUTTON2`.
 
 Annotation content rules:
 
+- Use a `Callout` only for an implemented setting. Draw other physical controls
+  as artwork, with a static `Text` label when useful; do not add disabled controls
+  for future features. On-board wheel binds use their supported `Button` slots.
 - Name the **config key** exactly (`dpi_up`, not "DPI+ button").
 - Include the **vendor code / zone id** where one exists. It ties the picture to the
   protocol doc.
@@ -368,6 +371,24 @@ Iterate against the rendered output. Coordinates in your head lie to you.
    Fix, regenerate, look again.
 
 ---
+
+### Editing points in the browser
+
+From the repository root, select an existing diagram by its model slug:
+
+```powershell
+cargo run --bin diagram-editor -- deathadder-v3
+```
+
+With no argument, the editor selects the first supported model with a diagram. It
+opens no mouse handle and works without hardware. Save writes the coordinates to
+the device source, regenerates SVG assets, and updates the notes batch signal.
+Review the source and asset diff before building or opening a native preview.
+Builds and daemon restarts remain explicit developer actions. Notes are kept in
+`tools/diagram-notes.md`; the editor does not assume an agent is watching them.
+
+The local server accepts its own loopback Host and Origin for JSON saves, caps
+headers at 16 KiB and bodies at 1 MiB, and uses five-second socket timeouts.
 
 ## 8. Checklist
 
