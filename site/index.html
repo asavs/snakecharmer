@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snakecharmer: configure Razer mice without Synapse</title>
+<meta name="description" content="Open-source Windows app for configuring Razer mice: DPI, polling rate, button binds and lighting. Single 0.6 MB exe, no account, no telemetry. Based on OpenRazer.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://asavs.github.io/snakecharmer/">
+<meta property="og:title" content="Snakecharmer: configure Razer mice without Synapse">
+<meta property="og:description" content="Configure DPI, polling rate, button binds and lighting on Razer mice. Single 0.6 MB exe for Windows, open source, no account, no telemetry.">
+<meta property="og:image" content="https://asavs.github.io/snakecharmer/card.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="ASCII art of a snake charmer playing a flute to a cobra, next to the Snakecharmer name, its features, and its idle RAM and process count compared to Synapse.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #fbfaf6;
+    --ink: #1c2521;
+    --muted: #5d6b64;
+    --rule: #dedcd2;
+    --link: #17704f;
+    --art: #1f7a58;
+    --sun: #a8740c;
+    --sand: #8f6c3a;
+    --flute: #a06f14;
+    --button: #17704f;
+    --button-ink: #ffffff;
+    --code-bg: #efede5;
+    --mono: Consolas, "Cascadia Mono", "SF Mono", Menlo, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1a16;
+      --ink: #e4ede8;
+      --muted: #98ada3;
+      --rule: #263830;
+      --link: #74d3ac;
+      --art: #6fcfa6;
+      --sun: #e6c16a;
+      --sand: #c6a674;
+      --flute: #d8aa55;
+      --button: #74d3ac;
+      --button-ink: #0b1611;
+      --code-bg: #1a2a23;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--sans); }
+  main, header, footer { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+  a { color: var(--link); text-underline-offset: 2px; }
+  code { font-family: var(--mono); font-size: 0.9em; background: var(--code-bg);
+    padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+  h1 { font-size: 40px; line-height: 1.1; margin: 28px 0 8px; letter-spacing: -0.5px; }
+  h2 { font-size: 24px; line-height: 1.25; margin: 56px 0 12px; padding-top: 20px;
+    border-top: 1px solid var(--rule); }
+  h3 { font-size: 17px; margin: 24px 0 4px; }
+  p, ul, ol { margin: 0 0 14px; }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .muted { color: var(--muted); }
+
+  .topbar { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-top: 18px; font-size: 15px; }
+  .topbar a { color: var(--muted); text-decoration: none; }
+  .topbar a:hover { color: var(--ink); text-decoration: underline; }
+  .topbar .home { color: var(--ink); font-weight: 600; margin-right: auto; }
+
+  .scene { margin: 36px 0 0; color: var(--art); overflow: hidden;
+    font: clamp(5px, calc((100vw - 40px) / 40), 14px)/1.15 var(--mono); }
+  .scene .sun, .scene .note { color: var(--sun); }
+  .scene .sand { color: var(--sand); }
+  .scene .flute { color: var(--flute); }
+  .caption { color: var(--muted); font-style: italic; font-size: 15px; margin: 12px 0 0; }
+
+  .lead { font-size: 19px; margin-bottom: 22px; }
+  .download { display: inline-block; background: var(--button); color: var(--button-ink);
+    font-weight: 600; text-decoration: none; padding: 11px 20px; border-radius: 6px; }
+  .download:hover { filter: brightness(1.08); }
+  .release { color: var(--muted); font-size: 15px; margin-top: 12px; }
+
+  .table-wrap { overflow-x: auto; margin: 0 0 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 16px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 16px 8px 0;
+    border-bottom: 1px solid var(--rule); }
+  thead th { font-weight: 600; border-bottom: 2px solid var(--rule); }
+  tbody th { font-weight: 600; }
+  .nowrap td, .nowrap th { white-space: nowrap; }
+
+  dl { margin: 0 0 14px; }
+  dt { font-weight: 600; margin-top: 14px; }
+  dd { margin: 2px 0 0; }
+
+  footer { margin-top: 64px; padding-bottom: 48px; color: var(--muted); font-size: 15px; }
+  footer > :first-child { border-top: 1px solid var(--rule); padding-top: 20px; }
+  footer p { margin-bottom: 8px; }
+  footer a { color: var(--muted); }
+
+  @media (max-width: 600px) {
+    body { font-size: 16px; }
+    h1 { font-size: 34px; }
+    h2 { margin-top: 44px; }
+    th, td { padding-right: 10px; }
+    table { font-size: 15px; }
+    .nowrap th, .nowrap td:last-child { white-space: normal; }
+    .nowrap tr > :nth-child(4) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="topbar">
+    <a class="home" href="#top">Snakecharmer</a>
+    <a href="#features">Features</a>
+    <a href="#mice">Mice</a>
+    <a href="#install">Install</a>
+    <a href="#contribute">Add your mouse</a>
+    <a href="{{REPO}}">GitHub</a>
+  </nav>
+</header>
+
+<main id="top">
+  <pre class="scene" aria-hidden="true">{{ART}}</pre>
+  <p class="caption">{{CAPTION}}</p>
+
+  <h1>Snakecharmer</h1>
+  <p class="lead">Configure Razer mice on Windows without Synapse: DPI, polling rate, button
+    binds and lighting. Open source, copyleft, based on <a href="https://openrazer.github.io/">OpenRazer</a>.</p>
+  <a class="download" href="{{REPO}}/releases/latest/download/snakecharmer.exe">Download snakecharmer.exe</a>
+  <p class="release">Windows 10 / 11 · <span id="release">latest release</span> · GPL-2.0 ·
+    <a href="{{REPO}}">source on GitHub</a></p>
+
+  <h2 id="compare">Compared to Synapse</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Razer Synapse</th><th>Snakecharmer</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Processes</th><td>6, including an embedded Chromium browser</td><td>1</td></tr>
+        <tr><th scope="row">Kernel drivers</th><td>2, still registered after uninstalling</td><td>none</td></tr>
+        <tr><th scope="row">Idle RAM</th><td>~558 MB</td><td>17 MB</td></tr>
+        <tr><th scope="row">On disk</th><td>~500 MB</td><td>0.6 MB</td></tr>
+        <tr><th scope="row">Installer</th><td>yes</td><td>none (single exe)</td></tr>
+        <tr><th scope="row">Telemetry</th><td>yes</td><td>none</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">RAM figures are measured. Synapse's disk size is Razer's published minimum.</p>
+
+  <h2 id="features">Features</h2>
+  <dl>
+    <dt>DPI</dt>
+    <dd>Set and lock DPI. Tray presets are based on the mouse's supported range.</dd>
+    <dt>Polling rate</dt>
+    <dd>Up to 8000 Hz on mice that support it. Only rates the mouse supports are offered.</dd>
+    <dt>Button binds</dt>
+    <dd>Map buttons to keystrokes, including the DeathAdder Elite's two DPI buttons, which
+      Windows doesn't receive on its own. On the DeathAdder V3, binds can be stored on the
+      mouse, so they work when Snakecharmer isn't running, in games that block injected
+      input, and on other PCs.</dd>
+    <dt>Lighting</dt>
+    <dd>Static, breathing, spectrum or off, set per zone. Effects run on the mouse, so
+      nothing animates in the background.</dd>
+  </dl>
+  <p>Settings are applied at startup, and DPI is re-checked every 60 seconds. Use the tray
+    menu for quick changes and the settings window for everything else.</p>
+
+  <h2 id="mice">Supported mice</h2>
+  <div class="table-wrap">
+    <table class="nowrap">
+      <thead><tr><th>Mouse</th><th>Max DPI</th><th>Polling</th><th>Lighting</th><th>Added by</th></tr></thead>
+      <tbody>
+{{MICE}}
+      </tbody>
+    </table>
+  </div>
+  <p>All verified on real hardware. Snakecharmer only opens mice on this list and ignores
+    every other device. To add a mouse, see <a href="#contribute">Add your mouse</a>.</p>
+
+  <h2 id="install">Install</h2>
+  <ol>
+    <li><a href="{{REPO}}/releases/latest/download/snakecharmer.exe">Download snakecharmer.exe</a>
+      and save it anywhere. There's no installer.</li>
+    <li>Run it. Windows SmartScreen may show "Windows protected your PC" because the exe
+      isn't code-signed. Click <b>More info</b>, then <b>Run anyway</b>. Releases are built
+      from the public source by <a href="{{REPO}}/actions/workflows/release.yml">GitHub Actions</a>.</li>
+    <li>Left-click the tray icon to open settings. Right-click it for DPI and lighting
+      presets. Snakecharmer starts with Windows by default; turn this off with
+      <b>Start with Windows</b> in the right-click menu.</li>
+    <li>Optional: uninstall Synapse. First reset your buttons to default in Synapse, because
+      some mice keep Synapse's binds in on-board memory. The
+      <a href="{{REPO}}/blob/master/docs/RAZER-REMOVAL.md">Synapse removal guide</a> covers
+      what Synapse's uninstaller leaves behind.</li>
+  </ol>
+
+  <h2 id="safety">Safety</h2>
+  <ul>
+    <li>Every command comes from OpenRazer's driver. Nothing is guessed or fuzzed.</li>
+    <li>It never touches firmware, the bootloader or update mode.</li>
+    <li>It never rebinds left or right click, so you can't lock yourself out of the mouse.</li>
+    <li>Quitting returns the mouse to its hardware mode. Stored binds reset with
+      <code>charmctl keymap reset</code>.</li>
+  </ul>
+
+  <h2 id="contribute">Add your mouse</h2>
+  <p>OpenRazer documents the protocol for {{OPEN_COUNT}} more Razer mice: {{FAMILIES}}.
+    Adding one mostly needs someone who owns it to test it on real hardware.</p>
+  <h3>Request a mouse</h3>
+  <p><a href="{{REPO}}/issues/new?template=device-request.yml">Open a request</a> with your
+    mouse's name. Someone else can write the code, and you can test it.</p>
+  <h3>Add it yourself</h3>
+  <ol>
+    <li>Find your mouse in the <a href="{{REPO}}/blob/master/docs/DEVICE-WISHLIST.md">wishlist</a>.</li>
+    <li><a href="{{REPO}}/issues/new?template=device-request.yml">Open an issue</a> to claim it.</li>
+    <li>Follow the <a href="{{REPO}}/blob/master/docs/CRACKING-MICE-GUIDE.md">cracking guide</a>,
+      or give your AI of choice the <a href="{{REPO}}/blob/master/docs/DEVICE-WISHLIST.md#adding-your-mouse-with-an-ai-assistant">AI prompt</a>.</li>
+    <li>Open a pull request. It's usually one new file. See
+      <a href="{{REPO}}/blob/master/CONTRIBUTING.md">CONTRIBUTING</a> for the checklist.</li>
+  </ol>
+  <h3>Without a Razer mouse</h3>
+  <p>You can <a href="{{REPO}}/blob/master/docs/DRAWING-MICE-GUIDE.md">draw a button map</a>
+    for a supported mouse or <a href="{{REPO}}/issues/new/choose">report a bug</a>.</p>
+  <p>I am so grateful for any and all contributions!</p>
+
+  <h2 id="alternatives">Alternatives</h2>
+  <p>Snakecharmer supports a few settings on a few mice, on Windows. These tools cover other
+    needs. The <a href="{{REPO}}/blob/master/docs/ALTERNATIVES.md">full comparison</a> has
+    more detail.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tool</th><th>Platform</th><th>Good for</th></tr></thead>
+      <tbody>
+        <tr><td><a href="https://openrazer.github.io/">OpenRazer</a> + <a href="https://polychromatic.app/">Polychromatic</a></td><td>Linux</td><td>Full Razer support, with a GUI. Snakecharmer is based on OpenRazer.</td></tr>
+        <tr><td><a href="https://github.com/libratbag/piper">libratbag + Piper</a></td><td>Linux</td><td>Razer and Logitech mice in one tool</td></tr>
+        <tr><td><a href="https://openrgb.org/">OpenRGB</a></td><td>Windows, Linux, Mac</td><td>Lighting across many brands, free</td></tr>
+        <tr><td><a href="https://github.com/infinityInfinite/secbird">secbird</a></td><td>Windows</td><td>Mice, keyboards and more, with per-game profiles, macros and button remapping</td></tr>
+        <tr><td><a href="https://signalrgb.com/">SignalRGB</a></td><td>Windows</td><td>Lighting synced to games and other devices</td></tr>
+        <tr><td><a href="https://www.highrez.co.uk/downloads/xmousebuttoncontrol.htm">X-Mouse Button Control</a></td><td>Windows</td><td>Per-app button profiles; can run alongside Snakecharmer</td></tr>
+        <tr><td><a href="https://www.autohotkey.com/">AutoHotkey</a></td><td>Windows</td><td>Macros and scripted remaps</td></tr>
+        <tr><td><a href="https://github.com/1kc/razer-macos">razer-macos</a></td><td>Mac</td><td>Razer lighting and DPI</td></tr>
+        <tr><td><a href="https://github.com/robbieplata/usemice">usemice</a></td><td>Browser</td><td>Quick changes without installing anything</td></tr>
+        <tr><td><a href="https://github.com/marcospb19/dawctl">dawctl</a>, <a href="https://github.com/HamzaYslmn/open-razerkit">open-razerkit</a></td><td>Command line</td><td>Setting a value from a script</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<footer>
+  <p>Snakecharmer is free software under the GPL-2.0, based on
+    <a href="https://github.com/openrazer/openrazer">OpenRazer</a>. Thanks to the OpenRazer
+    maintainers. Not affiliated with Razer.</p>
+  <p><a href="{{REPO}}">GitHub</a> · <a href="{{REPO}}/releases">Releases</a> ·
+    <a href="{{REPO}}/issues">Issues</a> · <a href="{{REPO}}/blob/master/README.md">Docs</a> ·
+    <a href="https://github.com/sponsors/asavs">Sponsor</a></p>
+</footer>
+
+<script>
+  // Fill in the version and size from the latest release; the page reads fine without it.
+  fetch("https://api.github.com/repos/asavs/snakecharmer/releases/latest")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((rel) => {
+      if (!rel) return;
+      const exe = (rel.assets || []).find((a) => a.name === "snakecharmer.exe");
+      const size = exe ? ` · ${(exe.size / 1048576).toFixed(1)} MB` : "";
+      document.getElementById("release").textContent = rel.tag_name + size;
+    })
+    .catch(() => {});
+</script>
+</body>
+</html>

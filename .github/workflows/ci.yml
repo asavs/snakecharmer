@@ -31,3 +31,5 @@ jobs:
       - name: Verify static CRT linkage
         run: python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe
       - run: python -m unittest discover -s tools -p "test_wishlist*.py"
+      # The Pages site is built from the docs; fail here, not after merge.
+      - run: python tools/build-site.py _site

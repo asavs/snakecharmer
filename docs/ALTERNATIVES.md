@@ -48,6 +48,7 @@ half a gigabyte of resident memory to run two side buttons and a DPI setting.
 | [dawctl](https://github.com/marcospb19/dawctl) | 🪟🐧 ⌨️ | no (exits) | 🟡 | ✅ | — | — | — | — |
 | [X-Mouse Button Control](https://www.highrez.co.uk/downloads/xmousebuttoncontrol.htm) | 🪟 | yes, light | — | — | ✅ | — *(Windows drops the codes)* | ✅ | 🟡 |
 | [AutoHotkey](https://www.autohotkey.com/) | 🪟 | yes, light | — | — | ✅ | — *(needs Synapse to translate first)* | 🟡 | ✅ |
+| [secbird](https://github.com/infinityInfinite/secbird) | 🪟, 🐧 ⌨️ | yes, light (~12 MB) | ✅ | ✅ | ✅ *(on-board memory)* | ✅ *(on-board memory)* | ✅ | ✅ *(on-device)* |
 | [razer-ctl](https://github.com/tdakhran/razer-ctl) | 🪟 | yes, light | — | — | — | — | — | — |
 | [MiniSynapse](https://github.com/miyu/MiniSynapse) 💤 | 🪟 | no (exits) | 🟡 | 🟡 | — | — | — | — |
 | **[Snakecharmer](https://github.com/asavs/snakecharmer)** | 🪟 | **yes, ~0 idle (17 MB)** | ✅ | ✅ | ✅ | **✅** | — | — |
@@ -60,6 +61,12 @@ half a gigabyte of resident memory to run two side buttons and a DPI setting.
 - **razer-macos:** the OpenRazer-family port for macOS; mostly lighting, effects, and
   battery.
 - **dawctl:** DeathAdder *Essential* only; also tunes sensor frequency.
+- **secbird** (Secretarybird): the closest tool to Snakecharmer, with a much wider scope:
+  keyboards and other Razer devices, per-app profiles, macros stored on the device, and
+  HyperShift. Button remaps are written to the mouse's on-board memory, so they need a mouse
+  that has it. In beta: its author tests on a Basilisk V3, users have confirmed nine more
+  devices, and the rest are listed from OpenRazer's protocol facts. On Linux it is
+  command-line only.
 - **razer-ctl:** for Razer *Blade laptops* (fan curves, power modes), not mice. Listed
   because people find it in the same "escape the suite" searches.
 - **MiniSynapse** (💤 abandoned): loaded Synapse 2 DLLs at startup, then exited. It is the
@@ -71,10 +78,11 @@ half a gigabyte of resident memory to run two side buttons and a DPI setting.
 
 ## Where Snakecharmer sits
 
-Read down the **"Rebind DPI buttons"** column: only Synapse, OpenRazer (Linux), and
-Snakecharmer catch the vendor `0x20`/`0x21` codes at all. Of those, Synapse costs
-half a gigabyte and OpenRazer isn't on Windows. Snakecharmer is the only **Windows** tool
-that reclaims those buttons at **~0 idle cost**.
+Read down the **"Rebind DPI buttons"** column: Synapse, OpenRazer (Linux), secbird and
+Snakecharmer can rebind them. Synapse costs half a gigabyte and OpenRazer isn't on Windows.
+secbird writes the remap into the mouse's on-board memory, so it needs a mouse that has
+some. Snakecharmer catches the vendor `0x20`/`0x21` codes live, at **~0 idle cost**, so it
+doesn't depend on on-board memory.
 
 The two empty columns on our row, **per-app profiles** and **macros**, are deliberate.
 Both need something running all the time (a foreground-window watcher or a resident macro
@@ -92,6 +100,9 @@ and button rebinds, including the buttons Windows hides, with nothing running ho
 - **"I want per-application button profiles on standard buttons"** → X-Mouse Button
   Control, possibly *alongside* Snakecharmer (we handle the DPI buttons it can't see,
   and it handles the per-app logic we don't have).
+- **"I want per-game profiles, macros, or my Razer keyboard and other devices on Windows"**
+  → secbird. It does more than Snakecharmer and covers far more devices, most of them not
+  yet tested on hardware.
 - **"I'm on Linux"** → OpenRazer + Polychromatic. Full stop.
 - **"I'm on macOS with a Razer mouse"** → razer-macos.
 - **"I don't want to install anything"** → usemice (or Synapse Web if you own a
