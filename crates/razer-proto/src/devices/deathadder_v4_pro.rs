@@ -49,7 +49,7 @@ pub const DEATHADDER_V4_PRO: DeviceSpec = DeviceSpec {
     // family and same rates as the V3.
     //
     // OpenRazer waits `RAZER_NEW_MOUSE_RECEIVER_WAIT_US` (31 ms) for this
-    // device's responses; `send_command` already sleeps 60 ms.
+    // device's responses; the shared HID transport already sleeps 60 ms.
     polling: PollingSpec {
         protocol: PollingProtocol::Extended,
         rates: &[125, 500, 1000, 2000, 4000, 8000],
@@ -109,7 +109,13 @@ mod tests {
     fn dpi_range_is_enforced() {
         let (t, lo, hi) = (DEATHADDER_V4_PRO.transaction_id, 100, 45000);
         assert!(set_dpi_report(t, lo, hi, 45000, 45000).is_ok());
-        assert_eq!(set_dpi_report(t, lo, hi, 45001, 45001), Err(ProtoError::DpiOutOfRange(45001)));
-        assert_eq!(set_dpi_report(t, lo, hi, 50, 50), Err(ProtoError::DpiOutOfRange(50)));
+        assert_eq!(
+            set_dpi_report(t, lo, hi, 45001, 45001),
+            Err(ProtoError::DpiOutOfRange(45001))
+        );
+        assert_eq!(
+            set_dpi_report(t, lo, hi, 50, 50),
+            Err(ProtoError::DpiOutOfRange(50))
+        );
     }
 }

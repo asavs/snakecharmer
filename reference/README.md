@@ -73,8 +73,9 @@ mirroring what OpenRazer does on Linux.
 
 ## Safety / recovery
 
-- Device mode is **volatile**; unplugging and reconnecting the Elite restores hardware
-  mode. These scripts do not reset stored settings or write persistent bindings.
+- Device mode is **volatile** in the recorded Elite checks. The DPI-write storage
+  selector differs from the pinned OpenRazer helper; its persistence semantics need
+  separate reference/capture investigation. Do not infer a factory reset from a replug.
 - Both setters confirm their read command before writing and require an exact read-back.
   A transport error, malformed reply, any status other than `0x02` (including BUSY), or a
   read-back mismatch stops all further control commands in that Python process.
@@ -100,6 +101,29 @@ The transport tests replace HID and Win32 dependencies with fakes. They do not v
 real hardware behavior.
 
 ## Protocol reference (as researched from OpenRazer)
+
+The later source review is pinned by commit and Git blob IDs in
+[`openrazer-source.json`](openrazer-source.json). It does not establish which revision
+the original port used. [`SPEC.md`](../docs/SPEC.md#reference-snapshot) records what was
+checked and the unresolved DPI selector difference. No device bytes were changed by
+that review, and it performed no hardware verification.
+
+The wishlist generator fetches immutable URLs and checks those blob IDs. Offline input
+must contain the exact `razermouse_driver.h`, `razermouse_driver.c`, and `mouse.py` files
+from that snapshot, under those flat names, with their original LF bytes:
+
+```powershell
+python tools/wishlist-from-openrazer.py --offline <snapshot-directory> --check
+```
+
+Use commit-specific raw downloads or a checkout made with `core.autocrlf=false`;
+Windows newline conversion changes the Git blob identity.
+
+Without `--check` it regenerates the table. To update deliberately, review a new full
+commit SHA and all six source files, update their Git blob IDs in the manifest, record
+any changed protocol assumptions in SPEC, and regenerate the wishlist. Edited or
+newline-converted offline files are rejected instead of being attributed to that commit.
+These checks compare source identity and generated documentation, not hardware behavior.
 
 90-byte feature report, report ID 0, sent to the interface-0 (mouse) HID collection;
 CRC = XOR of bytes 2..87:
