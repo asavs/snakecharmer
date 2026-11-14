@@ -1,7 +1,8 @@
 //! Tray menu construction and translation, plus application of menu/settings commands.
 //! Session-only events (window lifetime and Quit teardown) stay in the daemon loop.
 
-use platform::autostart::Registration;
+use platform::autostart::{Registration, Startup};
+use platform::startup_task::TaskState;
 use razer_hid::Mouse;
 use razer_proto::{DeviceSpec, Rgb};
 
@@ -66,9 +67,10 @@ fn dpi_presets(spec: Option<&DeviceSpec>) -> Vec<u16> {
 
 /// The startup item shows the registration request, not Windows' separate
 /// effective startup policy. A failed read must not look like an unchecked box.
+/// A packaged copy shows its startup task's real state instead.
 pub(super) fn build_menu_spec(
     spec: Option<&DeviceSpec>,
-    autostart: Registration,
+    autostart: Startup,
 ) -> Vec<platform::tray::MenuItem> {
     use menu_id::*;
     use platform::tray::MenuItem as M;
@@ -108,8 +110,22 @@ pub(super) fn build_menu_spec(
         M::Separator,
         M::action(SETTINGS, "Settings..."),
         match autostart {
-            Registration::Unknown => M::action(AUTOSTART, "Startup request unavailable"),
-            state => M::check(
+            Startup::PackageTask(state @ (TaskState::On | TaskState::Off)) => {
+                M::check(AUTOSTART, "Start with Windows", state == TaskState::On)
+            }
+            Startup::PackageTask(TaskState::OffInSettings) => {
+                M::action(AUTOSTART, "Start with Windows (off in Settings)...")
+            }
+            Startup::PackageTask(TaskState::SetByPolicy { .. }) => {
+                M::action(AUTOSTART, "Start with Windows (set by policy)")
+            }
+            Startup::PackageTask(TaskState::Unknown) => {
+                M::action(AUTOSTART, "Start with Windows unavailable")
+            }
+            Startup::RunValue(Registration::Unknown) => {
+                M::action(AUTOSTART, "Startup request unavailable")
+            }
+            Startup::RunValue(state) => M::check(
                 AUTOSTART,
                 "Request start with Windows",
                 state == Registration::Registered,
@@ -420,7 +436,7 @@ mod tests {
     #[test]
     fn menu_spec_renders_autostart_tick() {
         for state in [Registration::Registered, Registration::Absent] {
-            let items = build_menu_spec(None, state);
+            let items = build_menu_spec(None, Startup::RunValue(state));
             let tick = items.iter().find_map(|i| match i {
                 platform::tray::MenuItem::Check { id, checked, .. }
                     if *id == menu_id::AUTOSTART =>
@@ -431,12 +447,26 @@ mod tests {
             });
             assert_eq!(tick, Some(state == Registration::Registered));
         }
-        let items = build_menu_spec(None, Registration::Unknown);
+        let items = build_menu_spec(None, Startup::RunValue(Registration::Unknown));
         assert!(items.iter().any(|item| matches!(item,
             platform::tray::MenuItem::Action { id, label }
                 if *id == menu_id::AUTOSTART && label == "Startup request unavailable")));
         assert!(!items.iter().any(|item| matches!(item,
             platform::tray::MenuItem::Check { id, .. } if *id == menu_id::AUTOSTART)));
+    }
+
+    #[test]
+    fn packaged_menu_shows_startup_task_state() {
+        for (state, checked) in [(TaskState::On, true), (TaskState::Off, false)] {
+            let items = build_menu_spec(None, Startup::PackageTask(state));
+            assert!(items.iter().any(|item| matches!(item,
+                platform::tray::MenuItem::Check { id, label, checked: c }
+                    if *id == menu_id::AUTOSTART && label == "Start with Windows" && *c == checked)));
+        }
+        let items = build_menu_spec(None, Startup::PackageTask(TaskState::OffInSettings));
+        assert!(items.iter().any(|item| matches!(item,
+            platform::tray::MenuItem::Action { id, label }
+                if *id == menu_id::AUTOSTART && label == "Start with Windows (off in Settings)...")));
     }
 
     #[test]

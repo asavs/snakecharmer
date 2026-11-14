@@ -3,6 +3,8 @@
 //! makes the app appear in the OS's own startup UI (Task Manager → Startup
 //! apps, Settings → Apps → Startup).
 //!
+//! An MSIX-packaged copy does not use the Run value at all; see [`Startup`].
+//!
 //! This module observes registration, not Windows' effective startup policy.
 //! Task Manager can disable startup independently of the Run value. The
 //! documented `StartupTask.State` API requires a packaged startup task; this
@@ -61,6 +63,26 @@ impl Registration {
         } else {
             Self::Absent
         }
+    }
+}
+
+/// Who owns login startup for this copy of the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Startup {
+    /// A bare exe: the per-user Run value this module reads and writes.
+    RunValue(Registration),
+    /// An MSIX install: the package's `windows.startupTask` (see
+    /// `startup_task`). The HKCU Run value is not used: a packaged app's HKCU
+    /// writes go to its private hive, where they launch nothing.
+    PackageTask(crate::startup_task::TaskState),
+}
+
+/// How login startup works for this process, read now.
+pub fn startup() -> Startup {
+    if crate::package::is_packaged() {
+        Startup::PackageTask(crate::startup_task::state())
+    } else {
+        Startup::RunValue(registration())
     }
 }
 

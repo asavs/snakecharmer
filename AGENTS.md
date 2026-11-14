@@ -41,12 +41,17 @@ crates/device-diagram/ shared immutable shapes and SVG rendering. No I/O.
 crates/platform/      Win32 FFI: single-instance, keystroke injection, mouse hook, tray, settings UI
 src/                  daemon, config, lighting, on-board binds, charmctl
 reference/            runnable Python recon toolkit — poke a device with no compile cycle
-tools/                dev tools: diagram point editor, wishlist generator, Razer audit/removal PowerShell scripts
+tools/                dev tools: diagram point editor, wishlist generator, Razer audit/removal PowerShell scripts, MSIX build
+packaging/msix/       Microsoft Store manifest, identity, icons (see docs/MICROSOFT-STORE.md)
 ```
 
 `crates/razer-proto/src/devices/` holds one file per supported device, and
 `SUPPORTED` in `devices/mod.rs` is the source of truth for what the daemon will open.
 Unsafe code stays confined to `crates/platform`.
+
+The same exes run bare or inside the Store package. Behavior that differs between the two
+(today only login startup) branches on `platform::package::is_packaged()` at run time, not a
+build feature.
 
 ## The common task: add support for a mouse
 

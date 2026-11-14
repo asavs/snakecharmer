@@ -18,7 +18,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use platform::autostart::Registration;
+use platform::autostart::{Registration, Startup};
+use platform::startup_task::TaskState;
 use razer_hid::{aux_collection_paths, Listener, Mouse};
 use razer_proto::{DeviceMode, DeviceSpec, DpiButtons, Rgb};
 
@@ -372,12 +373,22 @@ impl Bindings {
 /// registration at click time. An unreadable value is left alone, and a
 /// failed mutation re-reads registration rather than assuming success.
 fn toggle_autostart(spec: Option<&DeviceSpec>, log: &Logger) {
-    let want = match platform::autostart::registration() {
+    let current = match platform::autostart::startup() {
+        Startup::PackageTask(state) => {
+            toggle_startup_task(spec, state, log);
+            return;
+        }
+        Startup::RunValue(registration) => registration,
+    };
+    let want = match current {
         Registration::Registered => Registration::Absent,
         Registration::Absent => Registration::Registered,
         Registration::Unknown => {
             log.log("WARN startup registration is unreadable; leaving it unchanged.");
-            platform::tray::set_menu(build_menu_spec(spec, Registration::Unknown));
+            platform::tray::set_menu(build_menu_spec(
+                spec,
+                Startup::RunValue(Registration::Unknown),
+            ));
             return;
         }
     };
@@ -410,7 +421,32 @@ fn toggle_autostart(spec: Option<&DeviceSpec>, log: &Logger) {
             describe(actual)
         ));
     }
-    platform::tray::set_menu(build_menu_spec(spec, actual));
+    platform::tray::set_menu(build_menu_spec(spec, Startup::RunValue(actual)));
+}
+
+/// The packaged counterpart of the Run-value toggle: switch the package's
+/// startup task. Windows reports the real state, so the tick is effective
+/// startup, not a request. A task the user turned off in Settings can only be
+/// turned back on there, so that click opens Settings.
+fn toggle_startup_task(spec: Option<&DeviceSpec>, state: TaskState, log: &Logger) {
+    let after = match state {
+        TaskState::On => platform::startup_task::disable(),
+        TaskState::Off => platform::startup_task::enable(),
+        TaskState::OffInSettings => {
+            log.log("Menu: startup is off in Windows Settings; opening Settings > Apps > Startup.");
+            platform::open_url(platform::startup_task::SETTINGS_URI);
+            return;
+        }
+        TaskState::SetByPolicy { .. } | TaskState::Unknown => {
+            log.log(&format!(
+                "Menu: startup task is {state:?}; leaving it unchanged."
+            ));
+            platform::tray::set_menu(build_menu_spec(spec, Startup::PackageTask(state)));
+            return;
+        }
+    };
+    log.log(&format!("Menu: startup task {state:?} -> {after:?}."));
+    platform::tray::set_menu(build_menu_spec(spec, Startup::PackageTask(after)));
 }
 
 /// What the startup autostart pass should do.
@@ -437,6 +473,7 @@ fn autostart_boot_plan(bootstrapped: bool, registration: Registration) -> Autost
 /// First-run "Start with Windows" registration, and exe-path self-heal on
 /// later launches. Skipped entirely in debug builds so `cargo run` never
 /// registers (or refreshes to) a `target\debug` exe in the user's login.
+/// Skipped too in a packaged install, whose startup task is in its manifest.
 ///
 /// The latch is set whether or not the write succeeded â€” we get one shot; a
 /// machine where the write always fails must not retry forever.
@@ -444,7 +481,15 @@ fn bootstrap_autostart(cfg: &mut Config, log: &Logger) {
     if cfg!(debug_assertions) {
         return;
     }
-    let registration = platform::autostart::registration();
+    let registration = match platform::autostart::startup() {
+        Startup::PackageTask(state) => {
+            log.log(&format!(
+                "Packaged install: login startup is the package startup task ({state:?})."
+            ));
+            return;
+        }
+        Startup::RunValue(registration) => registration,
+    };
     match autostart_boot_plan(cfg.autostart_bootstrapped, registration) {
         AutostartBoot::Register => {
             match platform::autostart::register() {
@@ -501,7 +546,7 @@ pub fn run(mut cfg: Config, log: Logger) -> ! {
         thread::spawn(move || {
             platform::tray::run(
                 "Snakecharmer",
-                build_menu_spec(None, platform::autostart::registration()),
+                build_menu_spec(None, platform::autostart::startup()),
                 move |id| {
                     if let Some(a) = menu_action_for(id) {
                         let _ = tx.send(Event::Menu(a));
@@ -849,10 +894,7 @@ fn run_session(
         spec.dpi_buttons.is_some()
     ));
     // Rebuild the tray menu around this device (DPI presets over its range).
-    platform::tray::set_menu(build_menu_spec(
-        Some(&spec),
-        platform::autostart::registration(),
-    ));
+    platform::tray::set_menu(build_menu_spec(Some(&spec), platform::autostart::startup()));
 
     let outcome = apply_config_candidate(cfg, cfg.clone(), spec, |candidate| {
         // Each setter confirms its read form before writing. A device failure

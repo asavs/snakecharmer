@@ -1,0 +1,15 @@
+# Package identity for tools/build-msix.py.
+#
+# These are placeholder values for local test installs. Before the first Store
+# submission, replace all three with the values Partner Center shows under
+# Product management > Product identity once the app name is reserved:
+#
+#   Package/Identity/Name                 -> name
+#   Package/Identity/Publisher            -> publisher
+#   Package/Properties/PublisherDisplayName -> publisher_display_name
+#
+# A package built from these placeholders installs locally with Developer Mode
+# but will be rejected by the Store.
+name = "Snakecharmer.Dev"
+publisher = "CN=SnakecharmerDev"
+publisher_display_name = "Snakecharmer (dev build)"

@@ -147,7 +147,20 @@ Produces `target\release\snakecharmer.exe` (the windowless daemon) and
 Default builds, including binaries produced by the release workflow, omit PC Vitals reporting. To include
 the optional local health integration, build with `cargo build --release --features pc-vitals`.
 
+`python tools/build-msix.py` packs the same two exes into the Microsoft Store package
+(`target\msix\Snakecharmer_<version>_x64.msix`). See
+[`docs/MICROSOFT-STORE.md`](docs/MICROSOFT-STORE.md) for what the package changes and how
+to test and submit it.
+
 ## Start with Windows
+
+Installed from the Microsoft Store, Snakecharmer starts at login through its package's
+startup task, which Windows turns on after the first launch. The tray menu's
+**Start with Windows** checkbox turns it on or off, and shows whether Windows will
+actually start it. If you turn startup off in Settings or Task Manager, Windows only
+lets you turn it back on there, so the item becomes
+**Start with Windows (off in Settings)...** and opens that page.
+The rest of this section is about the bare exe.
 
 On first run the daemon registers itself to start at login, using a per-user value named
 `Snakecharmer` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (no admin, no
@@ -161,7 +174,7 @@ can disable startup independently; that can leave the request checked in Snakech
 If startup is disabled there, use that same Windows control to enable it again. The Run
 backend does not query or override that separate setting. Microsoft's
 [`StartupTask.State` API](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask)
-requires a packaged startup task; Snakecharmer is an unpackaged app.
+requires a packaged startup task, which only the Store package has.
 
 Upgrading from a build that used `scripts\install-autostart.ps1`? Delete the leftover
 `Snakecharmer.vbs` (or any hand-made `Snakecharmer.lnk`) from your Startup folder
@@ -170,7 +183,11 @@ since the second instance exits on the single-instance mutex, but it clutters th
 
 ## Uninstall
 
-There is no installer, so there is nothing to run. To remove Snakecharmer completely:
+**Store package:** DeathAdder V3 only, if you wrote on-board binds, run
+`charmctl keymap reset` first. Then uninstall Snakecharmer from Settings > Apps >
+Installed apps and delete `%LOCALAPPDATA%\Snakecharmer`.
+
+**Bare exe:** there is no installer, so there is nothing to run. To remove Snakecharmer completely:
 
 1. Uncheck **Request start with Windows** in the tray menu to remove its registration.
    Disabling the app in Task Manager only suppresses startup; to remove the registration
