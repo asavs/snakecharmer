@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX manifest template. tools/build-msix.py fills the {{...}} fields:
+  identity from packaging/msix/identity.toml, version from Cargo.toml.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:virtualization="http://schemas.microsoft.com/appx/manifest/virtualization/windows10"
+  IgnorableNamespaces="uap uap3 desktop rescap virtualization">
+
+  <Identity
+    Name="{{IDENTITY_NAME}}"
+    Publisher="{{PUBLISHER}}"
+    Version="{{VERSION}}"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Snakecharmer</DisplayName>
+    <PublisherDisplayName>{{PUBLISHER_DISPLAY_NAME}}</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <!--
+      config.toml and daemon.log stay at their documented, hand-editable path
+      (%LOCALAPPDATA%\Snakecharmer) instead of the package's private copy, so
+      Notepad, a bare-exe charmctl, and the packaged daemon all see one file.
+      Needs the unvirtualizedResources capability below.
+    -->
+    <virtualization:FileSystemWriteVirtualization>
+      <virtualization:ExcludedDirectories>
+        <virtualization:ExcludedDirectory>$(KnownFolder:LocalAppData)\Snakecharmer</virtualization:ExcludedDirectory>
+      </virtualization:ExcludedDirectories>
+    </virtualization:FileSystemWriteVirtualization>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="Snakecharmer" Executable="snakecharmer.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Snakecharmer"
+        Description="Settings for supported Razer mice: DPI, polling rate, lighting, and buttons."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <!-- Replaces the HKCU Run value. Windows enables it after the first launch;
+             the user controls it in Settings > Apps > Startup. -->
+        <desktop:Extension Category="windows.startupTask" Executable="snakecharmer.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="SnakecharmerStartup" Enabled="true" DisplayName="Snakecharmer" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+
+    <!-- charmctl: no Start menu entry, reachable from any terminal by name. -->
+    <Application Id="Charmctl" Executable="charmctl.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="charmctl"
+        Description="Command-line control for Snakecharmer."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png"
+        AppListEntry="none" />
+      <Extensions>
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="charmctl.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="charmctl.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- A Win32 desktop app: USB HID access, a tray icon, and the optional
+         low-level mouse hook for thumb-button remaps. -->
+    <rescap:Capability Name="runFullTrust" />
+    <!-- Required by the ExcludedDirectories entry above. -->
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+</Package>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snakecharmer privacy policy</title>
+<meta name="description" content="Snakecharmer collects no data and makes no network connections.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #fbfaf6;
+    --ink: #1c2521;
+    --muted: #5d6b64;
+    --rule: #dedcd2;
+    --link: #17704f;
+    --code-bg: #efede5;
+    --mono: Consolas, "Cascadia Mono", "SF Mono", Menlo, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1a16;
+      --ink: #e4ede8;
+      --muted: #98ada3;
+      --rule: #263830;
+      --link: #74d3ac;
+      --code-bg: #18261f;
+    }
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 var(--sans);
+  }
+  main { max-width: 42rem; margin: 0 auto; padding: 2.5rem 16px 4rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
+  .date { color: var(--muted); margin: 0 0 2rem; }
+  a { color: var(--link); }
+  code { font-family: var(--mono); background: var(--code-bg); padding: 0 .25em; border-radius: 3px; font-size: .92em; overflow-wrap: anywhere; }
+  footer { border-top: 1px solid var(--rule); margin-top: 3rem; padding-top: 1rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+<h1>Snakecharmer privacy policy</h1>
+<p class="date">Effective 13 November 2026</p>
+
+<p>Snakecharmer collects no personal data. It has no account, no analytics, no crash reporting,
+and no telemetry. It makes no network connections.</p>
+
+<h2>What stays on your computer</h2>
+<p>Snakecharmer stores two files in <code>%LOCALAPPDATA%\Snakecharmer</code>:</p>
+<ul>
+  <li><code>config.toml</code>, your mouse settings.</li>
+  <li><code>daemon.log</code>, a log of what the app did, such as which mouse it found and which
+    settings it applied. The log is size-limited and rotated.</li>
+</ul>
+<p>Neither file leaves your computer unless you send it to someone yourself, for example when
+reporting a bug.</p>
+
+<h2>Your mouse</h2>
+<p>Snakecharmer talks to supported Razer mice over USB to read and write settings such as DPI,
+polling rate, lighting, and button binds. On the DeathAdder V3 it can write button binds into
+the mouse's on-board memory when you ask it to. Nothing is sent anywhere else.</p>
+
+<h2>Thumb-button remapping</h2>
+<p>If you remap a thumb button in the settings, Snakecharmer installs a Windows mouse hook to see
+those button presses. It acts only on the buttons you remapped and records nothing. With no remap
+configured, no hook is installed.</p>
+
+<h2>Links</h2>
+<p>Some menu items open a web page, such as the device wishlist on GitHub. That page opens in your
+default browser only when you click it, and is subject to that site's own policy.</p>
+
+<h2>Removing your data</h2>
+<p>Uninstalling Snakecharmer and deleting <code>%LOCALAPPDATA%\Snakecharmer</code> removes everything
+it stored. If you wrote on-board binds to a DeathAdder V3, run <code>charmctl keymap reset</code>
+before uninstalling to clear them from the mouse.</p>
+
+<h2>Changes and contact</h2>
+<p>Changes to this policy are made in the open in the
+<a href="https://github.com/asavs/snakecharmer">source repository</a>. Questions go to
+<a href="https://github.com/asavs/snakecharmer/issues">its issue tracker</a>.</p>
+
+<footer><a href="./">Snakecharmer</a></footer>
+</main>
+</body>
+</html>

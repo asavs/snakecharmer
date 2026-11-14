@@ -38,6 +38,16 @@ jobs:
       - run: cargo build --release
       - name: Verify static CRT linkage
         run: python tools/check-static-crt.py target/release/snakecharmer.exe target/release/charmctl.exe
+      - name: Pack the Microsoft Store package
+        run: python tools/build-msix.py --skip-build
+      # Unsigned on purpose: the Store signs it. Upload it to Partner Center by
+      # hand; see docs/MICROSOFT-STORE.md. Not attached to the GitHub release,
+      # because an unsigned .msix won't install outside Developer Mode.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msix
+          path: target/msix/*.msix
+          if-no-files-found: error
       - name: Create the draft release
         shell: bash
         env:

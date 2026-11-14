@@ -14,8 +14,10 @@ pub mod autostart;
 pub mod diagram;
 pub mod icon;
 pub mod mouse_hook;
+pub mod package;
 pub mod process_lease;
 pub mod settings;
+pub mod startup_task;
 pub mod tray;
 
 use std::ffi::OsStr;

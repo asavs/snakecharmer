@@ -24,8 +24,17 @@ windows-sys = { version = "0.61", features = [
     "Win32_Graphics_Dwm",
     "Win32_System_Registry",
     "Win32_Storage_FileSystem",
+    "Win32_Storage_Packaging_Appx",
     "Win32_UI_Controls",
     "Win32_UI_Controls_Dialogs",
+] }
+
+# Only for the MSIX startup task (Windows.ApplicationModel.StartupTask), which
+# is WinRT and has no windows-sys binding.
+windows = { version = "0.62", features = [
+    "ApplicationModel",
+    "Foundation",
+    "Win32_System_WinRT",
 ] }
 
 [dev-dependencies]
